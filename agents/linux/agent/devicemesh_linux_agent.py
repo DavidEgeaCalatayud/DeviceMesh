@@ -7,7 +7,6 @@ fixed allowlist; this module intentionally exposes no shell or process-execution
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import socket
@@ -347,7 +346,10 @@ class DeviceMeshLinuxAgent:
             },
         )
 
-    def execute_operation(self, operation: dict[str, object]) -> tuple[bool, dict[str, object], str | None]:
+    def execute_operation(
+        self,
+        operation: dict[str, object],
+    ) -> tuple[bool, dict[str, object], str | None]:
         operation_type = operation.get("operationType")
         arguments = operation.get("arguments", {})
         if not isinstance(operation_type, str) or operation_type not in ALLOWED_OPERATIONS:
