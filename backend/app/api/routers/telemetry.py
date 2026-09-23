@@ -1,20 +1,30 @@
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.dependencies.security import require_operator
 from app.api.schemas.telemetry import (
     DiagnosticSignalResponse,
     MetricSeriesPointResponse,
     MetricSeriesResponse,
     NetworkDiagnosticResponse,
+    TelemetryCompactionResponse,
 )
 from app.application.use_cases.network_diagnostics import NetworkDiagnostics
-from app.runtime import telemetry_repository
+from app.infrastructure.repositories.retention import SqlAlchemyTelemetryRetentionRepository
+from app.runtime import get_telemetry_retention_repository, telemetry_repository
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
+operator_router = APIRouter(prefix="/api/v1/operator/telemetry", tags=["telemetry-operator"])
 diagnostics = NetworkDiagnostics(telemetry_repository)
-_MAX_HISTORY_RANGE = timedelta(days=30)
+_MAX_RAW_HISTORY_RANGE = timedelta(days=30)
+_MAX_HOURLY_HISTORY_RANGE = timedelta(days=365)
+RetentionRepositoryDependency = Annotated[
+    SqlAlchemyTelemetryRetentionRepository,
+    Depends(get_telemetry_retention_repository),
+]
+Operator = Annotated[None, Depends(require_operator)]
 
 
 @router.get("/latest")
@@ -33,14 +43,54 @@ def latest_metrics() -> list[dict[str, object]]:
 
 @router.get("/history", response_model=MetricSeriesResponse)
 def metric_history(
+    retention_repository: RetentionRepositoryDependency,
     device_id: Annotated[str, Query(alias="deviceId", min_length=1, max_length=128)],
     name: Annotated[str, Query(min_length=1, max_length=128)],
     start: Annotated[datetime, Query()],
     end: Annotated[datetime, Query()],
     limit: Annotated[int, Query(ge=10, le=5000)] = 600,
     bucket_seconds: Annotated[int | None, Query(alias="bucketSeconds", ge=10, le=86400)] = None,
+    resolution: Annotated[Literal["raw", "hourly"], Query()] = "raw",
 ) -> MetricSeriesResponse:
-    _validate_window(start, end)
+    maximum_range = _MAX_RAW_HISTORY_RANGE if resolution == "raw" else _MAX_HOURLY_HISTORY_RANGE
+    _validate_window(start, end, maximum_range=maximum_range)
+
+    if resolution == "hourly":
+        if bucket_seconds not in (None, 3600):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="hourly resolution uses a fixed 3600-second bucket",
+            )
+        series = retention_repository.list_hourly(
+            device_id,
+            name,
+            start,
+            end,
+            limit=limit,
+        )
+        unit = next((point.unit for point in series.points if point.unit is not None), None)
+        return MetricSeriesResponse(
+            deviceId=series.device_id,
+            name=series.metric_name,
+            unit=unit,
+            start=series.start,
+            end=series.end,
+            bucketSeconds=3600,
+            resolution="hourly",
+            truncated=series.truncated,
+            points=[
+                MetricSeriesPointResponse(
+                    timestamp=point.timestamp,
+                    value=point.average,
+                    minimum=point.minimum,
+                    maximum=point.maximum,
+                    samples=point.samples,
+                    source="hourly_rollup",
+                )
+                for point in series.points
+            ],
+        )
+
     series = telemetry_repository.list_history(
         device_id,
         name,
@@ -56,6 +106,7 @@ def metric_history(
         start=series.start,
         end=series.end,
         bucketSeconds=series.bucket_seconds,
+        resolution="raw",
         truncated=series.truncated,
         points=[
             MetricSeriesPointResponse(
@@ -64,6 +115,7 @@ def metric_history(
                 minimum=point.minimum,
                 maximum=point.maximum,
                 samples=point.samples,
+                source="raw",
             )
             for point in series.points
         ],
@@ -105,7 +157,23 @@ def network_diagnostics(
     )
 
 
-def _validate_window(start: datetime, end: datetime) -> None:
+@operator_router.post("/compact", response_model=TelemetryCompactionResponse)
+def compact_telemetry(
+    _: Operator,
+    retention_repository: RetentionRepositoryDependency,
+    raw_retention_days: Annotated[int, Query(alias="rawRetentionDays", ge=1, le=90)] = 7,
+) -> TelemetryCompactionResponse:
+    cutoff = datetime.now(UTC) - timedelta(days=raw_retention_days)
+    result = retention_repository.compact_before(cutoff)
+    return TelemetryCompactionResponse(
+        cutoff=result.cutoff,
+        rollupsTouched=result.rollups_touched,
+        rawSamplesDeleted=result.raw_samples_deleted,
+        rawRetentionDays=raw_retention_days,
+    )
+
+
+def _validate_window(start: datetime, end: datetime, *, maximum_range: timedelta) -> None:
     if start.tzinfo is None or end.tzinfo is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -116,8 +184,9 @@ def _validate_window(start: datetime, end: datetime) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="end must be after start",
         )
-    if end - start > _MAX_HISTORY_RANGE:
+    if end - start > maximum_range:
+        days = maximum_range.days
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="history range cannot exceed 30 days",
+            detail=f"history range cannot exceed {days} days for this resolution",
         )
