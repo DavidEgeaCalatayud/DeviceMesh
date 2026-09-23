@@ -35,10 +35,21 @@ class SqlAlchemyDeviceRepository:
         identity: DeviceIdentity | None = None,
     ) -> Device:
         with self._session_factory() as session:
-            device = session.get(DeviceRow, agent_id)
+            agent = session.get(AgentRow, agent_id)
+            device = session.get(DeviceRow, agent.device_id) if agent is not None else None
+
+            if device is None and agent is None:
+                device = session.get(DeviceRow, agent_id)
+            if device is None and identity is not None:
+                device = self._resolve_identity_device(session, identity)
             if device is None:
-                device = DeviceRow(id=agent_id, first_seen=timestamp, status=DeviceStatus.UNKNOWN.value)
+                device = DeviceRow(
+                    id=agent_id,
+                    first_seen=timestamp,
+                    status=DeviceStatus.UNKNOWN.value,
+                )
                 session.add(device)
+                session.flush()
 
             device.status = DeviceStatus.ONLINE.value
             device.last_seen = timestamp
@@ -46,7 +57,6 @@ class SqlAlchemyDeviceRepository:
                 device.first_seen = timestamp
             self._apply_identity(session, device, identity, timestamp)
 
-            agent = session.get(AgentRow, agent_id)
             if agent is None:
                 session.add(AgentRow(id=agent_id, device_id=device.id, last_seen=timestamp))
             else:
@@ -108,6 +118,43 @@ class SqlAlchemyDeviceRepository:
             session.commit()
             session.refresh(device)
             return self._to_domain(session, device)
+
+    def _resolve_identity_device(
+        self,
+        session: Session,
+        identity: DeviceIdentity,
+    ) -> DeviceRow | None:
+        for raw_mac in identity.mac_addresses:
+            mac = _normalize_mac(raw_mac)
+            interface = session.scalar(
+                select(DeviceInterfaceRow)
+                .where(DeviceInterfaceRow.mac_address == mac)
+                .limit(1)
+            )
+            if interface is not None:
+                return session.get(DeviceRow, interface.device_id)
+
+        if identity.hostname:
+            device = session.scalar(
+                select(DeviceRow)
+                .where(DeviceRow.hostname == identity.hostname)
+                .limit(1)
+            )
+            if device is not None:
+                return device
+
+        for raw_ip in identity.ip_addresses:
+            ip = raw_ip.strip()
+            if not ip:
+                continue
+            interface = session.scalar(
+                select(DeviceInterfaceRow)
+                .where(DeviceInterfaceRow.ip_address == ip)
+                .limit(1)
+            )
+            if interface is not None:
+                return session.get(DeviceRow, interface.device_id)
+        return None
 
     def _resolve_observed_device(
         self,
@@ -294,10 +341,11 @@ class SqlAlchemyTelemetryRepository:
                     status=DeviceStatus.ONLINE.value,
                 )
                 session.add(device)
+                session.flush()
 
             if agent is None:
                 session.add(
-                    AgentRow(id=batch.agent_id, device_id=device_id, last_seen=batch.timestamp)
+                    AgentRow(id=batch.agent_id, device_id=device.id, last_seen=batch.timestamp)
                 )
             else:
                 agent.last_seen = batch.timestamp
@@ -306,7 +354,7 @@ class SqlAlchemyTelemetryRepository:
             for metric in batch.metrics:
                 session.add(
                     MetricSampleRow(
-                        device_id=device_id,
+                        device_id=device.id,
                         metric_type=metric.name,
                         timestamp=batch.timestamp,
                         value=metric.value,
