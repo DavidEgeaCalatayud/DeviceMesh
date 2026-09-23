@@ -9,7 +9,7 @@ class ProbeConfig:
     server_url: str
     source: str
     scopes: tuple[DiscoveryScope, ...]
-    tcp_ports: tuple[int, ...]
+    tcp_ports: tuple[int, ...] = ()
 
     @classmethod
     def from_environment(cls) -> "ProbeConfig":
