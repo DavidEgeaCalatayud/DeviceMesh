@@ -79,7 +79,12 @@ def test_maintenance_preserves_incident_but_marks_it_silenced() -> None:
     incident = transitions[0].incident
     assert incident.rule_id == rule.id
     assert incident.maintenance_window_id == window.id
-    assert alerts.list_alerts(active_only=True)[0].maintenance_window_id == window.id
+    stored = next(
+        candidate
+        for candidate in alerts.list_alerts(active_only=True)
+        if candidate.id == incident.id
+    )
+    assert stored.maintenance_window_id == window.id
 
 
 def test_remote_operations_are_allowlisted_claimed_and_completed_by_target_agent() -> None:
