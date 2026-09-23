@@ -1,0 +1,16 @@
+name: ESP32 Firmware CI
+on:
+  push:
+    paths: ["firmware/esp32/**", ".github/workflows/firmware-ci.yml"]
+  pull_request:
+    paths: ["firmware/esp32/**", ".github/workflows/firmware-ci.yml"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          path: firmware/esp32
+          target: esp32
+          command: idf.py build

@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: devicemesh
+      POSTGRES_USER: devicemesh
+      POSTGRES_PASSWORD: devicemesh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devicemesh -d devicemesh"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - devicemesh-postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - devicemesh-redis:/data
+
+  api:
+    build:
+      context: ../../backend
+    env_file:
+      - ../../.env.example
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    build:
+      context: ../../web
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_WS_BASE_URL: ws://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  devicemesh-postgres:
+  devicemesh-redis:

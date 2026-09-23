@@ -1,0 +1,20 @@
+name: SBOM
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: devicemesh-sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: devicemesh-sbom
+          path: devicemesh-sbom.cdx.json

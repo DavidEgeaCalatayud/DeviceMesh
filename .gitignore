@@ -1,0 +1,50 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# .NET
+**/bin/
+**/obj/
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+
+# Apple
+.DS_Store
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# ESP-IDF
+firmware/esp32/build/
+firmware/esp32/sdkconfig
+
+# IDE
+.idea/
+.vscode/
+*.user
+*.suo
+
+# Runtime
+data/
+logs/

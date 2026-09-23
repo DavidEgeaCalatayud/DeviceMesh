@@ -1,0 +1,5 @@
+[project]
+name = "devicemesh-linux-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28,<1", "psutil>=7,<8"]

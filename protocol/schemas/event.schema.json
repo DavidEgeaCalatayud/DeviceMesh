@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devicemesh.local/schemas/event-v1.json",
+  "title": "DeviceMesh Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocolVersion", "agentId", "timestamp", "event"],
+  "properties": {
+    "type": {"const": "event"},
+    "protocolVersion": {"const": 1},
+    "agentId": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "severity"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "severity": {"enum": ["info", "warning", "critical"]},
+        "attributes": {"type": "object"}
+      }
+    }
+  }
+}

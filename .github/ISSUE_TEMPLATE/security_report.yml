@@ -1,0 +1,11 @@
+name: Security guidance
+description: Do not disclose exploitable vulnerabilities publicly
+title: "security: non-sensitive hardening request"
+body:
+  - type: markdown
+    attributes:
+      value: "For exploitable vulnerabilities or secrets, stop and follow SECURITY.md instead of opening a public issue."
+  - type: textarea
+    id: hardening
+    attributes: {label: Non-sensitive security improvement}
+    validations: {required: true}

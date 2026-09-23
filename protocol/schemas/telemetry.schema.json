@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devicemesh.local/schemas/telemetry-v1.json",
+  "title": "DeviceMesh Telemetry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocolVersion", "agentId", "timestamp", "metrics"],
+  "properties": {
+    "type": {"const": "telemetry"},
+    "protocolVersion": {"const": 1},
+    "agentId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "metrics": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "value"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$"},
+          "value": {"type": "number"},
+          "unit": {"type": ["string", "null"], "maxLength": 32}
+        }
+      }
+    }
+  }
+}

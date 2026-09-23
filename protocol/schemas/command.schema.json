@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devicemesh.local/schemas/command-v1.json",
+  "title": "DeviceMesh Command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocolVersion", "commandId", "name"],
+  "properties": {
+    "type": {"const": "command"},
+    "protocolVersion": {"const": 1},
+    "commandId": {"type": "string", "minLength": 1},
+    "name": {"enum": ["refresh.telemetry", "refresh.inventory"]},
+    "arguments": {"type": "object"}
+  }
+}
