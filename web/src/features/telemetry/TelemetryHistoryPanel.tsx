@@ -116,42 +116,45 @@ export function TelemetryHistoryPanel({ devices }: { devices: Device[] }) {
   }, [devices, requestedDeviceId])
 
   useEffect(() => {
-    if (!selectedDeviceId) {
-      setSeries(null)
-      setDiagnostic(null)
-      return
-    }
+    if (!selectedDeviceId) return
     const controller = new AbortController()
     const selectedRange = RANGE_OPTIONS[range]
     const end = new Date()
     const start = new Date(end.getTime() - selectedRange.milliseconds)
-    setLoading(true)
-    setError(null)
-    void Promise.all([
-      getMetricHistory(
-        selectedDeviceId,
-        metricName,
-        start,
-        end,
-        selectedRange.bucketSeconds,
-        controller.signal,
-      ),
-      getNetworkDiagnostic(selectedDeviceId, 15, controller.signal),
-    ])
-      .then(([nextSeries, nextDiagnostic]) => {
-        setSeries(nextSeries)
-        setDiagnostic(nextDiagnostic)
-      })
-      .catch((reason: unknown) => {
+
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const [nextSeries, nextDiagnostic] = await Promise.all([
+          getMetricHistory(
+            selectedDeviceId,
+            metricName,
+            start,
+            end,
+            selectedRange.bucketSeconds,
+            controller.signal,
+          ),
+          getNetworkDiagnostic(selectedDeviceId, 15, controller.signal),
+        ])
+        if (!controller.signal.aborted) {
+          setSeries(nextSeries)
+          setDiagnostic(nextDiagnostic)
+        }
+      } catch (reason: unknown) {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError(String(reason))
-      })
-      .finally(() => {
+      } finally {
         if (!controller.signal.aborted) setLoading(false)
-      })
+      }
+    }
+
+    void load()
     return () => controller.abort()
   }, [metricName, range, selectedDeviceId])
 
   const metricLabel = METRIC_OPTIONS.find((metric) => metric.name === metricName)?.label ?? metricName
+  const visibleSeries = series?.deviceId === selectedDeviceId ? series : null
+  const visibleDiagnostic = diagnostic?.deviceId === selectedDeviceId ? diagnostic : null
 
   return <section className="card telemetryPanel">
     <div className="panelHeader telemetryHeader">
@@ -175,8 +178,8 @@ export function TelemetryHistoryPanel({ devices }: { devices: Device[] }) {
     </div>
     {error && <div className="errorBanner">{error}</div>}
     <div className="telemetryGrid">
-      <div>{series ? <MetricChart series={series} label={metricLabel} /> : <div className="chartEmpty">Select a device with telemetry.</div>}</div>
-      <div>{diagnostic ? <DiagnosticSummary diagnostic={diagnostic} /> : <div className="chartEmpty">No network diagnosis available.</div>}</div>
+      <div>{visibleSeries ? <MetricChart series={visibleSeries} label={metricLabel} /> : <div className="chartEmpty">Select a device with telemetry.</div>}</div>
+      <div>{visibleDiagnostic ? <DiagnosticSummary diagnostic={visibleDiagnostic} /> : <div className="chartEmpty">No network diagnosis available.</div>}</div>
     </div>
   </section>
 }
