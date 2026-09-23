@@ -133,9 +133,11 @@ class SqlAlchemyTelemetryRetentionRepository:
                 existing.samples = total_samples
                 existing.unit = existing.unit or row.unit
 
+            raw_samples_deleted = session.scalar(
+                select(func.count(MetricSampleRow.id)).where(MetricSampleRow.timestamp < cutoff)
+            ) or 0
             session.flush()
-            deletion = session.execute(delete(MetricSampleRow).where(MetricSampleRow.timestamp < cutoff))
-            raw_samples_deleted = int(deletion.rowcount or 0)
+            session.execute(delete(MetricSampleRow).where(MetricSampleRow.timestamp < cutoff))
             session.commit()
 
         return TelemetryCompactionResult(
