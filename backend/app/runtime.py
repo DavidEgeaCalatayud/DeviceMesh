@@ -10,6 +10,7 @@ from app.infrastructure.repositories.alerts import SqlAlchemyAlertRepository
 from app.infrastructure.repositories.event_recording import EventRecordingDeviceRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.network import SqlAlchemyNetworkRepository
+from app.infrastructure.repositories.retention import SqlAlchemyTelemetryRetentionRepository
 from app.infrastructure.repositories.sqlalchemy import (
     SqlAlchemyDeviceRepository,
     SqlAlchemyTelemetryRepository,
@@ -24,6 +25,7 @@ raw_device_repository = SqlAlchemyDeviceRepository(SessionFactory)
 device_repository = EventRecordingDeviceRepository(raw_device_repository, event_repository)
 network_repository = SqlAlchemyNetworkRepository(SessionFactory)
 raw_telemetry_repository = SqlAlchemyTelemetryRepository(SessionFactory)
+telemetry_retention_repository = SqlAlchemyTelemetryRetentionRepository(SessionFactory)
 alert_repository = SqlAlchemyAlertRepository(SessionFactory)
 telemetry_repository = AlertingTelemetryRepository(
     raw_telemetry_repository,
@@ -67,3 +69,7 @@ def get_alert_repository() -> SqlAlchemyAlertRepository:
 
 def get_network_repository() -> SqlAlchemyNetworkRepository:
     return network_repository
+
+
+def get_telemetry_retention_repository() -> SqlAlchemyTelemetryRetentionRepository:
+    return telemetry_retention_repository
