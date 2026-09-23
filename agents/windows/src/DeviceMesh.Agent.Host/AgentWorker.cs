@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.Versioning;
@@ -31,44 +32,13 @@ public sealed class AgentWorker(
             try
             {
                 credential ??= await EnsureCredentialAsync(client, settings, stoppingToken);
-                var now = DateTimeOffset.UtcNow;
-                var heartbeat = new HeartbeatMessage(
-                    "heartbeat",
-                    1,
-                    settings.AgentId,
-                    now,
-                    identityProvider.Capture());
-                using var heartbeatResponse = await SendAuthenticatedAsync(
-                    client,
-                    "/api/v1/agents/heartbeat",
-                    heartbeat,
-                    settings.AgentId,
-                    credential,
-                    stoppingToken);
-                heartbeatResponse.EnsureSuccessStatusCode();
-
-                var snapshot = collectTelemetry.Execute();
-                var metrics = snapshot.Metrics
-                    .Select(metric => new MetricPayload(metric.Name, metric.Value, metric.Unit))
-                    .ToArray();
-                var telemetry = new TelemetryMessage(
-                    "telemetry",
-                    1,
-                    settings.AgentId,
-                    snapshot.Timestamp,
-                    metrics);
-                using var telemetryResponse = await SendAuthenticatedAsync(
-                    client,
-                    "/api/v1/agents/telemetry",
-                    telemetry,
-                    settings.AgentId,
-                    credential,
-                    stoppingToken);
-                telemetryResponse.EnsureSuccessStatusCode();
+                await PublishHeartbeatAsync(client, settings, credential, stoppingToken);
+                await PublishTelemetryAsync(client, settings, credential, stoppingToken);
+                await ProcessOneRemoteOperationAsync(client, settings, credential, stoppingToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                logger.LogWarning(exception, "Failed to publish agent telemetry");
+                logger.LogWarning(exception, "Failed to publish agent telemetry or process remote operation");
             }
 
             await Task.Delay(
@@ -76,6 +46,157 @@ public sealed class AgentWorker(
                 stoppingToken);
         }
     }
+
+    private async Task PublishHeartbeatAsync(
+        HttpClient client,
+        AgentOptions settings,
+        string credential,
+        CancellationToken cancellationToken)
+    {
+        var heartbeat = new HeartbeatMessage(
+            "heartbeat",
+            1,
+            settings.AgentId,
+            DateTimeOffset.UtcNow,
+            identityProvider.Capture());
+        using var response = await SendAuthenticatedAsync(
+            client,
+            "/api/v1/agents/heartbeat",
+            heartbeat,
+            settings.AgentId,
+            credential,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task PublishTelemetryAsync(
+        HttpClient client,
+        AgentOptions settings,
+        string credential,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = collectTelemetry.Execute();
+        var metrics = snapshot.Metrics
+            .Select(metric => new MetricPayload(metric.Name, metric.Value, metric.Unit))
+            .ToArray();
+        var telemetry = new TelemetryMessage(
+            "telemetry",
+            1,
+            settings.AgentId,
+            snapshot.Timestamp,
+            metrics);
+        using var response = await SendAuthenticatedAsync(
+            client,
+            "/api/v1/agents/telemetry",
+            telemetry,
+            settings.AgentId,
+            credential,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task ProcessOneRemoteOperationAsync(
+        HttpClient client,
+        AgentOptions settings,
+        string credential,
+        CancellationToken cancellationToken)
+    {
+        using var claimResponse = await SendAuthenticatedAsync(
+            client,
+            "/api/v1/agents/operations/claim",
+            new { },
+            settings.AgentId,
+            credential,
+            cancellationToken);
+        if (claimResponse.StatusCode == HttpStatusCode.NoContent)
+        {
+            return;
+        }
+
+        claimResponse.EnsureSuccessStatusCode();
+        var operation = await claimResponse.Content.ReadFromJsonAsync<RemoteOperationClaim>(
+            ProtocolSerializer.Options,
+            cancellationToken);
+        if (operation is null)
+        {
+            throw new InvalidOperationException("Remote operation claim did not return a payload.");
+        }
+
+        RemoteOperationCompletion completion;
+        try
+        {
+            completion = await ExecuteRemoteOperationAsync(
+                operation,
+                client,
+                settings,
+                credential,
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            completion = new RemoteOperationCompletion(
+                "failed",
+                new Dictionary<string, object?>(),
+                exception.Message);
+        }
+
+        using var completionResponse = await SendAuthenticatedAsync(
+            client,
+            $"/api/v1/agents/operations/{Uri.EscapeDataString(operation.Id)}/complete",
+            completion,
+            settings.AgentId,
+            credential,
+            cancellationToken);
+        completionResponse.EnsureSuccessStatusCode();
+    }
+
+    private async Task<RemoteOperationCompletion> ExecuteRemoteOperationAsync(
+        RemoteOperationClaim operation,
+        HttpClient client,
+        AgentOptions settings,
+        string credential,
+        CancellationToken cancellationToken)
+    {
+        if (operation.Arguments.Count != 0)
+        {
+            return Failure("operation arguments are not supported by the Windows V1.1 executor");
+        }
+
+        switch (operation.OperationType)
+        {
+            case RemoteOperationTypes.TelemetryCollect:
+                await PublishTelemetryAsync(client, settings, credential, cancellationToken);
+                return Success(new Dictionary<string, object?>
+                {
+                    ["collectedAt"] = DateTimeOffset.UtcNow
+                });
+
+            case RemoteOperationTypes.InventoryRefresh:
+                await PublishHeartbeatAsync(client, settings, credential, cancellationToken);
+                return Success(new Dictionary<string, object?>
+                {
+                    ["refreshedAt"] = DateTimeOffset.UtcNow
+                });
+
+            case RemoteOperationTypes.AgentHealthCheck:
+                return Success(new Dictionary<string, object?>
+                {
+                    ["agentId"] = settings.AgentId,
+                    ["status"] = "ok",
+                    ["checkedAt"] = DateTimeOffset.UtcNow,
+                    ["platform"] = "windows"
+                });
+
+            default:
+                return Failure($"unsupported remote operation type: {operation.OperationType}");
+        }
+    }
+
+    private static RemoteOperationCompletion Success(IReadOnlyDictionary<string, object?> result) =>
+        new("succeeded", result);
+
+    private static RemoteOperationCompletion Failure(string error) =>
+        new("failed", new Dictionary<string, object?>(), error);
 
     private async Task<string> EnsureCredentialAsync(
         HttpClient client,
