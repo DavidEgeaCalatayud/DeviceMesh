@@ -87,7 +87,7 @@ class SqlAlchemyRemoteOperationRepository:
     ) -> list[RemoteOperation]:
         current = now or datetime.now(UTC)
         with self._session_factory() as session:
-            self._expire_queued(session, current)
+            self._expire_pending(session, current)
             statement = select(RemoteOperationRow)
             if device_id is not None:
                 statement = statement.where(RemoteOperationRow.device_id == device_id)
@@ -107,7 +107,7 @@ class SqlAlchemyRemoteOperationRepository:
     ) -> RemoteOperation | None:
         current = now or datetime.now(UTC)
         with self._session_factory() as session:
-            self._expire_queued(session, current, agent_id=agent_id)
+            self._expire_pending(session, current, agent_id=agent_id)
             row = session.scalar(
                 select(RemoteOperationRow)
                 .where(
@@ -151,9 +151,21 @@ class SqlAlchemyRemoteOperationRepository:
     ) -> RemoteOperation:
         current = now or datetime.now(UTC)
         with self._session_factory() as session:
-            row = session.get(RemoteOperationRow, operation_id)
+            row = session.scalar(
+                select(RemoteOperationRow)
+                .where(RemoteOperationRow.id == operation_id)
+                .with_for_update()
+                .limit(1)
+            )
             if row is None or row.agent_id != agent_id:
                 raise RemoteOperationNotFoundError
+            if (
+                row.status == RemoteOperationStatus.CLAIMED.value
+                and row.expires_at <= current
+            ):
+                self._expire_row(session, row, current)
+                session.commit()
+                raise InvalidRemoteOperationTransitionError
             if row.status != RemoteOperationStatus.CLAIMED.value:
                 raise InvalidRemoteOperationTransitionError
             row.status = (
@@ -180,7 +192,7 @@ class SqlAlchemyRemoteOperationRepository:
             session.refresh(row)
             return self._to_domain(row)
 
-    def _expire_queued(
+    def _expire_pending(
         self,
         session: Session,
         now: datetime,
@@ -188,27 +200,42 @@ class SqlAlchemyRemoteOperationRepository:
         agent_id: str | None = None,
     ) -> None:
         statement = select(RemoteOperationRow).where(
-            RemoteOperationRow.status == RemoteOperationStatus.QUEUED.value,
+            RemoteOperationRow.status.in_(
+                (
+                    RemoteOperationStatus.QUEUED.value,
+                    RemoteOperationStatus.CLAIMED.value,
+                )
+            ),
             RemoteOperationRow.expires_at <= now,
         )
         if agent_id is not None:
             statement = statement.where(RemoteOperationRow.agent_id == agent_id)
         rows = session.scalars(statement.with_for_update(skip_locked=True)).all()
         for row in rows:
-            row.status = RemoteOperationStatus.EXPIRED.value
-            row.completed_at = now
-            row.error = "operation expired before it was claimed"
-            self._audit(
-                session,
-                "REMOTE_OPERATION_EXPIRED",
-                now,
-                row.agent_id,
-                {
-                    "operationId": row.id,
-                    "deviceId": row.device_id,
-                    "operationType": row.operation_type,
-                },
-            )
+            self._expire_row(session, row, now)
+
+    def _expire_row(
+        self,
+        session: Session,
+        row: RemoteOperationRow,
+        now: datetime,
+    ) -> None:
+        previous_status = row.status
+        row.status = RemoteOperationStatus.EXPIRED.value
+        row.completed_at = now
+        row.error = f"operation expired while {previous_status}"
+        self._audit(
+            session,
+            "REMOTE_OPERATION_EXPIRED",
+            now,
+            row.agent_id,
+            {
+                "operationId": row.id,
+                "deviceId": row.device_id,
+                "operationType": row.operation_type,
+                "previousStatus": previous_status,
+            },
+        )
 
     @staticmethod
     def _validate_arguments(
