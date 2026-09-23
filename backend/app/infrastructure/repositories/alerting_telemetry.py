@@ -48,11 +48,16 @@ class AlertingTelemetryRepository:
     def _to_event(transition: AlertTransition) -> DeviceEvent:
         condition = transition.rule.condition
         opened = transition.type is AlertTransitionType.OPENED
+        silenced = transition.incident.maintenance_window_id is not None
         return DeviceEvent(
             device_id=transition.incident.device_id,
             name="ALERT_OPENED" if opened else "ALERT_RECOVERED",
             timestamp=transition.timestamp,
-            severity=EventSeverity.WARNING if opened else EventSeverity.INFO,
+            severity=(
+                EventSeverity.INFO
+                if silenced or not opened
+                else EventSeverity.WARNING
+            ),
             attributes={
                 "alertId": transition.incident.id,
                 "ruleId": transition.rule.id,
@@ -61,5 +66,7 @@ class AlertingTelemetryRepository:
                 "threshold": condition.threshold,
                 "durationSeconds": condition.duration_seconds,
                 "value": transition.value,
+                "silenced": silenced,
+                "maintenanceWindowId": transition.incident.maintenance_window_id,
             },
         )

@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.application.ports import EventRepository
 from app.domain.devices.models import DeviceStatus
 from app.domain.events.models import DeviceEvent, EventSeverity
+from app.domain.health.models import AvailabilityState
 from app.infrastructure.database import DeviceRow
+from app.infrastructure.repositories.health import SqlAlchemyHealthRepository
 
 
 class OfflineDeviceSweeper:
@@ -14,10 +16,12 @@ class OfflineDeviceSweeper:
         self,
         session_factory: sessionmaker[Session],
         events: EventRepository,
+        health: SqlAlchemyHealthRepository,
         offline_after_seconds: int,
     ) -> None:
         self._session_factory = session_factory
         self._events = events
+        self._health = health
         self._offline_after = timedelta(seconds=offline_after_seconds)
 
     def sweep(self, now: datetime | None = None) -> list[str]:
@@ -39,6 +43,15 @@ class OfflineDeviceSweeper:
             session.commit()
 
         for device_id, last_seen in transitions:
+            outage_started = (
+                last_seen + self._offline_after if last_seen is not None else current
+            )
+            self._health.record_state(
+                device_id,
+                AvailabilityState.OFFLINE,
+                outage_started,
+                "heartbeat-timeout",
+            )
             self._events.append(
                 DeviceEvent(
                     device_id=device_id,
@@ -47,6 +60,7 @@ class OfflineDeviceSweeper:
                     severity=EventSeverity.WARNING,
                     attributes={
                         "lastSeen": last_seen.isoformat() if last_seen is not None else None,
+                        "outageStartedAt": outage_started.isoformat(),
                         "offlineAfterSeconds": int(self._offline_after.total_seconds()),
                     },
                 )

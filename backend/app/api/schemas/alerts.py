@@ -37,3 +37,5 @@ class AlertResponse(BaseModel):
     operator: str
     threshold: float
     durationSeconds: int
+    silenced: bool
+    maintenanceWindowId: int | None

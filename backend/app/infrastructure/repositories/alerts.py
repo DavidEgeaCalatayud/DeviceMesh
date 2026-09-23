@@ -17,11 +17,17 @@ from app.infrastructure.database import (
     AlertRow,
     AlertRuleRow,
 )
+from app.infrastructure.repositories.health import SqlAlchemyMaintenanceRepository
 
 
 class SqlAlchemyAlertRepository:
-    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session],
+        maintenance: SqlAlchemyMaintenanceRepository | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._maintenance = maintenance
 
     def create_rule(self, rule: ThresholdRule) -> AlertRule:
         self._validate_rule(rule)
@@ -160,10 +166,15 @@ class SqlAlchemyAlertRepository:
         value: float,
         timestamp: datetime,
     ) -> AlertTransition:
+        maintenance_window_id = None
+        if self._maintenance is not None:
+            maintenance = self._maintenance.active_window(device_id, timestamp)
+            maintenance_window_id = maintenance.id if maintenance is not None else None
         incident_row = AlertRow(
             rule_id=rule.id,
             device_id=device_id,
             opened_at=timestamp,
+            maintenance_window_id=maintenance_window_id,
         )
         session.add(incident_row)
         session.flush()
@@ -205,4 +216,5 @@ class SqlAlchemyAlertRepository:
             device_id=row.device_id,
             opened_at=row.opened_at,
             closed_at=row.closed_at,
+            maintenance_window_id=row.maintenance_window_id,
         )

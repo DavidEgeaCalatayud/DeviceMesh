@@ -1,6 +1,7 @@
 import type { AlertIncident, AlertRule } from '../../entities/alert/types'
 import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
+import type { DeviceHealth, MaintenanceWindow, Outage } from '../../entities/health/types'
 import type { DeviceService, NetworkTopology } from '../../entities/network/types'
 import type { MetricSample, MetricSeries, NetworkDiagnostic } from '../../entities/telemetry/types'
 
@@ -59,6 +60,41 @@ export async function getNetworkDiagnostic(
   const response = await fetch(`${apiBase}/api/v1/telemetry/network-diagnostics?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Network diagnostics API failed: ${response.status}`)
   return response.json() as Promise<NetworkDiagnostic>
+}
+
+export async function getDeviceHealth(
+  deviceId: string,
+  signal?: AbortSignal,
+): Promise<DeviceHealth> {
+  const response = await fetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/health`, { signal })
+  if (!response.ok) throw new Error(`Device health API failed: ${response.status}`)
+  return response.json() as Promise<DeviceHealth>
+}
+
+export async function getDeviceOutages(
+  deviceId: string,
+  days = 30,
+  signal?: AbortSignal,
+): Promise<Outage[]> {
+  const params = new URLSearchParams({ days: String(days), limit: '100' })
+  const response = await fetch(
+    `${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/outages?${params.toString()}`,
+    { signal },
+  )
+  if (!response.ok) throw new Error(`Device outage API failed: ${response.status}`)
+  return response.json() as Promise<Outage[]>
+}
+
+export async function listMaintenanceWindows(
+  signal?: AbortSignal,
+  deviceId?: string,
+  activeOnly = false,
+): Promise<MaintenanceWindow[]> {
+  const params = new URLSearchParams({ activeOnly: String(activeOnly), limit: '100' })
+  if (deviceId) params.set('deviceId', deviceId)
+  const response = await fetch(`${apiBase}/api/v1/maintenance-windows?${params.toString()}`, { signal })
+  if (!response.ok) throw new Error(`Maintenance API failed: ${response.status}`)
+  return response.json() as Promise<MaintenanceWindow[]>
 }
 
 export async function listAlerts(signal?: AbortSignal, activeOnly = false): Promise<AlertIncident[]> {

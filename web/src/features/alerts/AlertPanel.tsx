@@ -24,10 +24,11 @@ export function AlertPanel({ alerts, devices }: { alerts: AlertIncident[]; devic
       <div className="alertSectionTitle">Active incidents <span>{active.length}</span></div>
       {active.length === 0
         ? <p className="muted">No active threshold alerts.</p>
-        : <div className="alertList">{active.map((alert) => <div className="alertItem activeAlert" key={alert.id}>
+        : <div className="alertList">{active.map((alert) => <div className={`alertItem activeAlert ${alert.silenced ? 'silencedAlert' : ''}`} key={alert.id}>
           <div>
-            <strong>{deviceLabel(alert.deviceId, devices)}</strong>
+            <div className="alertIdentity"><strong>{deviceLabel(alert.deviceId, devices)}</strong>{alert.silenced && <span className="maintenanceBadge">silenced</span>}</div>
             <div className="muted">{thresholdLabel(alert)}</div>
+            {alert.silenced && <div className="deviceMeta">Maintenance window #{alert.maintenanceWindowId} · incident retained, notification noise suppressed</div>}
           </div>
           <div className="alertTime">since {formatTime(alert.openedAt)}</div>
         </div>)}</div>}

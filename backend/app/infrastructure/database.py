@@ -133,6 +133,9 @@ class AlertRow(Base):
     device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    maintenance_window_id: Mapped[int | None] = mapped_column(
+        ForeignKey("maintenance_windows.id")
+    )
 
 
 class AlertConditionStateRow(Base):
@@ -143,6 +146,48 @@ class AlertConditionStateRow(Base):
     first_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_sample_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_value: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class DeviceAvailabilityIntervalRow(Base):
+    __tablename__ = "device_availability_intervals"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class MaintenanceWindowRow(Base):
+    __tablename__ = "maintenance_windows"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[str | None] = mapped_column(ForeignKey("devices.id"))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RemoteOperationRow(Base):
+    __tablename__ = "remote_operations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    error: Mapped[str | None] = mapped_column(String(1024))
 
 
 class EnrollmentTokenRow(Base):

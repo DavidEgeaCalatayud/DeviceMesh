@@ -3,12 +3,20 @@ from datetime import datetime
 from app.application.ports import DeviceRepository, EventRepository
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation, DeviceStatus
 from app.domain.events.models import DeviceEvent
+from app.domain.health.models import AvailabilityState
+from app.infrastructure.repositories.health import SqlAlchemyHealthRepository
 
 
 class EventRecordingDeviceRepository:
-    def __init__(self, devices: DeviceRepository, events: EventRepository) -> None:
+    def __init__(
+        self,
+        devices: DeviceRepository,
+        events: EventRepository,
+        health: SqlAlchemyHealthRepository,
+    ) -> None:
         self._devices = devices
         self._events = events
+        self._health = health
         self._connected_agents: set[str] = set()
 
     def list_devices(self) -> list[Device]:
@@ -24,6 +32,7 @@ class EventRecordingDeviceRepository:
         previous_ips = set(before.ip_addresses) if before is not None else set()
         previous_status = before.status if before is not None else DeviceStatus.UNKNOWN
         device = self._devices.mark_agent_online(agent_id, timestamp, identity)
+        self._health.record_state(device.id, AvailabilityState.ONLINE, timestamp, "agent")
 
         if agent_id not in self._connected_agents:
             self._events.append(
@@ -53,6 +62,12 @@ class EventRecordingDeviceRepository:
         previous_ips = set(before.ip_addresses) if before is not None else set()
         previous_status = before.status if before is not None else DeviceStatus.UNKNOWN
         device = self._devices.record_observation(observation)
+        self._health.record_state(
+            device.id,
+            AvailabilityState.ONLINE,
+            observation.observed_at,
+            observation.source,
+        )
 
         if before is None:
             self._events.append(
