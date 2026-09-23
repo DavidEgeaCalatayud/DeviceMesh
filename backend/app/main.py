@@ -6,7 +6,16 @@ from datetime import UTC, datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import alerts, agents, devices, discovery, enrollment, events, health, telemetry
+from app.api.routers import (
+    agents,
+    alerts,
+    devices,
+    discovery,
+    enrollment,
+    events,
+    health,
+    telemetry,
+)
 from app.api.websocket.manager import ConnectionManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging
