@@ -10,10 +10,11 @@ const series: MetricSeries = {
   start: '2026-09-23T10:00:00Z',
   end: '2026-09-23T11:00:00Z',
   bucketSeconds: 60,
+  resolution: 'raw',
   truncated: false,
   points: [
-    { timestamp: '2026-09-23T10:00:00Z', value: 10, minimum: 9, maximum: 11, samples: 2 },
-    { timestamp: '2026-09-23T11:00:00Z', value: 20, minimum: 18, maximum: 22, samples: 2 },
+    { timestamp: '2026-09-23T10:00:00Z', value: 10, minimum: 9, maximum: 11, samples: 2, source: 'raw' },
+    { timestamp: '2026-09-23T11:00:00Z', value: 20, minimum: 18, maximum: 22, samples: 2, source: 'raw' },
   ],
 }
 
@@ -30,10 +31,11 @@ const diagnostic: NetworkDiagnostic = {
 }
 
 describe('Telemetry history surfaces', () => {
-  it('renders a time-series chart with the latest value', () => {
+  it('renders a time-series chart with latest value and provenance', () => {
     render(<MetricChart series={series} label="Latency" />)
     expect(screen.getByRole('img', { name: 'Latency history' })).toBeTruthy()
     expect(screen.getByText('20.0 ms')).toBeTruthy()
+    expect(screen.getByText(/raw telemetry/)).toBeTruthy()
   })
 
   it('keeps measured signals separate from the heuristic diagnostic', () => {
