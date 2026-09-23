@@ -1,9 +1,11 @@
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 
 namespace DeviceMesh.Agent.Host;
 
+[SupportedOSPlatform("windows")]
 public sealed class WindowsCredentialStore(IOptions<AgentOptions> options)
 {
     private readonly string _path = options.Value.CredentialFilePath;
