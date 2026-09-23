@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.operations.models import (
@@ -187,19 +187,28 @@ class SqlAlchemyRemoteOperationRepository:
         *,
         agent_id: str | None = None,
     ) -> None:
-        statement = update(RemoteOperationRow).where(
+        statement = select(RemoteOperationRow).where(
             RemoteOperationRow.status == RemoteOperationStatus.QUEUED.value,
             RemoteOperationRow.expires_at <= now,
         )
         if agent_id is not None:
             statement = statement.where(RemoteOperationRow.agent_id == agent_id)
-        session.execute(
-            statement.values(
-                status=RemoteOperationStatus.EXPIRED.value,
-                completed_at=now,
-                error="operation expired before it was claimed",
+        rows = session.scalars(statement.with_for_update(skip_locked=True)).all()
+        for row in rows:
+            row.status = RemoteOperationStatus.EXPIRED.value
+            row.completed_at = now
+            row.error = "operation expired before it was claimed"
+            self._audit(
+                session,
+                "REMOTE_OPERATION_EXPIRED",
+                now,
+                row.agent_id,
+                {
+                    "operationId": row.id,
+                    "deviceId": row.device_id,
+                    "operationType": row.operation_type,
+                },
             )
-        )
 
     @staticmethod
     def _validate_arguments(
