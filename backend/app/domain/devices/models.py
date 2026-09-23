@@ -20,6 +20,17 @@ class DeviceIdentity:
     mac_addresses: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class DeviceObservation:
+    source: str
+    observed_at: datetime
+    hostname: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+    manufacturer: str | None = None
+    attributes: dict[str, object] = field(default_factory=dict)
+
+
 @dataclass(slots=True)
 class Device:
     id: str

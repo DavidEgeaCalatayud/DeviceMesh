@@ -1,13 +1,15 @@
 from datetime import datetime
+from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.domain.devices.models import Device, DeviceIdentity, DeviceStatus
+from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation, DeviceStatus
 from app.domain.telemetry.models import TelemetryBatch
 from app.infrastructure.database import (
     AgentRow,
     DeviceInterfaceRow,
+    DeviceObservationRow,
     DeviceRow,
     MetricSampleRow,
 )
@@ -54,6 +56,135 @@ class SqlAlchemyDeviceRepository:
             session.commit()
             session.refresh(device)
             return self._to_domain(session, device)
+
+    def record_observation(self, observation: DeviceObservation) -> Device:
+        with self._session_factory() as session:
+            device = self._resolve_observed_device(session, observation)
+            if device is None:
+                device = DeviceRow(
+                    id=self._observation_device_id(observation),
+                    hostname=observation.hostname,
+                    manufacturer=observation.manufacturer,
+                    status=DeviceStatus.ONLINE.value,
+                    first_seen=observation.observed_at,
+                    last_seen=observation.observed_at,
+                )
+                session.add(device)
+                session.flush()
+            else:
+                device.hostname = observation.hostname or device.hostname
+                device.manufacturer = observation.manufacturer or device.manufacturer
+                device.status = DeviceStatus.ONLINE.value
+                device.last_seen = observation.observed_at
+
+            self._apply_observed_interface(session, device, observation)
+            session.add(
+                DeviceObservationRow(
+                    device_id=device.id,
+                    source=observation.source,
+                    observed_at=observation.observed_at,
+                    hostname=observation.hostname,
+                    ip_address=observation.ip_address,
+                    mac_address=(
+                        _normalize_mac(observation.mac_address)
+                        if observation.mac_address is not None
+                        else None
+                    ),
+                    manufacturer=observation.manufacturer,
+                    attributes=observation.attributes,
+                )
+            )
+            session.commit()
+            session.refresh(device)
+            return self._to_domain(session, device)
+
+    def _resolve_observed_device(
+        self,
+        session: Session,
+        observation: DeviceObservation,
+    ) -> DeviceRow | None:
+        if observation.mac_address:
+            mac = _normalize_mac(observation.mac_address)
+            interface = session.scalar(
+                select(DeviceInterfaceRow)
+                .where(DeviceInterfaceRow.mac_address == mac)
+                .limit(1)
+            )
+            if interface is not None:
+                return session.get(DeviceRow, interface.device_id)
+
+        if observation.hostname:
+            device = session.scalar(
+                select(DeviceRow)
+                .where(DeviceRow.hostname == observation.hostname)
+                .limit(1)
+            )
+            if device is not None:
+                return device
+
+        if observation.ip_address:
+            interface = session.scalar(
+                select(DeviceInterfaceRow)
+                .where(DeviceInterfaceRow.ip_address == observation.ip_address)
+                .limit(1)
+            )
+            if interface is not None:
+                return session.get(DeviceRow, interface.device_id)
+        return None
+
+    @staticmethod
+    def _observation_device_id(observation: DeviceObservation) -> str:
+        if observation.mac_address:
+            key = f"mac:{_normalize_mac(observation.mac_address)}"
+        elif observation.hostname:
+            key = f"hostname:{observation.hostname.casefold()}"
+        elif observation.ip_address:
+            key = f"ip:{observation.ip_address}"
+        else:
+            key = f"source:{observation.source}:{observation.observed_at.isoformat()}"
+        return f"discovered-{uuid5(NAMESPACE_URL, f'devicemesh:{key}') }".replace(" ", "")
+
+    def _apply_observed_interface(
+        self,
+        session: Session,
+        device: DeviceRow,
+        observation: DeviceObservation,
+    ) -> None:
+        mac = _normalize_mac(observation.mac_address) if observation.mac_address else None
+        row = None
+        if mac is not None:
+            row = session.scalar(
+                select(DeviceInterfaceRow)
+                .where(
+                    DeviceInterfaceRow.device_id == device.id,
+                    DeviceInterfaceRow.mac_address == mac,
+                )
+                .limit(1)
+            )
+        if row is None and observation.ip_address is not None:
+            row = session.scalar(
+                select(DeviceInterfaceRow)
+                .where(
+                    DeviceInterfaceRow.device_id == device.id,
+                    DeviceInterfaceRow.ip_address == observation.ip_address,
+                )
+                .limit(1)
+            )
+        if row is None:
+            session.add(
+                DeviceInterfaceRow(
+                    device_id=device.id,
+                    mac_address=mac,
+                    ip_address=observation.ip_address,
+                    first_seen=observation.observed_at,
+                    last_seen=observation.observed_at,
+                )
+            )
+            return
+
+        row.mac_address = mac or row.mac_address
+        row.ip_address = observation.ip_address or row.ip_address
+        row.last_seen = observation.observed_at
 
     def _apply_identity(
         self,

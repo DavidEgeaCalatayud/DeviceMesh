@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
-from app.domain.devices.models import Device, DeviceIdentity
+from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation
 from app.domain.telemetry.models import TelemetryBatch
 
 
@@ -14,6 +14,8 @@ class DeviceRepository(Protocol):
         timestamp: datetime,
         identity: DeviceIdentity | None = None,
     ) -> Device: ...
+
+    def record_observation(self, observation: DeviceObservation) -> Device: ...
 
 
 class TelemetryRepository(Protocol):
