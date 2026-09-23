@@ -61,23 +61,26 @@ def metric_history(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="hourly resolution uses a fixed 3600-second bucket",
             )
-        series = retention_repository.list_hourly(
+        hourly_series = retention_repository.list_hourly(
             device_id,
             name,
             start,
             end,
             limit=limit,
         )
-        unit = next((point.unit for point in series.points if point.unit is not None), None)
+        unit = next(
+            (point.unit for point in hourly_series.points if point.unit is not None),
+            None,
+        )
         return MetricSeriesResponse(
-            deviceId=series.device_id,
-            name=series.metric_name,
+            deviceId=hourly_series.device_id,
+            name=hourly_series.metric_name,
             unit=unit,
-            start=series.start,
-            end=series.end,
+            start=hourly_series.start,
+            end=hourly_series.end,
             bucketSeconds=3600,
             resolution="hourly",
-            truncated=series.truncated,
+            truncated=hourly_series.truncated,
             points=[
                 MetricSeriesPointResponse(
                     timestamp=point.timestamp,
@@ -87,11 +90,11 @@ def metric_history(
                     samples=point.samples,
                     source="hourly_rollup",
                 )
-                for point in series.points
+                for point in hourly_series.points
             ],
         )
 
-    series = telemetry_repository.list_history(
+    raw_series = telemetry_repository.list_history(
         device_id,
         name,
         start,
@@ -100,14 +103,14 @@ def metric_history(
         bucket_seconds=bucket_seconds,
     )
     return MetricSeriesResponse(
-        deviceId=series.device_id,
-        name=series.metric_name,
-        unit=series.unit,
-        start=series.start,
-        end=series.end,
-        bucketSeconds=series.bucket_seconds,
+        deviceId=raw_series.device_id,
+        name=raw_series.metric_name,
+        unit=raw_series.unit,
+        start=raw_series.start,
+        end=raw_series.end,
+        bucketSeconds=raw_series.bucket_seconds,
         resolution="raw",
-        truncated=series.truncated,
+        truncated=raw_series.truncated,
         points=[
             MetricSeriesPointResponse(
                 timestamp=point.timestamp,
@@ -117,7 +120,7 @@ def metric_history(
                 samples=point.samples,
                 source="raw",
             )
-            for point in series.points
+            for point in raw_series.points
         ],
     )
 
