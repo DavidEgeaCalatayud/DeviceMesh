@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -12,10 +13,15 @@ from app.api.schemas.alerts import (
 from app.application.use_cases.network_alert_presets import ensure_network_quality_alert_rules
 from app.domain.alerts.models import AlertIncident, AlertRule, ThresholdRule
 from app.infrastructure.repositories.alerts import SqlAlchemyAlertRepository
-from app.runtime import get_alert_repository
+from app.infrastructure.repositories.health import SqlAlchemyMaintenanceRepository
+from app.runtime import get_alert_repository, get_maintenance_repository
 
 router = APIRouter(prefix="/api/v1", tags=["alerts"])
 AlertRepositoryDependency = Annotated[SqlAlchemyAlertRepository, Depends(get_alert_repository)]
+MaintenanceRepositoryDependency = Annotated[
+    SqlAlchemyMaintenanceRepository,
+    Depends(get_maintenance_repository),
+]
 Operator = Annotated[None, Depends(require_operator)]
 
 
@@ -31,8 +37,13 @@ def _rule_response(rule: AlertRule) -> AlertRuleResponse:
     )
 
 
-def _alert_response(incident: AlertIncident, rule: AlertRule) -> AlertResponse:
+def _alert_response(
+    incident: AlertIncident,
+    rule: AlertRule,
+    maintenance_window_id: int | None,
+) -> AlertResponse:
     condition = rule.condition
+    effective_maintenance_id = incident.maintenance_window_id or maintenance_window_id
     return AlertResponse(
         id=incident.id,
         ruleId=incident.rule_id,
@@ -44,6 +55,8 @@ def _alert_response(incident: AlertIncident, rule: AlertRule) -> AlertResponse:
         operator=condition.operator,
         threshold=condition.threshold,
         durationSeconds=condition.duration_seconds,
+        silenced=effective_maintenance_id is not None,
+        maintenanceWindowId=effective_maintenance_id,
     )
 
 
@@ -92,13 +105,26 @@ def install_network_quality_alert_preset(
 @router.get("/alerts", response_model=list[AlertResponse])
 def list_alerts(
     repository: AlertRepositoryDependency,
+    maintenance: MaintenanceRepositoryDependency,
     active_only: Annotated[bool, Query(alias="activeOnly")] = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[AlertResponse]:
     rules = {rule.id: rule for rule in repository.list_rules()}
     incidents = repository.list_alerts(active_only=active_only, limit=limit)
-    return [
-        _alert_response(incident, rules[incident.rule_id])
-        for incident in incidents
-        if incident.rule_id in rules
-    ]
+    now = datetime.now(UTC)
+    responses: list[AlertResponse] = []
+    for incident in incidents:
+        rule = rules.get(incident.rule_id)
+        if rule is None:
+            continue
+        current_window = None
+        if incident.closed_at is None and incident.maintenance_window_id is None:
+            current_window = maintenance.active_window(incident.device_id, now)
+        responses.append(
+            _alert_response(
+                incident,
+                rule,
+                current_window.id if current_window is not None else None,
+            )
+        )
+    return responses
