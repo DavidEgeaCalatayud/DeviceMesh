@@ -9,6 +9,7 @@ class EventRecordingDeviceRepository:
     def __init__(self, devices: DeviceRepository, events: EventRepository) -> None:
         self._devices = devices
         self._events = events
+        self._connected_agents: set[str] = set()
 
     def list_devices(self) -> list[Device]:
         return self._devices.list_devices()
@@ -19,23 +20,29 @@ class EventRecordingDeviceRepository:
         timestamp: datetime,
         identity: DeviceIdentity | None = None,
     ) -> Device:
-        before = next((device for device in self._devices.list_devices() if device.id == agent_id), None)
+        before = self._find_agent_candidate(agent_id, identity)
         previous_ips = set(before.ip_addresses) if before is not None else set()
         previous_status = before.status if before is not None else DeviceStatus.UNKNOWN
         device = self._devices.mark_agent_online(agent_id, timestamp, identity)
 
-        if before is None:
+        if agent_id not in self._connected_agents:
             self._events.append(
                 DeviceEvent(
                     device_id=device.id,
                     name="AGENT_CONNECTED",
                     timestamp=timestamp,
-                    attributes={"hostname": device.hostname or device.id},
+                    attributes={"hostname": device.hostname or device.id, "agentId": agent_id},
                 )
             )
-        elif previous_status is not DeviceStatus.ONLINE:
+            self._connected_agents.add(agent_id)
+        if before is not None and previous_status is not DeviceStatus.ONLINE:
             self._events.append(
-                DeviceEvent(device_id=device.id, name="DEVICE_ONLINE", timestamp=timestamp)
+                DeviceEvent(
+                    device_id=device.id,
+                    name="DEVICE_ONLINE",
+                    timestamp=timestamp,
+                    attributes={"source": "agent"},
+                )
             )
 
         self._record_ip_change(device, previous_ips, timestamp, "agent")
@@ -44,6 +51,7 @@ class EventRecordingDeviceRepository:
     def record_observation(self, observation: DeviceObservation) -> Device:
         before = self._match_observation(observation)
         previous_ips = set(before.ip_addresses) if before is not None else set()
+        previous_status = before.status if before is not None else DeviceStatus.UNKNOWN
         device = self._devices.record_observation(observation)
 
         if before is None:
@@ -61,6 +69,15 @@ class EventRecordingDeviceRepository:
                 )
             )
         else:
+            if previous_status is not DeviceStatus.ONLINE:
+                self._events.append(
+                    DeviceEvent(
+                        device_id=device.id,
+                        name="DEVICE_ONLINE",
+                        timestamp=observation.observed_at,
+                        attributes={"source": observation.source},
+                    )
+                )
             self._record_ip_change(
                 device,
                 previous_ips,
@@ -68,6 +85,37 @@ class EventRecordingDeviceRepository:
                 observation.source,
             )
         return device
+
+    def _find_agent_candidate(
+        self,
+        agent_id: str,
+        identity: DeviceIdentity | None,
+    ) -> Device | None:
+        devices = self._devices.list_devices()
+        direct = next((device for device in devices if device.id == agent_id), None)
+        if direct is not None or identity is None:
+            return direct
+
+        for raw_mac in identity.mac_addresses:
+            mac = raw_mac.upper().replace("-", ":")
+            match = next((device for device in devices if mac in device.mac_addresses), None)
+            if match is not None:
+                return match
+        if identity.hostname:
+            match = next(
+                (device for device in devices if device.hostname == identity.hostname),
+                None,
+            )
+            if match is not None:
+                return match
+        for ip_address in identity.ip_addresses:
+            match = next(
+                (device for device in devices if ip_address in device.ip_addresses),
+                None,
+            )
+            if match is not None:
+                return match
+        return None
 
     def _match_observation(self, observation: DeviceObservation) -> Device | None:
         devices = self._devices.list_devices()

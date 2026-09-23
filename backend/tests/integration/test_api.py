@@ -1,8 +1,36 @@
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
+OPERATOR_HEADERS = {"Authorization": "Bearer development-operator-change-me"}
+
+
+def _enroll(agent_id: str) -> str:
+    token_response = client.post(
+        "/api/v1/operator/agent-enrollment-tokens",
+        json={},
+        headers=OPERATOR_HEADERS,
+    )
+    assert token_response.status_code == 200
+    enrollment = client.post(
+        "/api/v1/agents/enroll",
+        json={"token": token_response.json()["token"], "agentId": agent_id},
+    )
+    assert enrollment.status_code == 200
+    return str(enrollment.json()["credential"])
+
+
+def _agent_headers(agent_id: str, credential: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Agent {credential}",
+        "X-DeviceMesh-Agent-ID": agent_id,
+        "X-DeviceMesh-Timestamp": datetime.now(UTC).isoformat(),
+        "X-DeviceMesh-Nonce": uuid4().hex,
+    }
 
 
 def test_health() -> None:
@@ -10,12 +38,19 @@ def test_health() -> None:
 
 
 def test_agent_heartbeat_and_device_inventory() -> None:
+    agent_id = f"integration-agent-{uuid4().hex[:8]}"
+    credential = _enroll(agent_id)
     payload = {
         "type": "heartbeat",
         "protocolVersion": 1,
-        "agentId": "integration-agent",
-        "timestamp": "2026-09-23T08:30:00Z",
+        "agentId": agent_id,
+        "timestamp": datetime.now(UTC).isoformat(),
     }
-    assert client.post("/api/v1/agents/heartbeat", json=payload).status_code == 200
+    response = client.post(
+        "/api/v1/agents/heartbeat",
+        json=payload,
+        headers=_agent_headers(agent_id, credential),
+    )
+    assert response.status_code == 200
     devices = client.get("/api/v1/devices").json()
-    assert any(device["id"] == "integration-agent" for device in devices)
+    assert any(device["id"] == agent_id for device in devices)

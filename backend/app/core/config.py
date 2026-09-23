@@ -11,8 +11,12 @@ class Settings(BaseSettings):
     api_port: int = 8000
     database_url: str = "postgresql+psycopg://devicemesh:devicemesh@localhost:5432/devicemesh"
     redis_url: str = "redis://localhost:6379/0"
-    jwt_secret: str = "development-only-change-me"
+    operator_token: str = "development-operator-change-me"
     agent_enrollment_ttl_seconds: int = 900
+    agent_request_max_skew_seconds: int = 300
+    agent_nonce_retention_seconds: int = 900
+    device_offline_after_seconds: int = 90
+    device_offline_sweep_interval_seconds: int = 15
 
 
 @lru_cache
