@@ -37,6 +37,7 @@ class AlertIncident:
     device_id: str
     opened_at: datetime
     closed_at: datetime | None = None
+    maintenance_window_id: int | None = None
 
 
 class AlertTransitionType(StrEnum):
