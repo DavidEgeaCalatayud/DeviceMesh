@@ -50,10 +50,9 @@ def test_websocket_receives_persisted_device_event() -> None:
             }
         ]
     }
-    with TestClient(app) as client:
-        with client.websocket_connect("/ws/events") as websocket:
-            response = client.post("/api/v1/discovery/observations", json=payload)
-            assert response.status_code == 202
-            envelope = websocket.receive_json()
-            assert envelope["type"] == "device.event"
-            assert envelope["payload"]["name"] == "DEVICE_DISCOVERED"
+    with TestClient(app) as client, client.websocket_connect("/ws/events") as websocket:
+        response = client.post("/api/v1/discovery/observations", json=payload)
+        assert response.status_code == 202
+        envelope = websocket.receive_json()
+        assert envelope["type"] == "device.event"
+        assert envelope["payload"]["name"] == "DEVICE_DISCOVERED"
