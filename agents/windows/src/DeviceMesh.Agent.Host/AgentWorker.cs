@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Runtime.Versioning;
 using DeviceMesh.Agent.Application.Telemetry;
 using DeviceMesh.Agent.Infrastructure.Identity;
 using DeviceMesh.Agent.Protocol;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Options;
 
 namespace DeviceMesh.Agent.Host;
 
+[SupportedOSPlatform("windows")]
 public sealed class AgentWorker(
     IHttpClientFactory httpClientFactory,
     CollectTelemetry collectTelemetry,
