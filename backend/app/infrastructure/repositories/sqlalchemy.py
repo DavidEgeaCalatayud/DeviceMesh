@@ -431,14 +431,14 @@ class SqlAlchemyTelemetryRepository:
         )
         with self._session_factory() as session:
             if bucket_seconds is None:
-                rows = session.scalars(
+                raw_rows = session.scalars(
                     select(MetricSampleRow)
                     .where(*filters)
                     .order_by(MetricSampleRow.timestamp.desc(), MetricSampleRow.id.desc())
                     .limit(bounded_limit + 1)
                 ).all()
-                truncated = len(rows) > bounded_limit
-                selected = list(reversed(rows[:bounded_limit]))
+                truncated = len(raw_rows) > bounded_limit
+                raw_selected = list(reversed(raw_rows[:bounded_limit]))
                 points = tuple(
                     MetricSeriesPoint(
                         timestamp=row.timestamp,
@@ -447,9 +447,12 @@ class SqlAlchemyTelemetryRepository:
                         maximum=row.value,
                         samples=1,
                     )
-                    for row in selected
+                    for row in raw_selected
                 )
-                unit = next((row.unit for row in selected if row.unit is not None), None)
+                unit = next(
+                    (row.unit for row in raw_selected if row.unit is not None),
+                    None,
+                )
             else:
                 bucket_epoch = (
                     func.floor(
@@ -457,7 +460,7 @@ class SqlAlchemyTelemetryRepository:
                     )
                     * bucket_seconds
                 ).label("bucket_epoch")
-                rows = session.execute(
+                bucket_rows = session.execute(
                     select(
                         bucket_epoch,
                         func.avg(MetricSampleRow.value),
@@ -471,8 +474,8 @@ class SqlAlchemyTelemetryRepository:
                     .order_by(bucket_epoch.desc())
                     .limit(bounded_limit + 1)
                 ).all()
-                truncated = len(rows) > bounded_limit
-                selected = list(reversed(rows[:bounded_limit]))
+                truncated = len(bucket_rows) > bounded_limit
+                bucket_selected = list(reversed(bucket_rows[:bounded_limit]))
                 points = tuple(
                     MetricSeriesPoint(
                         timestamp=datetime.fromtimestamp(float(row[0]), UTC),
@@ -481,9 +484,12 @@ class SqlAlchemyTelemetryRepository:
                         maximum=float(row[3]),
                         samples=int(row[4]),
                     )
-                    for row in selected
+                    for row in bucket_selected
                 )
-                unit = next((str(row[5]) for row in selected if row[5] is not None), None)
+                unit = next(
+                    (str(row[5]) for row in bucket_selected if row[5] is not None),
+                    None,
+                )
 
         return MetricSeries(
             device_id=device_id,
