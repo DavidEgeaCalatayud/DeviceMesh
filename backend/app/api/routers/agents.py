@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from app.api.schemas.agent import HeartbeatRequest, TelemetryRequest
 from app.application.use_cases.record_heartbeat import RecordHeartbeat
 from app.application.use_cases.record_telemetry import RecordTelemetry
+from app.domain.devices.models import DeviceIdentity
 from app.domain.telemetry.models import Metric, TelemetryBatch
 from app.runtime import get_heartbeat_use_case, get_telemetry_use_case
 
@@ -16,7 +17,18 @@ TelemetryUseCase = Annotated[RecordTelemetry, Depends(get_telemetry_use_case)]
 
 @router.post("/heartbeat")
 def heartbeat(request: HeartbeatRequest, use_case: HeartbeatUseCase) -> dict[str, str]:
-    device = use_case.execute(request.agentId, request.timestamp)
+    identity = None
+    if request.device is not None:
+        identity = DeviceIdentity(
+            hostname=request.device.hostname,
+            operating_system=request.device.operatingSystem,
+            operating_system_version=request.device.operatingSystemVersion,
+            architecture=request.device.architecture,
+            manufacturer=request.device.manufacturer,
+            ip_addresses=tuple(request.device.ipAddresses),
+            mac_addresses=tuple(request.device.macAddresses),
+        )
+    device = use_case.execute(request.agentId, request.timestamp, identity)
     return {"deviceId": device.id, "status": device.status.value}
 
 

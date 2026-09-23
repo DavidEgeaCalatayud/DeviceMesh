@@ -1,13 +1,19 @@
 from datetime import datetime
 from typing import Protocol
 
-from app.domain.devices.models import Device
+from app.domain.devices.models import Device, DeviceIdentity
 from app.domain.telemetry.models import TelemetryBatch
 
 
 class DeviceRepository(Protocol):
     def list_devices(self) -> list[Device]: ...
-    def mark_agent_online(self, agent_id: str, timestamp: datetime) -> Device: ...
+
+    def mark_agent_online(
+        self,
+        agent_id: str,
+        timestamp: datetime,
+        identity: DeviceIdentity | None = None,
+    ) -> Device: ...
 
 
 class TelemetryRepository(Protocol):

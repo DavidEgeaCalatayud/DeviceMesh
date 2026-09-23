@@ -1,13 +1,13 @@
 from app.application.use_cases.record_heartbeat import RecordHeartbeat
 from app.application.use_cases.record_telemetry import RecordTelemetry
-from app.infrastructure.repositories.in_memory import (
-    InMemoryDeviceRepository,
-    InMemoryTelemetryRepository,
+from app.infrastructure.database import SessionFactory
+from app.infrastructure.repositories.sqlalchemy import (
+    SqlAlchemyDeviceRepository,
+    SqlAlchemyTelemetryRepository,
 )
 
-# Bootstrap adapters. PostgreSQL implementations replace these as the persistence slice lands.
-device_repository = InMemoryDeviceRepository()
-telemetry_repository = InMemoryTelemetryRepository()
+device_repository = SqlAlchemyDeviceRepository(SessionFactory)
+telemetry_repository = SqlAlchemyTelemetryRepository(SessionFactory)
 heartbeat_use_case = RecordHeartbeat(device_repository)
 telemetry_use_case = RecordTelemetry(telemetry_repository)
 
