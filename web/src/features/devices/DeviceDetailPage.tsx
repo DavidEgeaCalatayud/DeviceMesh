@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import type { AlertIncident } from '../../entities/alert/types'
 import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
+import type { DeviceHealth, Outage } from '../../entities/health/types'
 import type { DeviceService } from '../../entities/network/types'
 import type { MetricSample } from '../../entities/telemetry/types'
 import {
+  getDeviceHealth,
+  getDeviceOutages,
   listAlerts,
   listDevices,
   listEvents,
@@ -13,6 +16,7 @@ import {
 } from '../../shared/api/client'
 import { AlertPanel } from '../alerts/AlertPanel'
 import { EventTimeline } from '../events/EventTimeline'
+import { DeviceHealthPanel } from '../health/DeviceHealthPanel'
 import { TelemetryHistoryPanel } from '../telemetry/TelemetryHistoryPanel'
 
 function metric(metrics: MetricSample[], name: string): MetricSample | undefined {
@@ -155,6 +159,8 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
   const [alerts, setAlerts] = useState<AlertIncident[]>([])
   const [services, setServices] = useState<DeviceService[]>([])
   const [events, setEvents] = useState<DeviceEvent[]>([])
+  const [health, setHealth] = useState<DeviceHealth | null>(null)
+  const [outages, setOutages] = useState<Outage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -166,13 +172,25 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
       listAlerts(controller.signal),
       listServices(controller.signal, deviceId),
       listEvents(controller.signal, 200),
+      getDeviceHealth(deviceId, controller.signal),
+      getDeviceOutages(deviceId, 30, controller.signal),
     ])
-      .then(([nextDevices, nextMetrics, nextAlerts, nextServices, nextEvents]) => {
+      .then(([
+        nextDevices,
+        nextMetrics,
+        nextAlerts,
+        nextServices,
+        nextEvents,
+        nextHealth,
+        nextOutages,
+      ]) => {
         setDevices(nextDevices)
         setMetrics(nextMetrics)
         setAlerts(nextAlerts)
         setServices(nextServices)
         setEvents(nextEvents)
+        setHealth(nextHealth)
+        setOutages(nextOutages)
         setError(null)
       })
       .catch((reason: unknown) => {
@@ -192,6 +210,7 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
 
   return <main className="shell deviceDetailShell">
     <DeviceOverview device={device} metrics={metrics} services={services} alerts={alerts} events={events} />
+    {health && <DeviceHealthPanel health={health} outages={outages} />}
     <TelemetryHistoryPanel devices={[device]} />
   </main>
 }
