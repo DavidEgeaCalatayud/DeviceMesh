@@ -9,6 +9,7 @@ from app.infrastructure.repositories.alerting_telemetry import AlertingTelemetry
 from app.infrastructure.repositories.alerts import SqlAlchemyAlertRepository
 from app.infrastructure.repositories.event_recording import EventRecordingDeviceRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
+from app.infrastructure.repositories.network import SqlAlchemyNetworkRepository
 from app.infrastructure.repositories.sqlalchemy import (
     SqlAlchemyDeviceRepository,
     SqlAlchemyTelemetryRepository,
@@ -21,6 +22,7 @@ raw_event_repository = SqlAlchemyEventRepository(SessionFactory)
 event_repository = PublishingEventRepository(raw_event_repository, realtime_event_publisher)
 raw_device_repository = SqlAlchemyDeviceRepository(SessionFactory)
 device_repository = EventRecordingDeviceRepository(raw_device_repository, event_repository)
+network_repository = SqlAlchemyNetworkRepository(SessionFactory)
 raw_telemetry_repository = SqlAlchemyTelemetryRepository(SessionFactory)
 alert_repository = SqlAlchemyAlertRepository(SessionFactory)
 telemetry_repository = AlertingTelemetryRepository(
@@ -35,7 +37,11 @@ offline_device_sweeper = OfflineDeviceSweeper(
     settings.device_offline_after_seconds,
 )
 heartbeat_use_case = RecordHeartbeat(device_repository)
-observation_use_case = RecordObservation(device_repository)
+observation_use_case = RecordObservation(
+    device_repository,
+    network_repository,
+    event_repository,
+)
 telemetry_use_case = RecordTelemetry(telemetry_repository)
 
 
@@ -57,3 +63,7 @@ def get_agent_auth_service() -> AgentAuthService:
 
 def get_alert_repository() -> SqlAlchemyAlertRepository:
     return alert_repository
+
+
+def get_network_repository() -> SqlAlchemyNetworkRepository:
+    return network_repository
