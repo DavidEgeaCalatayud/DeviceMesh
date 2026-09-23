@@ -1,7 +1,9 @@
+from datetime import datetime
+
 from app.application.ports import AlertRepository, EventRepository, TelemetryRepository
 from app.domain.alerts.models import AlertTransition, AlertTransitionType
 from app.domain.events.models import DeviceEvent, EventSeverity
-from app.domain.telemetry.models import MetricSample, TelemetryBatch
+from app.domain.telemetry.models import MetricSample, MetricSeries, TelemetryBatch
 
 
 class AlertingTelemetryRepository:
@@ -22,6 +24,25 @@ class AlertingTelemetryRepository:
 
     def list_latest(self) -> list[MetricSample]:
         return self._telemetry.list_latest()
+
+    def list_history(
+        self,
+        device_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        *,
+        limit: int = 1000,
+        bucket_seconds: int | None = None,
+    ) -> MetricSeries:
+        return self._telemetry.list_history(
+            device_id,
+            metric_name,
+            start,
+            end,
+            limit=limit,
+            bucket_seconds=bucket_seconds,
+        )
 
     @staticmethod
     def _to_event(transition: AlertTransition) -> DeviceEvent:

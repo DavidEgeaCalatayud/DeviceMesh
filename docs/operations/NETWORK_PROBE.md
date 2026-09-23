@@ -12,6 +12,16 @@ export DEVICEMESH_PROBE_SCOPES="192.168.1.0/24"
 
 A requested `--scope` must be contained by one of those configured networks. V1 accepts IPv4 scopes only and rejects scopes larger than 4096 addresses.
 
+## Network quality sampling
+
+A host that answers discovery is sampled with four bounded ICMP echo attempts. DeviceMesh records:
+
+- `network.latency.ms`: mean RTT across successful attempts;
+- `network.jitter.ms`: mean absolute difference between consecutive successful RTTs;
+- `network.packet_loss.percent`: unsuccessful attempts divided by four, expressed as percentage.
+
+If exactly one attempt succeeds, packet loss and latency are still measurable but jitter remains unknown. A host with no successful attempts is not published as reachable. These extra attempts are only sent to addresses already selected from the authorized CIDR scope; they do not expand discovery to another network.
+
 ## Optional TCP service inventory
 
 Service discovery is disabled by default. Enable only the TCP ports you want DeviceMesh to check:

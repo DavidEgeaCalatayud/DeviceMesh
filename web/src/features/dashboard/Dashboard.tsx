@@ -17,6 +17,7 @@ import { AlertPanel } from '../alerts/AlertPanel'
 import { DeviceList } from '../devices/DeviceList'
 import { EventTimeline } from '../events/EventTimeline'
 import { NetworkPanel } from '../network/NetworkPanel'
+import { TelemetryHistoryPanel } from '../telemetry/TelemetryHistoryPanel'
 
 function isAbortError(reason: unknown): boolean {
   return reason instanceof DOMException && reason.name === 'AbortError'
@@ -131,6 +132,7 @@ export function Dashboard() {
       </article>
       <article className="card panel"><div className="eyebrow">Network history</div><h2>Timeline</h2><EventTimeline events={events} /></article>
     </section>
+    <TelemetryHistoryPanel devices={devices} />
     <section className="card networkPanel">
       <div className="eyebrow">Observed network</div>
       <h2>Topology & exposed services</h2>
