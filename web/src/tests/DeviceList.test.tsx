@@ -4,7 +4,7 @@ import { DeviceList } from '../features/devices/DeviceList'
 
 describe('DeviceList', () => {
   it('renders the empty state', () => {
-    render(<DeviceList devices={[]} />)
+    render(<DeviceList devices={[]} metrics={[]} />)
     expect(screen.getByText(/No devices discovered yet/i)).toBeTruthy()
   })
 })

@@ -3,7 +3,7 @@ from typing import Protocol
 
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation
 from app.domain.events.models import DeviceEvent
-from app.domain.telemetry.models import TelemetryBatch
+from app.domain.telemetry.models import MetricSample, TelemetryBatch
 
 
 class DeviceRepository(Protocol):
@@ -21,6 +21,8 @@ class DeviceRepository(Protocol):
 
 class TelemetryRepository(Protocol):
     def append(self, batch: TelemetryBatch) -> None: ...
+
+    def list_latest(self) -> list[MetricSample]: ...
 
 
 class EventRepository(Protocol):

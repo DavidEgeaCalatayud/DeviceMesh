@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import agents, devices, discovery, events, health
+from app.api.routers import agents, devices, discovery, events, health, telemetry
 from app.api.websocket.manager import ConnectionManager
 from app.core.logging import configure_logging
 
@@ -30,6 +30,7 @@ app.include_router(agents.router)
 app.include_router(devices.router)
 app.include_router(discovery.router)
 app.include_router(events.router)
+app.include_router(telemetry.router)
 
 
 @app.websocket("/ws/events")

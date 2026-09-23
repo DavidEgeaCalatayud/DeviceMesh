@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation, DeviceStatus
-from app.domain.telemetry.models import TelemetryBatch
+from app.domain.telemetry.models import MetricSample, TelemetryBatch
 
 
 class InMemoryDeviceRepository:
@@ -79,3 +79,13 @@ class InMemoryTelemetryRepository:
 
     def append(self, batch: TelemetryBatch) -> None:
         self.batches.append(batch)
+
+    def list_latest(self) -> list[MetricSample]:
+        latest: dict[tuple[str, str], MetricSample] = {}
+        for batch in self.batches:
+            for metric in batch.metrics:
+                key = (batch.agent_id, metric.name)
+                existing = latest.get(key)
+                if existing is None or batch.timestamp > existing.timestamp:
+                    latest[key] = MetricSample(batch.agent_id, batch.timestamp, metric)
+        return list(latest.values())

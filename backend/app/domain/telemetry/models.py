@@ -14,3 +14,10 @@ class TelemetryBatch:
     agent_id: str
     timestamp: datetime
     metrics: tuple[Metric, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MetricSample:
+    device_id: str
+    timestamp: datetime
+    metric: Metric

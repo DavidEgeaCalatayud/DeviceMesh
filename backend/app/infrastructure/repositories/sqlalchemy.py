@@ -1,11 +1,11 @@
 from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation, DeviceStatus
-from app.domain.telemetry.models import TelemetryBatch
+from app.domain.telemetry.models import Metric, MetricSample, TelemetryBatch
 from app.infrastructure.database import (
     AgentRow,
     DeviceInterfaceRow,
@@ -94,6 +94,17 @@ class SqlAlchemyDeviceRepository:
                     attributes=observation.attributes,
                 )
             )
+            latency = observation.attributes.get("latencyMs")
+            if isinstance(latency, (int, float)) and not isinstance(latency, bool):
+                session.add(
+                    MetricSampleRow(
+                        device_id=device.id,
+                        metric_type="network.latency.ms",
+                        timestamp=observation.observed_at,
+                        value=float(latency),
+                        unit="ms",
+                    )
+                )
             session.commit()
             session.refresh(device)
             return self._to_domain(session, device)
@@ -303,3 +314,35 @@ class SqlAlchemyTelemetryRepository:
                     )
                 )
             session.commit()
+
+    def list_latest(self) -> list[MetricSample]:
+        rank = func.row_number().over(
+            partition_by=(MetricSampleRow.device_id, MetricSampleRow.metric_type),
+            order_by=(MetricSampleRow.timestamp.desc(), MetricSampleRow.id.desc()),
+        ).label("sample_rank")
+        ranked = select(
+            MetricSampleRow.device_id.label("device_id"),
+            MetricSampleRow.metric_type.label("metric_type"),
+            MetricSampleRow.timestamp.label("timestamp"),
+            MetricSampleRow.value.label("value"),
+            MetricSampleRow.unit.label("unit"),
+            rank,
+        ).subquery()
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    ranked.c.device_id,
+                    ranked.c.metric_type,
+                    ranked.c.timestamp,
+                    ranked.c.value,
+                    ranked.c.unit,
+                ).where(ranked.c.sample_rank == 1)
+            ).all()
+            return [
+                MetricSample(
+                    device_id=row.device_id,
+                    timestamp=row.timestamp,
+                    metric=Metric(row.metric_type, row.value, row.unit),
+                )
+                for row in rows
+            ]
