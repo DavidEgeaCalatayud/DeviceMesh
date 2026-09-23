@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import agents, devices, discovery, events, health, telemetry
+from app.api.routers import agents, devices, discovery, enrollment, events, health, telemetry
 from app.api.websocket.manager import ConnectionManager
 from app.core.logging import configure_logging
 
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(health.router)
+app.include_router(enrollment.router)
 app.include_router(agents.router)
 app.include_router(devices.router)
 app.include_router(discovery.router)

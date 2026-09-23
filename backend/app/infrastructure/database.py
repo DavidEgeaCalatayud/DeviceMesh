@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, String, create_engine
+from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, String, UniqueConstraint, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -80,6 +80,52 @@ class DeviceEventRow(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attributes: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class EnrollmentTokenRow(Base):
+    __tablename__ = "agent_enrollment_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    token_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class AgentCredentialRow(Base):
+    __tablename__ = "agent_credentials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    credential_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rotated_from_id: Mapped[str | None] = mapped_column(String(36))
+
+
+class AgentRequestNonceRow(Base):
+    __tablename__ = "agent_request_nonces"
+    __table_args__ = (
+        UniqueConstraint("credential_id", "nonce", name="uq_agent_request_nonce"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    credential_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_credentials.id"), nullable=False
+    )
+    nonce: Mapped[str] = mapped_column(String(128), nullable=False)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SecurityAuditEventRow(Base):
+    __tablename__ = "security_audit_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    agent_id: Mapped[str | None] = mapped_column(String(128))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attributes: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
 
 
