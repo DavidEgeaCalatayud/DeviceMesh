@@ -4,10 +4,12 @@ import type { MetricSeries, NetworkDiagnostic } from '../../entities/telemetry/t
 import { getMetricHistory, getNetworkDiagnostic } from '../../shared/api/client'
 
 const RANGE_OPTIONS = {
-  '1h': { label: '1h', milliseconds: 60 * 60 * 1000, bucketSeconds: 30 },
-  '6h': { label: '6h', milliseconds: 6 * 60 * 60 * 1000, bucketSeconds: 120 },
-  '24h': { label: '24h', milliseconds: 24 * 60 * 60 * 1000, bucketSeconds: 300 },
-  '7d': { label: '7d', milliseconds: 7 * 24 * 60 * 60 * 1000, bucketSeconds: 1800 },
+  '1h': { label: '1h', milliseconds: 60 * 60 * 1000, bucketSeconds: 30, resolution: 'raw' },
+  '6h': { label: '6h', milliseconds: 6 * 60 * 60 * 1000, bucketSeconds: 120, resolution: 'raw' },
+  '24h': { label: '24h', milliseconds: 24 * 60 * 60 * 1000, bucketSeconds: 300, resolution: 'raw' },
+  '7d': { label: '7d', milliseconds: 7 * 24 * 60 * 60 * 1000, bucketSeconds: 1800, resolution: 'raw' },
+  '30d': { label: '30d', milliseconds: 30 * 24 * 60 * 60 * 1000, bucketSeconds: 3600, resolution: 'hourly' },
+  '90d': { label: '90d', milliseconds: 90 * 24 * 60 * 60 * 1000, bucketSeconds: 3600, resolution: 'hourly' },
 } as const
 
 type RangeKey = keyof typeof RANGE_OPTIONS
@@ -57,10 +59,11 @@ export function MetricChart({ series, label }: { series: MetricSeries; label: st
     return `${x.toFixed(1)},${y.toFixed(1)}`
   })
   const latest = series.points[series.points.length - 1]
+  const provenance = series.resolution === 'hourly' ? 'hourly rollup' : 'raw telemetry'
 
   return <div className="metricChart">
     <div className="metricChartHeader">
-      <div><strong>{label}</strong><div className="muted">{series.points.length} chart point(s){series.truncated ? ' · truncated' : ''}</div></div>
+      <div><strong>{label}</strong><div className="muted">{series.points.length} chart point(s) · {provenance}{series.truncated ? ' · truncated' : ''}</div></div>
       <div className="chartLatest">{formatMetric(latest.value, series.unit)}</div>
     </div>
     <svg className="chartSvg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label} history`}>
@@ -134,6 +137,7 @@ export function TelemetryHistoryPanel({ devices }: { devices: Device[] }) {
             end,
             selectedRange.bucketSeconds,
             controller.signal,
+            selectedRange.resolution,
           ),
           getNetworkDiagnostic(selectedDeviceId, 15, controller.signal),
         ])
