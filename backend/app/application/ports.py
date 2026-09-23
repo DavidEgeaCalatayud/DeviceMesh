@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation
+from app.domain.events.models import DeviceEvent
 from app.domain.telemetry.models import TelemetryBatch
 
 
@@ -20,3 +21,9 @@ class DeviceRepository(Protocol):
 
 class TelemetryRepository(Protocol):
     def append(self, batch: TelemetryBatch) -> None: ...
+
+
+class EventRepository(Protocol):
+    def append(self, event: DeviceEvent) -> None: ...
+
+    def list_recent(self, limit: int = 100) -> list[DeviceEvent]: ...

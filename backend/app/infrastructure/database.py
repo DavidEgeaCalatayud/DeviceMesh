@@ -72,6 +72,17 @@ class MetricSampleRow(Base):
     unit: Mapped[str | None] = mapped_column(String(32))
 
 
+class DeviceEventRow(Base):
+    __tablename__ = "device_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attributes: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+
+
 def create_database_engine(database_url: str | None = None) -> Engine:
     return create_engine(database_url or get_settings().database_url, pool_pre_ping=True)
 
