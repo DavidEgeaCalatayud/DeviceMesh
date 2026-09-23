@@ -1,4 +1,4 @@
-from sqlalchemy import desc, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.devices.models import DeviceObservation
@@ -103,7 +103,11 @@ class SqlAlchemyNetworkRepository:
             query = query.where(DeviceServiceRow.device_id == device_id)
         if active_only:
             query = query.where(DeviceServiceRow.state == ServiceState.OPEN.value)
-        query = query.order_by(DeviceServiceRow.device_id, DeviceServiceRow.transport, DeviceServiceRow.port)
+        query = query.order_by(
+            DeviceServiceRow.device_id,
+            DeviceServiceRow.transport,
+            DeviceServiceRow.port,
+        )
         with self._session_factory() as session:
             rows = session.scalars(query).all()
             return [self._to_domain(row) for row in rows]
@@ -113,11 +117,15 @@ class SqlAlchemyNetworkRepository:
             partition_by=DeviceObservationRow.device_id,
             order_by=(DeviceObservationRow.observed_at.desc(), DeviceObservationRow.id.desc()),
         ).label("observation_rank")
-        ranked = select(
-            DeviceObservationRow.device_id.label("device_id"),
-            DeviceObservationRow.network_cidr.label("network_cidr"),
-            rank,
-        ).where(DeviceObservationRow.network_cidr.is_not(None)).subquery()
+        ranked = (
+            select(
+                DeviceObservationRow.device_id.label("device_id"),
+                DeviceObservationRow.network_cidr.label("network_cidr"),
+                rank,
+            )
+            .where(DeviceObservationRow.network_cidr.is_not(None))
+            .subquery()
+        )
 
         with self._session_factory() as session:
             memberships = session.execute(
