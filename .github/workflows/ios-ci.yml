@@ -1,0 +1,16 @@
+name: iOS CI
+on:
+  push:
+    paths: ["mobile/ios/**", ".github/workflows/ios-ci.yml"]
+  pull_request:
+    paths: ["mobile/ios/**", ".github/workflows/ios-ci.yml"]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - working-directory: mobile/ios
+        run: xcodegen generate
+      - working-directory: mobile/ios
+        run: xcodebuild -project DeviceMesh.xcodeproj -scheme DeviceMesh -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO

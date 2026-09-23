@@ -1,0 +1,16 @@
+name: Windows Agent CI
+on:
+  push:
+    paths: ["agents/windows/**", "protocol/**", ".github/workflows/windows-agent-ci.yml"]
+  pull_request:
+    paths: ["agents/windows/**", "protocol/**", ".github/workflows/windows-agent-ci.yml"]
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: {dotnet-version: "8.0.x"}
+      - run: dotnet restore agents/windows/DeviceMesh.Agent.sln
+      - run: dotnet build agents/windows/DeviceMesh.Agent.sln --configuration Release --no-restore
+      - run: dotnet test agents/windows/DeviceMesh.Agent.sln --configuration Release --no-build
