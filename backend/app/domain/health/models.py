@@ -57,8 +57,4 @@ class MaintenanceWindow:
     cancelled_at: datetime | None = None
 
     def is_active(self, timestamp: datetime) -> bool:
-        return (
-            self.cancelled_at is None
-            and self.starts_at <= timestamp
-            and timestamp < self.ends_at
-        )
+        return self.cancelled_at is None and self.starts_at <= timestamp < self.ends_at
