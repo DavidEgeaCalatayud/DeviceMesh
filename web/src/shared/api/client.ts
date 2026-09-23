@@ -2,7 +2,7 @@ import type { AlertIncident, AlertRule } from '../../entities/alert/types'
 import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
 import type { DeviceService, NetworkTopology } from '../../entities/network/types'
-import type { MetricSample } from '../../entities/telemetry/types'
+import type { MetricSample, MetricSeries, NetworkDiagnostic } from '../../entities/telemetry/types'
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -22,6 +22,41 @@ export async function listLatestTelemetry(signal?: AbortSignal): Promise<MetricS
   const response = await fetch(`${apiBase}/api/v1/telemetry/latest`, { signal })
   if (!response.ok) throw new Error(`Telemetry API failed: ${response.status}`)
   return response.json() as Promise<MetricSample[]>
+}
+
+export async function getMetricHistory(
+  deviceId: string,
+  name: string,
+  start: Date,
+  end: Date,
+  bucketSeconds: number,
+  signal?: AbortSignal,
+): Promise<MetricSeries> {
+  const params = new URLSearchParams({
+    deviceId,
+    name,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    bucketSeconds: String(bucketSeconds),
+    limit: '1200',
+  })
+  const response = await fetch(`${apiBase}/api/v1/telemetry/history?${params.toString()}`, { signal })
+  if (!response.ok) throw new Error(`Telemetry history API failed: ${response.status}`)
+  return response.json() as Promise<MetricSeries>
+}
+
+export async function getNetworkDiagnostic(
+  deviceId: string,
+  windowMinutes = 15,
+  signal?: AbortSignal,
+): Promise<NetworkDiagnostic> {
+  const params = new URLSearchParams({
+    deviceId,
+    windowMinutes: String(windowMinutes),
+  })
+  const response = await fetch(`${apiBase}/api/v1/telemetry/network-diagnostics?${params.toString()}`, { signal })
+  if (!response.ok) throw new Error(`Network diagnostics API failed: ${response.status}`)
+  return response.json() as Promise<NetworkDiagnostic>
 }
 
 export async function listAlerts(signal?: AbortSignal, activeOnly = false): Promise<AlertIncident[]> {
