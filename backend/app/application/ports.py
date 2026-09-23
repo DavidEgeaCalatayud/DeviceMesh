@@ -5,7 +5,7 @@ from app.domain.alerts.models import AlertIncident, AlertRule, AlertTransition, 
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation
 from app.domain.events.models import DeviceEvent
 from app.domain.network.models import DeviceService, NetworkTopology, ServiceTransition
-from app.domain.telemetry.models import MetricSample, TelemetryBatch
+from app.domain.telemetry.models import MetricSample, MetricSeries, TelemetryBatch
 
 
 class DeviceRepository(Protocol):
@@ -25,6 +25,17 @@ class TelemetryRepository(Protocol):
     def append(self, batch: TelemetryBatch) -> None: ...
 
     def list_latest(self) -> list[MetricSample]: ...
+
+    def list_history(
+        self,
+        device_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        *,
+        limit: int = 1000,
+        bucket_seconds: int | None = None,
+    ) -> MetricSeries: ...
 
 
 class EventRepository(Protocol):

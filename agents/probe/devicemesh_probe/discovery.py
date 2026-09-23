@@ -7,8 +7,11 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from statistics import fmean
 from threading import Event
 from time import perf_counter
+
+_QUALITY_ATTEMPTS = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +35,15 @@ class ObservedService:
 
 
 @dataclass(frozen=True, slots=True)
+class NetworkQuality:
+    latency_ms: float
+    jitter_ms: float | None
+    packet_loss_percent: float
+    attempts: int
+    successes: int
+
+
+@dataclass(frozen=True, slots=True)
 class HostObservation:
     ip_address: str
     observed_at: datetime
@@ -41,6 +53,10 @@ class HostObservation:
     network_cidr: str | None = None
     services: tuple[ObservedService, ...] = ()
     scanned_tcp_ports: tuple[int, ...] = ()
+    jitter_ms: float | None = None
+    packet_loss_percent: float | None = None
+    quality_attempts: int = 0
+    quality_successes: int = 0
 
 
 _SERVICE_NAMES = {
@@ -115,6 +131,10 @@ def scan_scope(
                     network_cidr=network_cidr,
                     services=services,
                     scanned_tcp_ports=tcp_ports,
+                    jitter_ms=observation.jitter_ms,
+                    packet_loss_percent=observation.packet_loss_percent,
+                    quality_attempts=observation.quality_attempts,
+                    quality_successes=observation.quality_successes,
                 )
             )
         return sorted(observations, key=lambda item: ipaddress.ip_address(item.ip_address))
@@ -142,6 +162,27 @@ def scan_tcp_services(
     )
 
 
+def summarize_network_quality(samples: tuple[float | None, ...]) -> NetworkQuality | None:
+    if not samples:
+        raise ValueError("at least one quality attempt is required")
+    successful = tuple(value for value in samples if value is not None)
+    if not successful:
+        return None
+    jitter = None
+    if len(successful) >= 2:
+        jitter = fmean(
+            abs(current - previous)
+            for previous, current in zip(successful, successful[1:], strict=False)
+        )
+    return NetworkQuality(
+        latency_ms=fmean(successful),
+        jitter_ms=jitter,
+        packet_loss_percent=((len(samples) - len(successful)) / len(samples)) * 100,
+        attempts=len(samples),
+        successes=len(successful),
+    )
+
+
 def _tcp_connect_open(address: str, port: int, timeout_seconds: float) -> bool:
     try:
         with socket.create_connection((address, port), timeout=timeout_seconds):
@@ -151,6 +192,28 @@ def _tcp_connect_open(address: str, port: int, timeout_seconds: float) -> bool:
 
 
 def _probe_host(address: str, timeout_seconds: float) -> HostObservation | None:
+    quality = summarize_network_quality(
+        tuple(_probe_latency_once(address, timeout_seconds) for _ in range(_QUALITY_ATTEMPTS))
+    )
+    if quality is None:
+        return None
+
+    hostname = _reverse_dns(address)
+    mac_address = _neighbor_mac(address)
+    return HostObservation(
+        ip_address=address,
+        observed_at=datetime.now(UTC),
+        latency_ms=quality.latency_ms,
+        hostname=hostname,
+        mac_address=mac_address,
+        jitter_ms=quality.jitter_ms,
+        packet_loss_percent=quality.packet_loss_percent,
+        quality_attempts=quality.attempts,
+        quality_successes=quality.successes,
+    )
+
+
+def _probe_latency_once(address: str, timeout_seconds: float) -> float | None:
     command = _ping_command(address, timeout_seconds)
     started = perf_counter()
     try:
@@ -165,17 +228,7 @@ def _probe_host(address: str, timeout_seconds: float) -> HostObservation | None:
         return None
     if result.returncode != 0:
         return None
-
-    elapsed_ms = (perf_counter() - started) * 1000
-    hostname = _reverse_dns(address)
-    mac_address = _neighbor_mac(address)
-    return HostObservation(
-        ip_address=address,
-        observed_at=datetime.now(UTC),
-        latency_ms=elapsed_ms,
-        hostname=hostname,
-        mac_address=mac_address,
-    )
+    return (perf_counter() - started) * 1000
 
 
 def _ping_command(address: str, timeout_seconds: float) -> list[str]:

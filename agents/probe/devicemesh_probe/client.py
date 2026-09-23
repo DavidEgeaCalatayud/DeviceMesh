@@ -5,6 +5,19 @@ from urllib.request import Request, urlopen
 from devicemesh_probe.discovery import HostObservation
 
 
+def _quality_attributes(observation: HostObservation) -> dict[str, object]:
+    attributes: dict[str, object] = {
+        "latencyMs": observation.latency_ms,
+        "qualityAttempts": observation.quality_attempts,
+        "qualitySuccesses": observation.quality_successes,
+    }
+    if observation.jitter_ms is not None:
+        attributes["jitterMs"] = observation.jitter_ms
+    if observation.packet_loss_percent is not None:
+        attributes["packetLossPercent"] = observation.packet_loss_percent
+    return attributes
+
+
 def publish_observations(
     server_url: str,
     source: str,
@@ -30,7 +43,7 @@ def publish_observations(
                 ],
                 "serviceSnapshotComplete": bool(observation.scanned_tcp_ports),
                 "scannedTcpPorts": list(observation.scanned_tcp_ports),
-                "attributes": {"latencyMs": observation.latency_ms},
+                "attributes": _quality_attributes(observation),
             }
             for observation in observations
         ]

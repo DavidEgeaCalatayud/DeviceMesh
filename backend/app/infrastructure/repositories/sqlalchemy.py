@@ -1,11 +1,17 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation, DeviceStatus
-from app.domain.telemetry.models import Metric, MetricSample, TelemetryBatch
+from app.domain.telemetry.models import (
+    Metric,
+    MetricSample,
+    MetricSeries,
+    MetricSeriesPoint,
+    TelemetryBatch,
+)
 from app.infrastructure.database import (
     AgentRow,
     DeviceInterfaceRow,
@@ -13,6 +19,12 @@ from app.infrastructure.database import (
     DeviceRow,
     MetricSampleRow,
 )
+
+_DISCOVERY_METRICS = {
+    "latencyMs": ("network.latency.ms", "ms"),
+    "jitterMs": ("network.jitter.ms", "ms"),
+    "packetLossPercent": ("network.packet_loss.percent", "percent"),
+}
 
 
 def _normalize_mac(value: str) -> str:
@@ -105,17 +117,18 @@ class SqlAlchemyDeviceRepository:
                     attributes=observation.attributes,
                 )
             )
-            latency = observation.attributes.get("latencyMs")
-            if isinstance(latency, (int, float)) and not isinstance(latency, bool):
-                session.add(
-                    MetricSampleRow(
-                        device_id=device.id,
-                        metric_type="network.latency.ms",
-                        timestamp=observation.observed_at,
-                        value=float(latency),
-                        unit="ms",
+            for attribute_name, (metric_name, unit) in _DISCOVERY_METRICS.items():
+                value = observation.attributes.get(attribute_name)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    session.add(
+                        MetricSampleRow(
+                            device_id=device.id,
+                            metric_type=metric_name,
+                            timestamp=observation.observed_at,
+                            value=float(value),
+                            unit=unit,
+                        )
                     )
-                )
             session.commit()
             session.refresh(device)
             return self._to_domain(session, device)
@@ -395,3 +408,90 @@ class SqlAlchemyTelemetryRepository:
                 )
                 for row in rows
             ]
+
+    def list_history(
+        self,
+        device_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        *,
+        limit: int = 1000,
+        bucket_seconds: int | None = None,
+    ) -> MetricSeries:
+        bounded_limit = min(max(limit, 1), 5000)
+        if bucket_seconds is not None and not 10 <= bucket_seconds <= 86400:
+            raise ValueError("bucket_seconds must be between 10 and 86400")
+
+        filters = (
+            MetricSampleRow.device_id == device_id,
+            MetricSampleRow.metric_type == metric_name,
+            MetricSampleRow.timestamp >= start,
+            MetricSampleRow.timestamp <= end,
+        )
+        with self._session_factory() as session:
+            if bucket_seconds is None:
+                rows = session.scalars(
+                    select(MetricSampleRow)
+                    .where(*filters)
+                    .order_by(MetricSampleRow.timestamp.desc(), MetricSampleRow.id.desc())
+                    .limit(bounded_limit + 1)
+                ).all()
+                truncated = len(rows) > bounded_limit
+                selected = list(reversed(rows[:bounded_limit]))
+                points = tuple(
+                    MetricSeriesPoint(
+                        timestamp=row.timestamp,
+                        value=row.value,
+                        minimum=row.value,
+                        maximum=row.value,
+                        samples=1,
+                    )
+                    for row in selected
+                )
+                unit = next((row.unit for row in selected if row.unit is not None), None)
+            else:
+                bucket_epoch = (
+                    func.floor(
+                        func.extract("epoch", MetricSampleRow.timestamp) / float(bucket_seconds)
+                    )
+                    * bucket_seconds
+                ).label("bucket_epoch")
+                rows = session.execute(
+                    select(
+                        bucket_epoch,
+                        func.avg(MetricSampleRow.value),
+                        func.min(MetricSampleRow.value),
+                        func.max(MetricSampleRow.value),
+                        func.count(MetricSampleRow.id),
+                        func.max(MetricSampleRow.unit),
+                    )
+                    .where(*filters)
+                    .group_by(bucket_epoch)
+                    .order_by(bucket_epoch.desc())
+                    .limit(bounded_limit + 1)
+                ).all()
+                truncated = len(rows) > bounded_limit
+                selected = list(reversed(rows[:bounded_limit]))
+                points = tuple(
+                    MetricSeriesPoint(
+                        timestamp=datetime.fromtimestamp(float(row[0]), UTC),
+                        value=float(row[1]),
+                        minimum=float(row[2]),
+                        maximum=float(row[3]),
+                        samples=int(row[4]),
+                    )
+                    for row in selected
+                )
+                unit = next((str(row[5]) for row in selected if row[5] is not None), None)
+
+        return MetricSeries(
+            device_id=device_id,
+            metric_name=metric_name,
+            unit=unit,
+            start=start,
+            end=end,
+            bucket_seconds=bucket_seconds,
+            points=points,
+            truncated=truncated,
+        )
