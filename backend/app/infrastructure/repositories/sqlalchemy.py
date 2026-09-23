@@ -142,7 +142,7 @@ class SqlAlchemyDeviceRepository:
             key = f"ip:{observation.ip_address}"
         else:
             key = f"source:{observation.source}:{observation.observed_at.isoformat()}"
-        return f"discovered-{uuid5(NAMESPACE_URL, f'devicemesh:{key}') }".replace(" ", "")
+        return f"discovered-{uuid5(NAMESPACE_URL, f'devicemesh:{key}')}"
 
     def _apply_observed_interface(
         self,
