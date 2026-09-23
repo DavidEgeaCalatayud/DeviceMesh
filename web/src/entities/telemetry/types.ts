@@ -12,6 +12,7 @@ export interface MetricSeriesPoint {
   minimum: number
   maximum: number
   samples: number
+  source: 'raw' | 'hourly_rollup'
 }
 
 export interface MetricSeries {
@@ -21,6 +22,7 @@ export interface MetricSeries {
   start: string
   end: string
   bucketSeconds: number | null
+  resolution: 'raw' | 'hourly'
   truncated: boolean
   points: MetricSeriesPoint[]
 }
