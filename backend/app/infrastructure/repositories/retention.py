@@ -1,7 +1,18 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, delete, func, select
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    delete,
+    func,
+    select,
+)
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from app.infrastructure.database import Base, MetricSampleRow
