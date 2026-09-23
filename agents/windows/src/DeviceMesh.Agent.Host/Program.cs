@@ -8,6 +8,7 @@ builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Devic
 builder.Services.AddSingleton<IHostCollector, RuntimeCollector>();
 builder.Services.AddSingleton<IHostCollector, WindowsHostCollector>();
 builder.Services.AddSingleton<WindowsHostIdentityProvider>();
+builder.Services.AddSingleton<WindowsCredentialStore>();
 builder.Services.AddSingleton<CollectTelemetry>();
 builder.Services.AddHttpClient("server", (services, client) =>
 {
