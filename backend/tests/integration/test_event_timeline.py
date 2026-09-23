@@ -5,13 +5,15 @@ from app.domain.devices.models import DeviceObservation
 from app.infrastructure.database import SessionFactory
 from app.infrastructure.repositories.event_recording import EventRecordingDeviceRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
+from app.infrastructure.repositories.health import SqlAlchemyHealthRepository
 from app.infrastructure.repositories.sqlalchemy import SqlAlchemyDeviceRepository
 
 
 def test_discovery_and_ip_change_append_timeline_events() -> None:
     devices = SqlAlchemyDeviceRepository(SessionFactory)
     events = SqlAlchemyEventRepository(SessionFactory)
-    repository = EventRecordingDeviceRepository(devices, events)
+    health = SqlAlchemyHealthRepository(SessionFactory)
+    repository = EventRecordingDeviceRepository(devices, events, health)
     now = datetime.now(UTC)
     suffix = ":".join(f"{value:02X}" for value in uuid4().bytes[:4])
     mac = f"02:01:{suffix}"
