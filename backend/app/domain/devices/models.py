@@ -9,6 +9,28 @@ class DeviceStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
+@dataclass(frozen=True, slots=True)
+class DeviceIdentity:
+    hostname: str | None = None
+    operating_system: str | None = None
+    operating_system_version: str | None = None
+    architecture: str | None = None
+    manufacturer: str | None = None
+    ip_addresses: tuple[str, ...] = ()
+    mac_addresses: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceObservation:
+    source: str
+    observed_at: datetime
+    hostname: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+    manufacturer: str | None = None
+    attributes: dict[str, object] = field(default_factory=dict)
+
+
 @dataclass(slots=True)
 class Device:
     id: str
@@ -16,6 +38,9 @@ class Device:
     ip_addresses: set[str] = field(default_factory=set)
     mac_addresses: set[str] = field(default_factory=set)
     operating_system: str | None = None
+    operating_system_version: str | None = None
+    architecture: str | None = None
+    manufacturer: str | None = None
     status: DeviceStatus = DeviceStatus.UNKNOWN
     first_seen: datetime | None = None
     last_seen: datetime | None = None

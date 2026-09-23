@@ -9,6 +9,29 @@
     "type": {"const": "heartbeat"},
     "protocolVersion": {"const": 1},
     "agentId": {"type": "string", "minLength": 1, "maxLength": 128},
-    "timestamp": {"type": "string", "format": "date-time"}
+    "timestamp": {"type": "string", "format": "date-time"},
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {"type": ["string", "null"], "maxLength": 255},
+        "operatingSystem": {"type": ["string", "null"], "maxLength": 255},
+        "operatingSystemVersion": {"type": ["string", "null"], "maxLength": 255},
+        "architecture": {"type": ["string", "null"], "maxLength": 64},
+        "manufacturer": {"type": ["string", "null"], "maxLength": 255},
+        "ipAddresses": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64},
+          "uniqueItems": true
+        },
+        "macAddresses": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"type": "string", "minLength": 1, "maxLength": 64},
+          "uniqueItems": true
+        }
+      }
+    }
   }
 }

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Device } from '../../entities/device/types'
-import { listDevices } from '../../shared/api/client'
+import type { DeviceEvent } from '../../entities/event/types'
+import type { MetricSample } from '../../entities/telemetry/types'
+import { listDevices, listEvents, listLatestTelemetry } from '../../shared/api/client'
 import { DeviceList } from '../devices/DeviceList'
+import { EventTimeline } from '../events/EventTimeline'
 
 function isAbortError(reason: unknown): boolean {
   return reason instanceof DOMException && reason.name === 'AbortError'
@@ -9,12 +12,25 @@ function isAbortError(reason: unknown): boolean {
 
 export function Dashboard() {
   const [devices, setDevices] = useState<Device[]>([])
+  const [events, setEvents] = useState<DeviceEvent[]>([])
+  const [metrics, setMetrics] = useState<MetricSample[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  const applySnapshot = (nextDevices: Device[], nextEvents: DeviceEvent[], nextMetrics: MetricSample[]) => {
+    setDevices(nextDevices)
+    setEvents(nextEvents)
+    setMetrics(nextMetrics)
+    setError(null)
+  }
 
   const refresh = async () => {
     try {
-      setDevices(await listDevices())
-      setError(null)
+      const [nextDevices, nextEvents, nextMetrics] = await Promise.all([
+        listDevices(),
+        listEvents(),
+        listLatestTelemetry(),
+      ])
+      applySnapshot(nextDevices, nextEvents, nextMetrics)
     } catch (reason) {
       setError(String(reason))
     }
@@ -22,10 +38,13 @@ export function Dashboard() {
 
   useEffect(() => {
     const controller = new AbortController()
-    listDevices(controller.signal)
-      .then((result) => {
-        setDevices(result)
-        setError(null)
+    Promise.all([
+      listDevices(controller.signal),
+      listEvents(controller.signal),
+      listLatestTelemetry(controller.signal),
+    ])
+      .then(([nextDevices, nextEvents, nextMetrics]) => {
+        applySnapshot(nextDevices, nextEvents, nextMetrics)
       })
       .catch((reason: unknown) => {
         if (!isAbortError(reason)) setError(String(reason))
@@ -37,18 +56,22 @@ export function Dashboard() {
 
   return <main className="shell">
     <section className="hero">
-      <div><div className="eyebrow">Local-first observability</div><h1>DeviceMesh</h1><p>Discover, identify and monitor the devices that make up your network.</p></div>
-      <div className="status">Foundation · v0.1</div>
+      <div><div className="eyebrow">Local-first device observability</div><h1>DeviceMesh</h1><p>Discover, identify and monitor the devices that make up your network.</p></div>
+      <div className="status">V1 data plane</div>
     </section>
     <section className="grid">
       <article className="card"><div className="muted">Known devices</div><div className="metric">{devices.length}</div></article>
       <article className="card"><div className="muted">Online</div><div className="metric">{online}</div></article>
-      <article className="card"><div className="muted">Events</div><div className="metric">—</div></article>
-      <article className="card"><div className="muted">Open alerts</div><div className="metric">—</div></article>
+      <article className="card"><div className="muted">Recent events</div><div className="metric">{events.length}</div></article>
+      <article className="card"><div className="muted">Live metrics</div><div className="metric">{metrics.length}</div></article>
     </section>
-    <section className="card" style={{marginTop:16}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><h2>Devices</h2>{error && <p className="offline">{error}</p>}</div><button onClick={() => void refresh()}>Refresh</button></div>
-      <DeviceList devices={devices} />
+    {error && <section className="errorBanner">{error}</section>}
+    <section className="contentGrid">
+      <article className="card panel">
+        <div className="panelHeader"><div><div className="eyebrow">Inventory</div><h2>Devices</h2></div><button onClick={() => void refresh()}>Refresh</button></div>
+        <DeviceList devices={devices} metrics={metrics} />
+      </article>
+      <article className="card panel"><div className="eyebrow">Network history</div><h2>Timeline</h2><EventTimeline events={events} /></article>
     </section>
   </main>
 }

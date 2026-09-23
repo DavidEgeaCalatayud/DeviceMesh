@@ -6,6 +6,9 @@ export interface Device {
   ipAddresses: string[]
   macAddresses: string[]
   operatingSystem: string | null
+  operatingSystemVersion?: string | null
+  architecture?: string | null
+  manufacturer?: string | null
   status: DeviceStatus
   firstSeen: string | null
   lastSeen: string | null
