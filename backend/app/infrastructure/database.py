@@ -5,9 +5,11 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
     create_engine,
@@ -90,6 +92,37 @@ class DeviceEventRow(Base):
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attributes: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class AlertRuleRow(Base):
+    __tablename__ = "alert_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    metric_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    operator: Mapped[str] = mapped_column(String(4), nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class AlertRow(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("alert_rules.id"), nullable=False)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AlertConditionStateRow(Base):
+    __tablename__ = "alert_condition_states"
+
+    rule_id: Mapped[int] = mapped_column(ForeignKey("alert_rules.id"), primary_key=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), primary_key=True)
+    first_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_sample_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_value: Mapped[float] = mapped_column(Float, nullable=False)
 
 
 class EnrollmentTokenRow(Base):

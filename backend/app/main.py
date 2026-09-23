@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import agents, devices, discovery, enrollment, events, health, telemetry
+from app.api.routers import alerts, agents, devices, discovery, enrollment, events, health, telemetry
 from app.api.websocket.manager import ConnectionManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -74,6 +74,7 @@ app.include_router(devices.router)
 app.include_router(discovery.router)
 app.include_router(events.router)
 app.include_router(telemetry.router)
+app.include_router(alerts.router)
 
 
 @app.websocket("/ws/events")
