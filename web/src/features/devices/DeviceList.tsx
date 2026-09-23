@@ -16,10 +16,10 @@ export function DeviceList({ devices, metrics }: { devices: Device[], metrics: M
     const cpu = metricValue(deviceMetrics, 'host.cpu.utilization.percent')
     const memory = metricValue(deviceMetrics, 'host.memory.utilization.percent')
     const latency = metricValue(deviceMetrics, 'network.latency.ms')
-    return <div className="device" key={device.id}>
+    return <a className="device deviceLink" href={`#/devices/${encodeURIComponent(device.id)}`} key={device.id}>
       <div className="deviceIdentity"><strong>{device.hostname ?? device.id}</strong><div className="muted">{device.operatingSystem ?? 'Unknown OS'}{device.operatingSystemVersion ? ` ${device.operatingSystemVersion}` : ''} · {device.ipAddresses[0] ?? 'No IP'}</div><div className="deviceMeta">{device.manufacturer ?? device.macAddresses[0] ?? 'Identity pending'}{device.architecture ? ` · ${device.architecture}` : ''}</div></div>
       <div className="deviceMetrics"><span>CPU {display(cpu, '%')}</span><span>RAM {display(memory, '%')}</span><span>RTT {display(latency, ' ms')}</span></div>
       <div className={device.status === 'online' ? 'online' : 'offline'}>{device.status}</div>
-    </div>
+    </a>
   })}</div>
 }
