@@ -1,12 +1,12 @@
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import ipaddress
 import platform
 import re
 import socket
 import subprocess
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from threading import Event
 from time import perf_counter
 
@@ -18,7 +18,7 @@ class DiscoveryScope:
     def network(self) -> ipaddress.IPv4Network:
         parsed = ipaddress.ip_network(self.cidr, strict=False)
         if not isinstance(parsed, ipaddress.IPv4Network):
-            raise ValueError("V1 discovery supports IPv4 scopes only")
+            raise TypeError("V1 discovery supports IPv4 scopes only")
         if parsed.num_addresses > 4096:
             raise ValueError("discovery scope is too large; maximum 4096 addresses")
         return parsed

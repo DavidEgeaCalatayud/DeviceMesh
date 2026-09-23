@@ -38,9 +38,7 @@ class InMemoryDeviceRepository:
         if device is None:
             key = observation.mac_address or observation.hostname or observation.ip_address
             stable_key = key or f"{observation.source}:{observation.observed_at.isoformat()}"
-            device_id = f"discovered-{uuid5(NAMESPACE_URL, f'devicemesh:{stable_key}') }".replace(
-                " ", ""
-            )
+            device_id = f"discovered-{uuid5(NAMESPACE_URL, f'devicemesh:{stable_key}')}"
             device = Device(id=device_id, first_seen=observation.observed_at)
             self._devices[device_id] = device
 

@@ -9,7 +9,8 @@ from app.infrastructure.repositories.sqlalchemy import SqlAlchemyDeviceRepositor
 def test_mac_observations_keep_stable_device_identity_across_ip_change() -> None:
     repository = SqlAlchemyDeviceRepository(SessionFactory)
     now = datetime.now(UTC)
-    mac = "02:00:%02X:%02X:%02X:%02X" % tuple(uuid4().bytes[:4])
+    suffix = ":".join(f"{value:02X}" for value in uuid4().bytes[:4])
+    mac = f"02:00:{suffix}"
 
     first = repository.record_observation(
         DeviceObservation(

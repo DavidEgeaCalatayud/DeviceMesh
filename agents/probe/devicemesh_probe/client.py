@@ -1,5 +1,5 @@
-from collections.abc import Sequence
 import json
+from collections.abc import Sequence
 from urllib.request import Request, urlopen
 
 from devicemesh_probe.discovery import HostObservation
@@ -32,6 +32,6 @@ def publish_observations(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urlopen(request, timeout=15) as response:  # noqa: S310 - operator-configured server
+    with urlopen(request, timeout=15) as response:
         if not 200 <= response.status < 300:
             raise RuntimeError(f"DeviceMesh server returned HTTP {response.status}")
