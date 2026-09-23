@@ -15,6 +15,7 @@ from app.infrastructure.repositories.health import (
     SqlAlchemyMaintenanceRepository,
 )
 from app.infrastructure.repositories.operations import (
+    InvalidRemoteOperationTransitionError,
     RemoteOperationNotFoundError,
     SqlAlchemyRemoteOperationRepository,
 )
@@ -126,3 +127,40 @@ def test_remote_operations_are_allowlisted_claimed_and_completed_by_target_agent
             arguments={"command": "whoami"},
             now=now,
         )
+
+
+def test_claimed_remote_operation_expires_and_rejects_late_completion() -> None:
+    agent_id = f"expired-operation-{uuid4()}"
+    now = datetime.now(UTC).replace(microsecond=0)
+
+    devices = SqlAlchemyDeviceRepository(SessionFactory)
+    operations = SqlAlchemyRemoteOperationRepository(SessionFactory)
+    devices.mark_agent_online(agent_id, now, DeviceIdentity(hostname="expiry-test"))
+
+    queued = operations.queue(
+        device_id=agent_id,
+        operation_type=RemoteOperationType.TELEMETRY_COLLECT,
+        ttl_seconds=30,
+        now=now,
+    )
+    claimed = operations.claim_next(agent_id, now=now + timedelta(seconds=1))
+    assert claimed is not None and claimed.status is RemoteOperationStatus.CLAIMED
+
+    with pytest.raises(InvalidRemoteOperationTransitionError):
+        operations.complete(
+            agent_id=agent_id,
+            operation_id=queued.id,
+            succeeded=True,
+            now=now + timedelta(seconds=31),
+        )
+
+    stored = next(
+        operation
+        for operation in operations.list_operations(
+            device_id=agent_id,
+            now=now + timedelta(seconds=31),
+        )
+        if operation.id == queued.id
+    )
+    assert stored.status is RemoteOperationStatus.EXPIRED
+    assert stored.completed_at == now + timedelta(seconds=31)
