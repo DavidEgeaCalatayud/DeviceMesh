@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
+from app.domain.alerts.models import AlertIncident, AlertRule, AlertTransition, ThresholdRule
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation
 from app.domain.events.models import DeviceEvent
 from app.domain.telemetry.models import MetricSample, TelemetryBatch
@@ -29,3 +30,13 @@ class EventRepository(Protocol):
     def append(self, event: DeviceEvent) -> None: ...
 
     def list_recent(self, limit: int = 100) -> list[DeviceEvent]: ...
+
+
+class AlertRepository(Protocol):
+    def create_rule(self, rule: ThresholdRule) -> AlertRule: ...
+
+    def list_rules(self) -> list[AlertRule]: ...
+
+    def list_alerts(self, *, active_only: bool = False, limit: int = 100) -> list[AlertIncident]: ...
+
+    def evaluate(self, batch: TelemetryBatch) -> list[AlertTransition]: ...
