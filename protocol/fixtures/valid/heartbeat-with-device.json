@@ -1,0 +1,15 @@
+{
+  "type": "heartbeat",
+  "protocolVersion": 1,
+  "agentId": "agent-pc-david",
+  "timestamp": "2026-09-23T09:45:00Z",
+  "device": {
+    "hostname": "PC-DAVID",
+    "operatingSystem": "Windows",
+    "operatingSystemVersion": "11",
+    "architecture": "x64",
+    "manufacturer": null,
+    "ipAddresses": ["192.168.1.32"],
+    "macAddresses": ["AA:BB:CC:DD:EE:FF"]
+  }
+}

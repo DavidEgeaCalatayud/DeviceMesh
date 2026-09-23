@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using DeviceMesh.Agent.Application.Telemetry;
+using DeviceMesh.Agent.Infrastructure.Identity;
 using DeviceMesh.Agent.Protocol;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ namespace DeviceMesh.Agent.Host;
 public sealed class AgentWorker(
     IHttpClientFactory httpClientFactory,
     CollectTelemetry collectTelemetry,
+    WindowsHostIdentityProvider identityProvider,
     IOptions<AgentOptions> options,
     ILogger<AgentWorker> logger) : BackgroundService
 {
@@ -22,20 +24,44 @@ public sealed class AgentWorker(
             try
             {
                 var now = DateTimeOffset.UtcNow;
-                var heartbeat = new HeartbeatMessage("heartbeat", 1, settings.AgentId, now);
-                await client.PostAsJsonAsync("/api/v1/agents/heartbeat", heartbeat, ProtocolSerializer.Options, stoppingToken);
+                var heartbeat = new HeartbeatMessage(
+                    "heartbeat",
+                    1,
+                    settings.AgentId,
+                    now,
+                    identityProvider.Capture());
+                var heartbeatResponse = await client.PostAsJsonAsync(
+                    "/api/v1/agents/heartbeat",
+                    heartbeat,
+                    ProtocolSerializer.Options,
+                    stoppingToken);
+                heartbeatResponse.EnsureSuccessStatusCode();
 
                 var snapshot = collectTelemetry.Execute();
-                var metrics = snapshot.Metrics.Select(metric => new MetricPayload(metric.Name, metric.Value, metric.Unit)).ToArray();
-                var telemetry = new TelemetryMessage("telemetry", 1, settings.AgentId, snapshot.Timestamp, metrics);
-                await client.PostAsJsonAsync("/api/v1/agents/telemetry", telemetry, ProtocolSerializer.Options, stoppingToken);
+                var metrics = snapshot.Metrics
+                    .Select(metric => new MetricPayload(metric.Name, metric.Value, metric.Unit))
+                    .ToArray();
+                var telemetry = new TelemetryMessage(
+                    "telemetry",
+                    1,
+                    settings.AgentId,
+                    snapshot.Timestamp,
+                    metrics);
+                var telemetryResponse = await client.PostAsJsonAsync(
+                    "/api/v1/agents/telemetry",
+                    telemetry,
+                    ProtocolSerializer.Options,
+                    stoppingToken);
+                telemetryResponse.EnsureSuccessStatusCode();
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 logger.LogWarning(exception, "Failed to publish agent telemetry");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, settings.IntervalSeconds)), stoppingToken);
+            await Task.Delay(
+                TimeSpan.FromSeconds(Math.Max(5, settings.IntervalSeconds)),
+                stoppingToken);
         }
     }
 }
