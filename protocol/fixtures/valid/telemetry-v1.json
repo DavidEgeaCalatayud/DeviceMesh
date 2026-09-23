@@ -1,0 +1,1 @@
+{"type":"telemetry","protocolVersion":1,"agentId":"agent-demo","timestamp":"2026-09-23T08:30:00Z","metrics":[{"name":"cpu.usage","value":17.8,"unit":"percent"},{"name":"memory.usage","value":42.1,"unit":"percent"}]}
