@@ -1,3 +1,4 @@
+import type { AlertIncident, AlertRule } from '../../entities/alert/types'
 import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
 import type { MetricSample } from '../../entities/telemetry/types'
@@ -20,4 +21,16 @@ export async function listLatestTelemetry(signal?: AbortSignal): Promise<MetricS
   const response = await fetch(`${apiBase}/api/v1/telemetry/latest`, { signal })
   if (!response.ok) throw new Error(`Telemetry API failed: ${response.status}`)
   return response.json() as Promise<MetricSample[]>
+}
+
+export async function listAlerts(signal?: AbortSignal, activeOnly = false): Promise<AlertIncident[]> {
+  const response = await fetch(`${apiBase}/api/v1/alerts?activeOnly=${activeOnly}`, { signal })
+  if (!response.ok) throw new Error(`Alert API failed: ${response.status}`)
+  return response.json() as Promise<AlertIncident[]>
+}
+
+export async function listAlertRules(signal?: AbortSignal): Promise<AlertRule[]> {
+  const response = await fetch(`${apiBase}/api/v1/alert-rules`, { signal })
+  if (!response.ok) throw new Error(`Alert rule API failed: ${response.status}`)
+  return response.json() as Promise<AlertRule[]>
 }
