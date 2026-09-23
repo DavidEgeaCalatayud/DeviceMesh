@@ -50,6 +50,10 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[index]}`
 }
 
+function formatTimestamp(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : 'Not observed'
+}
+
 function metricCard(label: string, sample: MetricSample | undefined, hint?: string) {
   return <article className="card detailMetric" key={label}>
     <div className="muted">{label}</div>
@@ -111,8 +115,8 @@ export function DeviceOverview({
         <dl className="identityGrid">
           <div><dt>Device ID</dt><dd>{device.id}</dd></div>
           <div><dt>Manufacturer</dt><dd>{device.manufacturer ?? 'Unknown'}</dd></div>
-          <div><dt>First seen</dt><dd>{new Date(device.firstSeen).toLocaleString()}</dd></div>
-          <div><dt>Last seen</dt><dd>{new Date(device.lastSeen).toLocaleString()}</dd></div>
+          <div><dt>First seen</dt><dd>{formatTimestamp(device.firstSeen)}</dd></div>
+          <div><dt>Last seen</dt><dd>{formatTimestamp(device.lastSeen)}</dd></div>
         </dl>
         <div className="identityGroup"><strong>IP addresses</strong><div className="identityChips">{device.ipAddresses.length ? device.ipAddresses.map((value) => <span key={value}>{value}</span>) : <span>None observed</span>}</div></div>
         <div className="identityGroup"><strong>MAC addresses</strong><div className="identityChips">{device.macAddresses.length ? device.macAddresses.map((value) => <span key={value}>{value}</span>) : <span>None observed</span>}</div></div>
