@@ -1,0 +1,12 @@
+name: DeviceMesh
+targets:
+  DeviceMesh:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Sources]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh
+        SWIFT_VERSION: 5.10
+        GENERATE_INFOPLIST_FILE: YES
