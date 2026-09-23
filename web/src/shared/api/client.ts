@@ -31,14 +31,16 @@ export async function getMetricHistory(
   end: Date,
   bucketSeconds: number,
   signal?: AbortSignal,
+  resolution: 'raw' | 'hourly' = 'raw',
 ): Promise<MetricSeries> {
   const params = new URLSearchParams({
     deviceId,
     name,
     start: start.toISOString(),
     end: end.toISOString(),
-    bucketSeconds: String(bucketSeconds),
+    bucketSeconds: String(resolution === 'hourly' ? 3600 : bucketSeconds),
     limit: '1200',
+    resolution,
   })
   const response = await fetch(`${apiBase}/api/v1/telemetry/history?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Telemetry history API failed: ${response.status}`)
@@ -71,8 +73,10 @@ export async function listAlertRules(signal?: AbortSignal): Promise<AlertRule[]>
   return response.json() as Promise<AlertRule[]>
 }
 
-export async function listServices(signal?: AbortSignal): Promise<DeviceService[]> {
-  const response = await fetch(`${apiBase}/api/v1/services?activeOnly=true`, { signal })
+export async function listServices(signal?: AbortSignal, deviceId?: string): Promise<DeviceService[]> {
+  const params = new URLSearchParams({ activeOnly: 'true' })
+  if (deviceId) params.set('deviceId', deviceId)
+  const response = await fetch(`${apiBase}/api/v1/services?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Service inventory API failed: ${response.status}`)
   return response.json() as Promise<DeviceService[]>
 }

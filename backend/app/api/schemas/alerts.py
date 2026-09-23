@@ -20,6 +20,12 @@ class AlertRuleResponse(BaseModel):
     enabled: bool
 
 
+class AlertPresetResponse(BaseModel):
+    preset: str
+    created: int
+    rules: list[AlertRuleResponse]
+
+
 class AlertResponse(BaseModel):
     id: int
     ruleId: int

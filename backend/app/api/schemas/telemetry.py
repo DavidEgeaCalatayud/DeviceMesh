@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -9,6 +10,7 @@ class MetricSeriesPointResponse(BaseModel):
     minimum: float
     maximum: float
     samples: int
+    source: Literal["raw", "hourly_rollup"]
 
 
 class MetricSeriesResponse(BaseModel):
@@ -18,8 +20,16 @@ class MetricSeriesResponse(BaseModel):
     start: datetime
     end: datetime
     bucketSeconds: int | None
+    resolution: Literal["raw", "hourly"]
     truncated: bool
     points: list[MetricSeriesPointResponse]
+
+
+class TelemetryCompactionResponse(BaseModel):
+    cutoff: datetime
+    rollupsTouched: int
+    rawSamplesDeleted: int
+    rawRetentionDays: int
 
 
 class DiagnosticSignalResponse(BaseModel):

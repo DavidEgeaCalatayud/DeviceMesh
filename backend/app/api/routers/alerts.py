@@ -3,7 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.dependencies.security import require_operator
-from app.api.schemas.alerts import AlertResponse, AlertRuleCreateRequest, AlertRuleResponse
+from app.api.schemas.alerts import (
+    AlertPresetResponse,
+    AlertResponse,
+    AlertRuleCreateRequest,
+    AlertRuleResponse,
+)
+from app.application.use_cases.network_alert_presets import ensure_network_quality_alert_rules
 from app.domain.alerts.models import AlertIncident, AlertRule, ThresholdRule
 from app.infrastructure.repositories.alerts import SqlAlchemyAlertRepository
 from app.runtime import get_alert_repository
@@ -65,6 +71,22 @@ def create_alert_rule(
         )
     )
     return _rule_response(rule)
+
+
+@router.post(
+    "/operator/alert-rules/presets/network-quality",
+    response_model=AlertPresetResponse,
+)
+def install_network_quality_alert_preset(
+    _: Operator,
+    repository: AlertRepositoryDependency,
+) -> AlertPresetResponse:
+    result = ensure_network_quality_alert_rules(repository)
+    return AlertPresetResponse(
+        preset="network-quality-v1",
+        created=result.created,
+        rules=[_rule_response(rule) for rule in result.rules],
+    )
 
 
 @router.get("/alerts", response_model=list[AlertResponse])

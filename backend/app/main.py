@@ -84,6 +84,7 @@ app.include_router(devices.router)
 app.include_router(discovery.router)
 app.include_router(events.router)
 app.include_router(telemetry.router)
+app.include_router(telemetry.operator_router)
 app.include_router(alerts.router)
 app.include_router(network.router)
 
