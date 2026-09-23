@@ -4,7 +4,10 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    sources: [Sources]
+    sources:
+      - path: Sources
+        excludes:
+          - "**/*.md"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh

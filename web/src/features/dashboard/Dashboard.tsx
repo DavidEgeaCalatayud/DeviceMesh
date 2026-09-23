@@ -3,18 +3,33 @@ import type { Device } from '../../entities/device/types'
 import { listDevices } from '../../shared/api/client'
 import { DeviceList } from '../devices/DeviceList'
 
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === 'AbortError'
+}
+
 export function Dashboard() {
   const [devices, setDevices] = useState<Device[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = async (signal?: AbortSignal) => {
-    try { setDevices(await listDevices(signal)); setError(null) }
-    catch (reason) { if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError(String(reason)) }
+  const refresh = async () => {
+    try {
+      setDevices(await listDevices())
+      setError(null)
+    } catch (reason) {
+      setError(String(reason))
+    }
   }
 
   useEffect(() => {
     const controller = new AbortController()
-    void refresh(controller.signal)
+    listDevices(controller.signal)
+      .then((result) => {
+        setDevices(result)
+        setError(null)
+      })
+      .catch((reason: unknown) => {
+        if (!isAbortError(reason)) setError(String(reason))
+      })
     return () => controller.abort()
   }, [])
 
