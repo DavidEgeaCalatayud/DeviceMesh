@@ -3,6 +3,8 @@ from app.application.use_cases.record_observation import RecordObservation
 from app.application.use_cases.record_telemetry import RecordTelemetry
 from app.core.config import get_settings
 from app.infrastructure.database import SessionFactory
+from app.infrastructure.offline import OfflineDeviceSweeper
+from app.infrastructure.realtime.events import InProcessEventPublisher, PublishingEventRepository
 from app.infrastructure.repositories.event_recording import EventRecordingDeviceRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.sqlalchemy import (
@@ -11,11 +13,19 @@ from app.infrastructure.repositories.sqlalchemy import (
 )
 from app.infrastructure.security.agent_auth import AgentAuthService
 
+settings = get_settings()
+realtime_event_publisher = InProcessEventPublisher()
+raw_event_repository = SqlAlchemyEventRepository(SessionFactory)
+event_repository = PublishingEventRepository(raw_event_repository, realtime_event_publisher)
 raw_device_repository = SqlAlchemyDeviceRepository(SessionFactory)
-event_repository = SqlAlchemyEventRepository(SessionFactory)
 device_repository = EventRecordingDeviceRepository(raw_device_repository, event_repository)
 telemetry_repository = SqlAlchemyTelemetryRepository(SessionFactory)
-agent_auth_service = AgentAuthService(SessionFactory, get_settings())
+agent_auth_service = AgentAuthService(SessionFactory, settings)
+offline_device_sweeper = OfflineDeviceSweeper(
+    SessionFactory,
+    event_repository,
+    settings.device_offline_after_seconds,
+)
 heartbeat_use_case = RecordHeartbeat(device_repository)
 observation_use_case = RecordObservation(device_repository)
 telemetry_use_case = RecordTelemetry(telemetry_repository)

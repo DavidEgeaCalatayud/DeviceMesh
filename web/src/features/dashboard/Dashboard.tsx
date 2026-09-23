@@ -3,6 +3,7 @@ import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
 import type { MetricSample } from '../../entities/telemetry/types'
 import { listDevices, listEvents, listLatestTelemetry } from '../../shared/api/client'
+import { connectEventStream, isDeviceEventEnvelope } from '../../shared/websocket/eventStream'
 import { DeviceList } from '../devices/DeviceList'
 import { EventTimeline } from '../events/EventTimeline'
 
@@ -52,12 +53,18 @@ export function Dashboard() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => connectEventStream((envelope) => {
+    if (!isDeviceEventEnvelope(envelope)) return
+    setEvents((current) => [envelope.payload, ...current].slice(0, 100))
+    void listDevices().then(setDevices).catch((reason: unknown) => setError(String(reason)))
+  }), [])
+
   const online = useMemo(() => devices.filter((device) => device.status === 'online').length, [devices])
 
   return <main className="shell">
     <section className="hero">
       <div><div className="eyebrow">Local-first device observability</div><h1>DeviceMesh</h1><p>Discover, identify and monitor the devices that make up your network.</p></div>
-      <div className="status">V1 data plane</div>
+      <div className="status">V1 realtime</div>
     </section>
     <section className="grid">
       <article className="card"><div className="muted">Known devices</div><div className="metric">{devices.length}</div></article>

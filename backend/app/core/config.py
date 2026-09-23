@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     agent_enrollment_ttl_seconds: int = 900
     agent_request_max_skew_seconds: int = 300
     agent_nonce_retention_seconds: int = 900
+    device_offline_after_seconds: int = 90
+    device_offline_sweep_interval_seconds: int = 15
 
 
 @lru_cache
