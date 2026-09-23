@@ -7,6 +7,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import pairwise
 from statistics import fmean
 from threading import Event
 from time import perf_counter
@@ -170,10 +171,7 @@ def summarize_network_quality(samples: tuple[float | None, ...]) -> NetworkQuali
         return None
     jitter = None
     if len(successful) >= 2:
-        jitter = fmean(
-            abs(current - previous)
-            for previous, current in zip(successful, successful[1:], strict=False)
-        )
+        jitter = fmean(abs(current - previous) for previous, current in pairwise(successful))
     return NetworkQuality(
         latency_ms=fmean(successful),
         jitter_ms=jitter,
