@@ -7,7 +7,7 @@ from app.domain.devices.models import DeviceIdentity
 from app.infrastructure.database import SessionFactory
 from app.infrastructure.offline import OfflineDeviceSweeper
 from app.main import app
-from app.runtime import device_repository, event_repository
+from app.runtime import device_repository, event_repository, health_repository
 
 
 def test_offline_transition_is_deduplicated_and_recovers() -> None:
@@ -18,6 +18,7 @@ def test_offline_transition_is_deduplicated_and_recovers() -> None:
     sweeper = OfflineDeviceSweeper(
         SessionFactory,
         event_repository,
+        health_repository,
         offline_after_seconds=60,
     )
 
