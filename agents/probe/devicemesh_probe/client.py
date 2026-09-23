@@ -19,6 +19,17 @@ def publish_observations(
                 "ipAddress": observation.ip_address,
                 "macAddress": observation.mac_address,
                 "manufacturer": None,
+                "networkCidr": observation.network_cidr,
+                "services": [
+                    {
+                        "port": service.port,
+                        "transport": service.transport,
+                        "name": service.name,
+                    }
+                    for service in observation.services
+                ],
+                "serviceSnapshotComplete": bool(observation.scanned_tcp_ports),
+                "scannedTcpPorts": list(observation.scanned_tcp_ports),
                 "attributes": {"latencyMs": observation.latency_ms},
             }
             for observation in observations

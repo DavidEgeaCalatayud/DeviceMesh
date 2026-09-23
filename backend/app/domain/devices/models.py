@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from app.domain.network.models import ObservedService
+
 
 class DeviceStatus(StrEnum):
     ONLINE = "online"
@@ -28,6 +30,10 @@ class DeviceObservation:
     ip_address: str | None = None
     mac_address: str | None = None
     manufacturer: str | None = None
+    network_cidr: str | None = None
+    services: tuple[ObservedService, ...] = ()
+    service_snapshot_complete: bool = False
+    scanned_tcp_ports: tuple[int, ...] = ()
     attributes: dict[str, object] = field(default_factory=dict)
 
 

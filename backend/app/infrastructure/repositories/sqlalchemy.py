@@ -101,6 +101,7 @@ class SqlAlchemyDeviceRepository:
                         else None
                     ),
                     manufacturer=observation.manufacturer,
+                    network_cidr=observation.network_cidr,
                     attributes=observation.attributes,
                 )
             )
@@ -345,7 +346,7 @@ class SqlAlchemyTelemetryRepository:
 
             if agent is None:
                 session.add(
-                    AgentRow(id=batch.agent_id, device_id=device.id, last_seen=batch.timestamp)
+                    AgentRow(id=batch.agent_id, device_id=device_id, last_seen=batch.timestamp)
                 )
             else:
                 agent.last_seen = batch.timestamp
@@ -354,7 +355,7 @@ class SqlAlchemyTelemetryRepository:
             for metric in batch.metrics:
                 session.add(
                     MetricSampleRow(
-                        device_id=device.id,
+                        device_id=device_id,
                         metric_type=metric.name,
                         timestamp=batch.timestamp,
                         value=metric.value,

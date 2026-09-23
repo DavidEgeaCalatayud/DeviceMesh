@@ -14,6 +14,7 @@ from app.api.routers import (
     enrollment,
     events,
     health,
+    network,
     telemetry,
 )
 from app.api.websocket.manager import ConnectionManager
@@ -84,6 +85,7 @@ app.include_router(discovery.router)
 app.include_router(events.router)
 app.include_router(telemetry.router)
 app.include_router(alerts.router)
+app.include_router(network.router)
 
 
 @app.websocket("/ws/events")

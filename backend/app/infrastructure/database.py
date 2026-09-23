@@ -69,7 +69,27 @@ class DeviceObservationRow(Base):
     ip_address: Mapped[str | None] = mapped_column(String(64))
     mac_address: Mapped[str | None] = mapped_column(String(64))
     manufacturer: Mapped[str | None] = mapped_column(String(255))
+    network_cidr: Mapped[str | None] = mapped_column(String(64))
     attributes: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class DeviceServiceRow(Base):
+    __tablename__ = "device_services"
+    __table_args__ = (
+        UniqueConstraint("device_id", "transport", "port", name="uq_device_service_endpoint"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    transport: Mapped[str] = mapped_column(String(16), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False)
+    service_name: Mapped[str | None] = mapped_column(String(128))
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    network_cidr: Mapped[str | None] = mapped_column(String(64))
 
 
 class MetricSampleRow(Base):
