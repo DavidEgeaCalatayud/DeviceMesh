@@ -1,6 +1,7 @@
 import type { AlertIncident, AlertRule } from '../../entities/alert/types'
 import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
+import type { DeviceService, NetworkTopology } from '../../entities/network/types'
 import type { MetricSample } from '../../entities/telemetry/types'
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
@@ -33,4 +34,16 @@ export async function listAlertRules(signal?: AbortSignal): Promise<AlertRule[]>
   const response = await fetch(`${apiBase}/api/v1/alert-rules`, { signal })
   if (!response.ok) throw new Error(`Alert rule API failed: ${response.status}`)
   return response.json() as Promise<AlertRule[]>
+}
+
+export async function listServices(signal?: AbortSignal): Promise<DeviceService[]> {
+  const response = await fetch(`${apiBase}/api/v1/services?activeOnly=true`, { signal })
+  if (!response.ok) throw new Error(`Service inventory API failed: ${response.status}`)
+  return response.json() as Promise<DeviceService[]>
+}
+
+export async function getNetworkTopology(signal?: AbortSignal): Promise<NetworkTopology> {
+  const response = await fetch(`${apiBase}/api/v1/network/topology`, { signal })
+  if (!response.ok) throw new Error(`Network topology API failed: ${response.status}`)
+  return response.json() as Promise<NetworkTopology>
 }
