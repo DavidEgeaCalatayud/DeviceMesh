@@ -18,4 +18,6 @@ export interface AlertIncident {
   operator: string
   threshold: number
   durationSeconds: number
+  silenced: boolean
+  maintenanceWindowId: number | null
 }
