@@ -15,10 +15,11 @@ dependencies = [
   "alembic>=1.16,<2",
   "psycopg[binary]>=3.2,<4",
   "redis>=6,<7",
+  "httpx>=0.28,<1",
 ]
 
 [project.optional-dependencies]
-dev = ["httpx>=0.28,<1", "jsonschema[format]>=4.25,<5", "pytest>=8.4,<9", "pytest-cov>=6,<7", "ruff>=0.13,<1", "mypy>=1.18,<2"]
+dev = ["jsonschema[format]>=4.25,<5", "pytest>=8.4,<9", "pytest-cov>=6,<7", "ruff>=0.13,<1", "mypy>=1.18,<2"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
