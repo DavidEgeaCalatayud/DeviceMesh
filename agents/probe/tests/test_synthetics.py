@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Self
 
 from devicemesh_probe import synthetics
 from devicemesh_probe.synthetics import SyntheticMonitorSpec, execute_monitor
@@ -7,7 +8,7 @@ from devicemesh_probe.synthetics import SyntheticMonitorSpec, execute_monitor
 class _Response:
     status = 204
 
-    def __enter__(self) -> "_Response":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -57,7 +58,7 @@ def test_tcp_check_uses_socket_connection_with_explicit_host_port(monkeypatch) -
     calls: list[tuple[tuple[str, int], int]] = []
 
     class Connection:
-        def __enter__(self) -> "Connection":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *args: object) -> None:
