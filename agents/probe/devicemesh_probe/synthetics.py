@@ -72,7 +72,7 @@ def _parse_work(payload: list[dict[str, object]]) -> list[SyntheticWork]:
     for raw in payload:
         monitor_raw = raw.get("monitor")
         if not isinstance(monitor_raw, dict):
-            raise ValueError("synthetic work item is missing monitor data")
+            raise TypeError("synthetic work item is missing monitor data")
         work_id = raw.get("workId")
         monitor_id = monitor_raw.get("id")
         name = monitor_raw.get("name")
@@ -82,7 +82,7 @@ def _parse_work(payload: list[dict[str, object]]) -> list[SyntheticWork]:
         if not all(isinstance(value, str) for value in (work_id, monitor_id, name, kind, target)):
             raise ValueError("synthetic work item contains invalid string fields")
         if not isinstance(timeout, (int, float)):
-            raise ValueError("synthetic work item timeout is invalid")
+            raise TypeError("synthetic work item timeout is invalid")
         port = monitor_raw.get("port")
         http_method = monitor_raw.get("httpMethod")
         expected_status = monitor_raw.get("expectedStatus")
@@ -225,7 +225,7 @@ class DistributedSyntheticClient:
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, list):
-            raise ValueError("synthetic work response must be a list")
+            raise TypeError("synthetic work response must be a list")
         return _parse_work(payload)
 
     async def submit(self, work: SyntheticWork, outcome: ProbeOutcome) -> None:
