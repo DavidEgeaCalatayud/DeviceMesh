@@ -37,6 +37,8 @@ struct RemoteOperationExecutor {
                         "status": .string("ok"),
                         "checkedAt": .string(iso8601Now()),
                         "platform": .string("macos"),
+                        "agentVersion": .string(DeviceMeshMacAgentVersion.current),
+                        "protocolVersion": .number(Double(DeviceMeshMacAgentVersion.protocolVersion)),
                     ],
                     error: nil
                 )
