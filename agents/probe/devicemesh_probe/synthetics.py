@@ -25,6 +25,7 @@ class SyntheticMonitorSpec:
     expected_status_min: int | None
     expected_status_max: int | None
     timeout_seconds: int
+    interval_seconds: int = 60
 
 
 @dataclass(frozen=True, slots=True)
