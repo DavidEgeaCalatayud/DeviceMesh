@@ -1,15 +1,16 @@
 import Foundation
 
-@main
-enum DeviceMeshMacAgentMain {
-    static func main() async {
-        do {
-            let config = try AgentConfig.fromEnvironment()
-            let agent = DeviceMeshMacAgent(config: config)
-            await agent.runForever()
-        } catch {
-            FileHandle.standardError.write(Data("DeviceMesh macOS agent configuration error: \(error)\n".utf8))
-            exit(EXIT_FAILURE)
-        }
-    }
+let config: AgentConfig
+do {
+    config = try AgentConfig.fromEnvironment()
+} catch {
+    FileHandle.standardError.write(Data("DeviceMesh macOS agent configuration error: \(error)\n".utf8))
+    exit(EXIT_FAILURE)
 }
+
+let agent = DeviceMeshMacAgent(config: config)
+Task {
+    await agent.runForever()
+    exit(EXIT_SUCCESS)
+}
+RunLoop.main.run()
