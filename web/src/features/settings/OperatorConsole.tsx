@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import type { Device } from '../../entities/device/types'
 import type { MaintenanceWindow } from '../../entities/health/types'
 import type { RemoteOperation, RemoteOperationType } from '../../entities/operations/types'
@@ -49,14 +50,14 @@ export function OperatorConsole() {
       listMaintenanceWindows(),
       listSyntheticMonitors(),
     ])
-    setDevices(nextDevices)
-    setMaintenance(nextMaintenance)
-    setMonitors(nextMonitors)
-    if (!deviceId && nextDevices[0]) setDeviceId(nextDevices[0].id)
     const healthEntries = await Promise.all(
       nextMonitors.map(async (monitor) => [monitor.id, await getSyntheticHealth(monitor.id)] as const),
     )
+    setDevices(nextDevices)
+    setMaintenance(nextMaintenance)
+    setMonitors(nextMonitors)
     setSyntheticHealth(Object.fromEntries(healthEntries))
+    setDeviceId((current) => current || nextDevices[0]?.id || '')
   }
 
   const refreshOperator = async (nextToken = token) => {
@@ -77,7 +78,29 @@ export function OperatorConsole() {
   }
 
   useEffect(() => {
-    void refreshPublic().catch((reason: unknown) => setError(String(reason)))
+    let active = true
+    const loadInitialState = async () => {
+      try {
+        const [nextDevices, nextMaintenance, nextMonitors] = await Promise.all([
+          listDevices(),
+          listMaintenanceWindows(),
+          listSyntheticMonitors(),
+        ])
+        const healthEntries = await Promise.all(
+          nextMonitors.map(async (monitor) => [monitor.id, await getSyntheticHealth(monitor.id)] as const),
+        )
+        if (!active) return
+        setDevices(nextDevices)
+        setMaintenance(nextMaintenance)
+        setMonitors(nextMonitors)
+        setSyntheticHealth(Object.fromEntries(healthEntries))
+        setDeviceId(nextDevices[0]?.id ?? '')
+      } catch (reason) {
+        if (active) setError(String(reason))
+      }
+    }
+    void loadInitialState()
+    return () => { active = false }
   }, [])
 
   const saveToken = async () => {
@@ -143,9 +166,7 @@ export function OperatorConsole() {
       <div><div className="eyebrow">V1.2 operations</div><h1>Operator Console</h1><p>Controlled maintenance, allowlisted remote operations and service-level synthetic monitoring.</p></div>
       <a className="status" href="#/">Back to dashboard</a>
     </section>
-
     {error && <section className="errorBanner">{error}</section>}
-
     <section className="card panel operatorAuth">
       <div className="panelHeader"><div><div className="eyebrow">Authorization</div><h2>Operator session</h2></div></div>
       <div className="operatorRow">
@@ -155,7 +176,6 @@ export function OperatorConsole() {
       </div>
       <p className="muted">The token is kept only in this browser tab via sessionStorage.</p>
     </section>
-
     <section className="contentGrid">
       <form className="card panel" onSubmit={submitMaintenance}>
         <div className="eyebrow">Noise control</div><h2>Maintenance window</h2>
@@ -166,7 +186,6 @@ export function OperatorConsole() {
         <button type="submit" disabled={!token}>Schedule maintenance</button>
         <div className="compactList">{maintenance.slice(0, 8).map((window) => <div key={window.id} className="compactItem"><div><strong>{window.deviceId ?? 'Global'}</strong><span>{window.reason}</span></div><div>{window.active ? 'Active' : 'Scheduled/ended'} {window.cancelledAt ? '· Cancelled' : ''}</div>{!window.cancelledAt && <button type="button" disabled={!token} onClick={() => void cancelMaintenanceWindow(token, window.id).then(refreshPublic).catch((reason: unknown) => setError(String(reason)))}>Cancel</button>}</div>)}</div>
       </form>
-
       <section className="card panel">
         <div className="eyebrow">Safe control plane</div><h2>Remote operation</h2>
         <p className="muted">No shell input exists. Only the V1.1 declarative allowlist is available.</p>
@@ -177,7 +196,6 @@ export function OperatorConsole() {
         <div className="compactList">{operations.slice(0, 10).map((operation) => <div key={operation.id} className="compactItem"><div><strong>{operation.operationType}</strong><span>{operation.deviceId}</span></div><div>{operation.status}{operation.error ? ` · ${operation.error}` : ''}</div></div>)}</div>
       </section>
     </section>
-
     <form className="card panel" onSubmit={submitMonitor}>
       <div className="eyebrow">Service health</div><h2>Synthetic monitors</h2>
       <div className="operatorGrid">
