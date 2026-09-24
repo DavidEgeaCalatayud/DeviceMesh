@@ -60,13 +60,15 @@ const outages = [{
 }]
 
 describe('DeviceHealthPanel', () => {
-  it('renders SLA windows, current outage and maintenance state', () => {
+  it('renders agent SLA windows, current outage and maintenance state', () => {
     render(<DeviceHealthPanel health={health} outages={outages} />)
 
+    expect(screen.getByText('Agent health')).toBeTruthy()
+    expect(screen.getByText('Heartbeat availability & outages')).toBeTruthy()
     expect(screen.getByText('95.833%')).toBeTruthy()
     expect(screen.getByText('99.405%')).toBeTruthy()
     expect(screen.getByText('99.861%')).toBeTruthy()
-    expect(screen.getByText('Current outage')).toBeTruthy()
+    expect(screen.getByText('Current agent outage')).toBeTruthy()
     expect(screen.getByText('maintenance')).toBeTruthy()
     expect(screen.getByText(/window #42/i)).toBeTruthy()
     expect(screen.getByText(/heartbeat-timeout/i)).toBeTruthy()
