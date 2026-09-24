@@ -4,10 +4,12 @@
 <dict>
     <key>Label</key>
     <string>io.github.davidegeacalatayud.devicemesh.macos-agent</string>
+
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/libexec/devicemesh-macos-agent</string>
     </array>
+
     <key>EnvironmentVariables</key>
     <dict>
         <key>DEVICEMESH_SERVER</key>
@@ -15,15 +17,14 @@
         <key>DEVICEMESH_INTERVAL_SECONDS</key>
         <string>30</string>
     </dict>
+
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>ProcessType</key>
     <string>Background</string>
-    <key>StandardOutPath</key>
-    <string>/tmp/devicemesh-macos-agent.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/devicemesh-macos-agent.err</string>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
 </dict>
 </plist>
