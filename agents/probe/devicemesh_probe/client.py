@@ -86,10 +86,13 @@ def fetch_synthetic_monitors(
         monitor_type = item.get("monitorType")
         target = item.get("target")
         timeout_seconds = item.get("timeoutSeconds")
+        interval_seconds = item.get("intervalSeconds")
         if not isinstance(monitor_id, str) or not isinstance(monitor_type, str):
             raise RuntimeError("DeviceMesh synthetic monitor identity is invalid")
         if not isinstance(target, str) or not isinstance(timeout_seconds, int):
             raise RuntimeError("DeviceMesh synthetic monitor target is invalid")
+        if not isinstance(interval_seconds, int):
+            raise RuntimeError("DeviceMesh synthetic monitor interval is invalid")
         port = item.get("port")
         minimum = item.get("expectedStatusMin")
         maximum = item.get("expectedStatusMax")
@@ -102,6 +105,7 @@ def fetch_synthetic_monitors(
                 expected_status_min=minimum if isinstance(minimum, int) else None,
                 expected_status_max=maximum if isinstance(maximum, int) else None,
                 timeout_seconds=timeout_seconds,
+                interval_seconds=interval_seconds,
             )
         )
     return monitors
