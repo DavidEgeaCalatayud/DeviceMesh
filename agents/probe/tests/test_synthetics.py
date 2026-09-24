@@ -48,7 +48,7 @@ def test_http_check_uses_bounded_get_without_redirect_following(monkeypatch) -> 
     assert result.success is True
     assert result.http_status == 204
     assert result.latency_ms is not None
-    assert any(isinstance(handler, synthetics._NoRedirect) for handler in handlers)
+    assert synthetics._NoRedirect in handlers
     request, timeout = opener.requests[0]
     assert request.get_method() == "GET"  # type: ignore[attr-defined]
     assert timeout == 5
