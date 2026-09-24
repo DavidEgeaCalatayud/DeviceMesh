@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://devicemesh:devicemesh@localhost:5432/devicemesh"
     redis_url: str = "redis://localhost:6379/0"
     operator_token: str = "development-operator-change-me"
+    probe_token: str = "development-probe-change-me"
     agent_enrollment_ttl_seconds: int = 900
     agent_request_max_skew_seconds: int = 300
     agent_nonce_retention_seconds: int = 900
