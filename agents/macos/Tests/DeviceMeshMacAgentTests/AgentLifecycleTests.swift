@@ -62,10 +62,13 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(snapshot.completions.first?.0, "health-1")
         XCTAssertEqual(snapshot.completions.first?.1.status, "succeeded")
         XCTAssertEqual(snapshot.completions.first?.1.result["platform"], .string("macos"))
-        XCTAssertEqual(snapshot.completions.first?.1.result["agentVersion"], .string(AgentVersion.current))
+        XCTAssertEqual(
+            snapshot.completions.first?.1.result["agentVersion"],
+            .string(DeviceMeshMacAgentVersion.current)
+        )
         XCTAssertEqual(
             snapshot.completions.first?.1.result["protocolVersion"],
-            .number(Double(AgentVersion.protocolVersion))
+            .number(Double(DeviceMeshMacAgentVersion.protocolVersion))
         )
     }
 }
