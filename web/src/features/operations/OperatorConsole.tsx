@@ -81,9 +81,33 @@ export function OperatorConsole({
   }, [deviceId])
 
   useEffect(() => {
-    void refreshPublic().catch((reason: unknown) => setError(String(reason)))
-    if (token) void refreshProtected(token).catch(() => setToken(''))
-  }, [refreshProtected, refreshPublic, token])
+    let cancelled = false
+    void Promise.all([
+      listMaintenanceWindows(undefined, deviceId, false),
+      listSyntheticMonitors(undefined, deviceId),
+    ])
+      .then(([nextMaintenance, nextMonitors]) => {
+        if (cancelled) return
+        setMaintenance(nextMaintenance)
+        setMonitors(nextMonitors)
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(String(reason))
+      })
+
+    if (token) {
+      void listRemoteOperations(token, deviceId)
+        .then((nextOperations) => {
+          if (!cancelled) setOperations(nextOperations)
+        })
+        .catch(() => {
+          if (!cancelled) setToken('')
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [deviceId, token])
 
   function unlock(event: FormEvent) {
     event.preventDefault()
