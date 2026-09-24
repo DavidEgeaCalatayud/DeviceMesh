@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.github.davidegeacalatayud.devicemesh.macos-agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/libexec/devicemesh-macos-agent</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DEVICEMESH_SERVER</key>
+        <string>https://devicemesh.example.internal</string>
+        <key>DEVICEMESH_INTERVAL_SECONDS</key>
+        <string>30</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/devicemesh-macos-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/devicemesh-macos-agent.err</string>
+</dict>
+</plist>

@@ -1,0 +1,28 @@
+name: macOS Agent CI
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agents/macos/**"
+      - ".github/workflows/macos-agent-ci.yml"
+  pull_request:
+    paths:
+      - "agents/macos/**"
+      - ".github/workflows/macos-agent-ci.yml"
+
+jobs:
+  macos-agent:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: agents/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build release
+        run: swift build -c release
+      - name: Run tests
+        run: swift test
+      - name: Validate launchd plist
+        run: plutil -lint launchd/io.github.davidegeacalatayud.devicemesh.macos-agent.plist
