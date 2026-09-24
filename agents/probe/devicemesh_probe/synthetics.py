@@ -160,7 +160,7 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
             error_kind="unsupported",
             error="ICMP requires an explicitly privileged probe runtime",
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return ProbeOutcome(
             success=False,
             latency_ms=(time.perf_counter() - started) * 1000.0,
