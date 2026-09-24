@@ -39,6 +39,7 @@ class SyntheticProbeWorker:
                 error_kind=outcome.error_kind,
                 error=outcome.error,
                 probe_id=self._probe_id,
+                probe_location="backend-local",
                 checked_at=datetime.now(UTC),
             )
         return len(monitors)

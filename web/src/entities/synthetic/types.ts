@@ -1,4 +1,5 @@
 export type SyntheticMonitorKind = 'http' | 'tcp' | 'icmp'
+export type ServiceConsensusClassification = 'healthy' | 'global_outage' | 'regional_degradation' | 'insufficient_data'
 
 export interface SyntheticMonitor {
   id: string
@@ -12,6 +13,8 @@ export interface SyntheticMonitor {
   enabled: boolean
   httpMethod: 'GET' | 'HEAD' | null
   expectedStatus: number | null
+  failureThreshold: number
+  recoveryThreshold: number
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -28,6 +31,8 @@ export interface SyntheticCheck {
   errorKind: string | null
   error: string | null
   probeId: string
+  probeLocation: string | null
+  workId: string | null
 }
 
 export interface SyntheticSlaWindow {
@@ -48,4 +53,72 @@ export interface SyntheticHealth {
   consecutiveFailures: number
   failingSince: string | null
   windows: SyntheticSlaWindow[]
+}
+
+export interface SyntheticProbe {
+  id: string
+  name: string
+  location: string
+  capabilities: SyntheticMonitorKind[]
+  enabled: boolean
+  lastSeenAt: string | null
+  online: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SyntheticProbeRegistration {
+  probe: SyntheticProbe
+  token: string
+}
+
+export interface SyntheticProbeAssignment {
+  monitorId: string
+  probeId: string
+  enabled: boolean
+  nextRunAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProbeServiceState {
+  probeId: string
+  location: string
+  success: boolean
+  checkedAt: string
+  latencyMs: number
+}
+
+export interface ServiceConsensus {
+  monitorId: string
+  generatedAt: string
+  classification: ServiceConsensusClassification
+  healthyProbes: number
+  failingProbes: number
+  states: ProbeServiceState[]
+}
+
+export interface ServiceIncident {
+  id: string
+  monitorId: string
+  state: 'open' | 'resolved'
+  classification: 'service_outage' | 'regional_path'
+  openedAt: string
+  resolvedAt: string | null
+  lastObservedAt: string
+  durationSeconds: number
+  failureThreshold: number
+  recoveryThreshold: number
+  maintenanceActiveAtOpen: boolean
+  hostOfflineAtOpen: boolean
+  failingProbes: number
+  totalProbes: number
+}
+
+export interface ServiceIncidentSummary {
+  monitorId: string
+  openIncident: ServiceIncident | null
+  incidents: ServiceIncident[]
+  resolvedCount: number
+  meanRecoverySeconds: number | null
 }
