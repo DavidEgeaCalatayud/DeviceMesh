@@ -17,6 +17,7 @@ from app.api.routers import (
     network,
     operational_health,
     operations,
+    synthetics,
     telemetry,
 )
 from app.api.websocket.manager import ConnectionManager
@@ -91,6 +92,7 @@ app.include_router(alerts.router)
 app.include_router(network.router)
 app.include_router(operational_health.router)
 app.include_router(operations.router)
+app.include_router(synthetics.router)
 
 
 @app.websocket("/ws/events")
