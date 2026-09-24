@@ -7,7 +7,6 @@ from uuid import uuid4
 from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
-from app.infrastructure.database import Base
 from app.domain.synthetics.models import (
     SyntheticCheckErrorKind,
     SyntheticCheckResult,
@@ -16,6 +15,7 @@ from app.domain.synthetics.models import (
     SyntheticMonitorKind,
     SyntheticSlaWindow,
 )
+from app.infrastructure.database import Base
 
 
 class SyntheticMonitorRow(Base):
