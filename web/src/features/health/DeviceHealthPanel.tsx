@@ -33,7 +33,7 @@ function formatTimestamp(value: string): string {
 export function DeviceHealthPanel({ health, outages }: { health: DeviceHealth; outages: Outage[] }) {
   return <section className="card healthPanel">
     <div className="panelHeader healthHeader">
-      <div><div className="eyebrow">Service-level health</div><h2>Availability & outages</h2></div>
+      <div><div className="eyebrow">Agent health</div><h2>Heartbeat availability & outages</h2><p className="muted">Observed from authenticated device heartbeats, independently of synthetic service checks.</p></div>
       <div className="healthStateGroup">
         {health.maintenanceActive && <span className="maintenanceBadge">maintenance</span>}
         <span className={`healthState ${health.currentState ?? 'unknown'}`}>{health.currentState ?? 'unknown'}</span>
@@ -41,8 +41,8 @@ export function DeviceHealthPanel({ health, outages }: { health: DeviceHealth; o
     </div>
 
     {health.currentState === 'offline' && <div className="outageBanner">
-      <strong>Current outage</strong>
-      <span>{formatDuration(health.currentOutageSeconds)} without an online transition.</span>
+      <strong>Current agent outage</strong>
+      <span>{formatDuration(health.currentOutageSeconds)} without an online heartbeat transition.</span>
     </div>}
     {health.maintenanceActive && <div className="maintenanceBanner">
       Alert notification semantics are silenced by maintenance window #{health.maintenanceWindowId}; telemetry and incidents continue to be recorded.
@@ -53,9 +53,9 @@ export function DeviceHealthPanel({ health, outages }: { health: DeviceHealth; o
     </div>
 
     <div className="outageHistory">
-      <div className="alertSectionTitle">Recent outages <span>{outages.length}</span></div>
+      <div className="alertSectionTitle">Recent agent outages <span>{outages.length}</span></div>
       {outages.length === 0
-        ? <p className="muted">No outage interval has been recorded in the selected 30-day history.</p>
+        ? <p className="muted">No heartbeat outage interval has been recorded in the selected 30-day history.</p>
         : <div className="outageList">{outages.slice(0, 10).map((outage) => <div className="outageRow" key={outage.id}>
           <div><strong>{outage.active ? 'Active outage' : 'Recovered outage'}</strong><div className="deviceMeta">Started {formatTimestamp(outage.startedAt)} · {outage.source}</div></div>
           <div className="outageDuration">{formatDuration(outage.durationSeconds)}</div>
