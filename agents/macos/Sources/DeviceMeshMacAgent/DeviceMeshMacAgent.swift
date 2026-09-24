@@ -92,7 +92,8 @@ final class DeviceMeshMacAgent {
             } catch {
                 FileHandle.standardError.write(Data("DeviceMesh macOS agent error: \(error)\n".utf8))
             }
-            try? await Task.sleep(for: .seconds(config.intervalSeconds))
+            let nanoseconds = config.intervalSeconds.multipliedReportingOverflow(by: 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds.overflow ? UInt64.max : nanoseconds.partialValue)
         }
     }
 }
