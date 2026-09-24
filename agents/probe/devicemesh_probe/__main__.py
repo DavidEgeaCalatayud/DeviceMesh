@@ -1,19 +1,21 @@
 import argparse
+import sys
 
 from devicemesh_probe.client import publish_observations
 from devicemesh_probe.config import ProbeConfig
 from devicemesh_probe.discovery import DiscoveryScope, scan_scope
+from devicemesh_probe.runner import run_synthetic_forever, run_synthetic_once
 
 
-def main() -> None:
+def _discovery_main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description="DeviceMesh bounded LAN discovery probe")
     parser.add_argument("--scope", required=True, help="IPv4 CIDR inside DEVICEMESH_PROBE_SCOPES")
     parser.add_argument("--workers", type=int, default=64)
     parser.add_argument("--timeout", type=float, default=1.0)
     parser.add_argument("--service-timeout", type=float, default=0.35)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    config = ProbeConfig.from_environment()
+    config = ProbeConfig.from_environment(require_scopes=True)
     scope = DiscoveryScope(args.scope)
     config.require_allowed(scope)
     observations = scan_scope(
@@ -29,6 +31,31 @@ def main() -> None:
         f"discovered {len(observations)} reachable host(s) in {scope.network()} "
         f"with {service_count} allowed TCP service(s) open"
     )
+
+
+def _synthetics_main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="DeviceMesh synthetic service probe")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="execute all enabled synthetic monitors once and exit",
+    )
+    args = parser.parse_args(argv)
+    config = ProbeConfig.from_environment(require_scopes=False)
+    if args.once:
+        results = run_synthetic_once(config)
+        successes = sum(result.success for result in results)
+        print(f"executed {len(results)} synthetic check(s), {successes} succeeded")
+        return
+    run_synthetic_forever(config)
+
+
+def main() -> None:
+    argv = sys.argv[1:]
+    if argv and argv[0] == "synthetics":
+        _synthetics_main(argv[1:])
+        return
+    _discovery_main(argv)
 
 
 if __name__ == "__main__":
