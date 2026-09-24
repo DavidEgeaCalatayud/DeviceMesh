@@ -76,23 +76,23 @@ def fetch_synthetic_monitors(
             raise RuntimeError(f"DeviceMesh server returned HTTP {response.status}")
         payload = json.load(response)
     if not isinstance(payload, list):
-        raise RuntimeError("DeviceMesh synthetic monitor response is invalid")
+        raise TypeError("DeviceMesh synthetic monitor response is invalid")
 
     monitors: list[SyntheticMonitorSpec] = []
     for item in payload:
         if not isinstance(item, dict):
-            raise RuntimeError("DeviceMesh synthetic monitor item is invalid")
+            raise TypeError("DeviceMesh synthetic monitor item is invalid")
         monitor_id = item.get("id")
         monitor_type = item.get("monitorType")
         target = item.get("target")
         timeout_seconds = item.get("timeoutSeconds")
         interval_seconds = item.get("intervalSeconds")
         if not isinstance(monitor_id, str) or not isinstance(monitor_type, str):
-            raise RuntimeError("DeviceMesh synthetic monitor identity is invalid")
+            raise TypeError("DeviceMesh synthetic monitor identity is invalid")
         if not isinstance(target, str) or not isinstance(timeout_seconds, int):
-            raise RuntimeError("DeviceMesh synthetic monitor target is invalid")
+            raise TypeError("DeviceMesh synthetic monitor target is invalid")
         if not isinstance(interval_seconds, int):
-            raise RuntimeError("DeviceMesh synthetic monitor interval is invalid")
+            raise TypeError("DeviceMesh synthetic monitor interval is invalid")
         port = item.get("port")
         minimum = item.get("expectedStatusMin")
         maximum = item.get("expectedStatusMax")
