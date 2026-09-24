@@ -15,9 +15,11 @@ final class AgentLifecycleTests: XCTestCase {
         )
 
         let first = DeviceMeshMacAgent(config: config, api: api, credentialStore: store)
-        XCTAssertEqual(try await first.ensureCredential(), "issued-credential")
+        let firstCredential = try await first.ensureCredential()
+        XCTAssertEqual(firstCredential, "issued-credential")
         XCTAssertEqual(store.value, "issued-credential")
-        XCTAssertEqual(await api.enrollmentCount(), 1)
+        let enrollmentCountAfterFirst = await api.enrollmentCount()
+        XCTAssertEqual(enrollmentCountAfterFirst, 1)
 
         let reuseConfig = AgentConfig(
             serverURL: config.serverURL,
@@ -27,8 +29,10 @@ final class AgentLifecycleTests: XCTestCase {
             credentialOverride: nil
         )
         let second = DeviceMeshMacAgent(config: reuseConfig, api: api, credentialStore: store)
-        XCTAssertEqual(try await second.ensureCredential(), "issued-credential")
-        XCTAssertEqual(await api.enrollmentCount(), 1)
+        let reusedCredential = try await second.ensureCredential()
+        XCTAssertEqual(reusedCredential, "issued-credential")
+        let enrollmentCountAfterReuse = await api.enrollmentCount()
+        XCTAssertEqual(enrollmentCountAfterReuse, 1)
     }
 
     func testRunCyclePublishesHeartbeatTelemetryAndCompletesHealthOperation() async throws {
@@ -59,7 +63,10 @@ final class AgentLifecycleTests: XCTestCase {
         XCTAssertEqual(snapshot.completions.first?.1.status, "succeeded")
         XCTAssertEqual(snapshot.completions.first?.1.result["platform"], .string("macos"))
         XCTAssertEqual(snapshot.completions.first?.1.result["agentVersion"], .string(AgentVersion.current))
-        XCTAssertEqual(snapshot.completions.first?.1.result["protocolVersion"], .number(Double(AgentVersion.protocolVersion)))
+        XCTAssertEqual(
+            snapshot.completions.first?.1.result["protocolVersion"],
+            .number(Double(AgentVersion.protocolVersion))
+        )
     }
 }
 
