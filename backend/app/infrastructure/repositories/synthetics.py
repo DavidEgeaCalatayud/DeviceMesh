@@ -939,12 +939,14 @@ class SqlAlchemySyntheticRepository:
         monitor: SyntheticMonitorRow,
         now: datetime,
     ) -> bool:
-        device_filter = MaintenanceWindowRow.device_id.is_(None)
-        if monitor.device_id is not None:
-            device_filter = or_(
+        device_filter = (
+            or_(
                 MaintenanceWindowRow.device_id.is_(None),
                 MaintenanceWindowRow.device_id == monitor.device_id,
             )
+            if monitor.device_id is not None
+            else MaintenanceWindowRow.device_id.is_(None)
+        )
         return (
             session.scalar(
                 select(MaintenanceWindowRow.id)
