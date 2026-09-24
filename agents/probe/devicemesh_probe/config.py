@@ -10,6 +10,8 @@ class ProbeConfig:
     source: str
     scopes: tuple[DiscoveryScope, ...]
     tcp_ports: tuple[int, ...] = ()
+    synthetic_token: str | None = None
+    synthetic_poll_seconds: float = 5.0
 
     @classmethod
     def from_environment(cls) -> "ProbeConfig":
@@ -19,8 +21,6 @@ class ProbeConfig:
             for value in raw_scopes.split(",")
             if value.strip()
         )
-        if not scopes:
-            raise ValueError("DEVICEMESH_PROBE_SCOPES must explicitly allow at least one CIDR")
         for scope in scopes:
             scope.network()
 
@@ -39,14 +39,27 @@ class ProbeConfig:
         if any(port < 1 or port > 65535 for port in ports):
             raise ValueError("configured TCP ports must be between 1 and 65535")
 
+        poll_seconds = float(os.environ.get("DEVICEMESH_PROBE_POLL_SECONDS", "5"))
+        if poll_seconds < 1.0 or poll_seconds > 300.0:
+            raise ValueError("DEVICEMESH_PROBE_POLL_SECONDS must be between 1 and 300")
+
         return cls(
             server_url=os.environ.get("DEVICEMESH_SERVER_URL", "http://localhost:8000"),
             source=os.environ.get("DEVICEMESH_PROBE_SOURCE", "network-probe"),
             scopes=scopes,
             tcp_ports=ports,
+            synthetic_token=os.environ.get("DEVICEMESH_PROBE_TOKEN") or None,
+            synthetic_poll_seconds=poll_seconds,
         )
 
     def require_allowed(self, requested: DiscoveryScope) -> None:
+        if not self.scopes:
+            raise ValueError("DEVICEMESH_PROBE_SCOPES must explicitly allow at least one CIDR")
         network = requested.network()
         if not any(network.subnet_of(allowed.network()) for allowed in self.scopes):
             raise ValueError(f"requested scope {network} is outside DEVICEMESH_PROBE_SCOPES")
+
+    def require_synthetic_token(self) -> str:
+        if not self.synthetic_token:
+            raise ValueError("DEVICEMESH_PROBE_TOKEN is required for synthetic probe mode")
+        return self.synthetic_token
