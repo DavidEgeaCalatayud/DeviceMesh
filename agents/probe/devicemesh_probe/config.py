@@ -1,4 +1,5 @@
 import os
+import socket
 from dataclasses import dataclass
 
 from devicemesh_probe.discovery import DiscoveryScope
@@ -8,18 +9,20 @@ from devicemesh_probe.discovery import DiscoveryScope
 class ProbeConfig:
     server_url: str
     source: str
+    probe_id: str
+    probe_token: str | None
     scopes: tuple[DiscoveryScope, ...]
     tcp_ports: tuple[int, ...] = ()
 
     @classmethod
-    def from_environment(cls) -> "ProbeConfig":
+    def from_environment(cls, *, require_scopes: bool = True) -> "ProbeConfig":
         raw_scopes = os.environ.get("DEVICEMESH_PROBE_SCOPES", "")
         scopes = tuple(
             DiscoveryScope(value.strip())
             for value in raw_scopes.split(",")
             if value.strip()
         )
-        if not scopes:
+        if require_scopes and not scopes:
             raise ValueError("DEVICEMESH_PROBE_SCOPES must explicitly allow at least one CIDR")
         for scope in scopes:
             scope.network()
@@ -40,11 +43,18 @@ class ProbeConfig:
             raise ValueError("configured TCP ports must be between 1 and 65535")
 
         return cls(
-            server_url=os.environ.get("DEVICEMESH_SERVER_URL", "http://localhost:8000"),
+            server_url=os.environ.get("DEVICEMESH_SERVER_URL", "http://localhost:8000").rstrip("/"),
             source=os.environ.get("DEVICEMESH_PROBE_SOURCE", "network-probe"),
+            probe_id=os.environ.get("DEVICEMESH_PROBE_ID", socket.gethostname()),
+            probe_token=os.environ.get("DEVICEMESH_PROBE_TOKEN"),
             scopes=scopes,
             tcp_ports=ports,
         )
+
+    def require_probe_token(self) -> str:
+        if not self.probe_token:
+            raise ValueError("DEVICEMESH_PROBE_TOKEN is required for synthetic monitoring")
+        return self.probe_token
 
     def require_allowed(self, requested: DiscoveryScope) -> None:
         network = requested.network()
