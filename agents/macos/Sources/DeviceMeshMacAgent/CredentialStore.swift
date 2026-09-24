@@ -7,7 +7,13 @@ protocol AgentCredentialStore: Sendable {
 }
 
 struct KeychainCredentialStore: AgentCredentialStore {
-    private let service = "io.github.davidegeacalatayud.devicemesh.macos-agent"
+    static let defaultService = "io.github.davidegeacalatayud.devicemesh.macos-agent"
+
+    let service: String
+
+    init(service: String = Self.defaultService) {
+        self.service = service
+    }
 
     func load(agentId: String) throws -> String? {
         let query: [String: Any] = [
@@ -21,7 +27,9 @@ struct KeychainCredentialStore: AgentCredentialStore {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw AgentError.keychain(status) }
-        guard let data = item as? Data, let value = String(data: data, encoding: .utf8), !value.isEmpty else {
+        guard let data = item as? Data,
+              let value = String(data: data, encoding: .utf8),
+              !value.isEmpty else {
             throw AgentError.malformedResponse("Stored Keychain credential is invalid")
         }
         return value
@@ -31,11 +39,7 @@ struct KeychainCredentialStore: AgentCredentialStore {
         guard let data = credential.data(using: .utf8), !credential.isEmpty else {
             throw AgentError.configuration("Cannot save an empty agent credential")
         }
-        let key: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: agentId,
-        ]
+        let key = baseQuery(agentId: agentId)
         let attributes: [String: Any] = [kSecValueData as String: data]
         let updateStatus = SecItemUpdate(key as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess { return }
@@ -43,8 +47,23 @@ struct KeychainCredentialStore: AgentCredentialStore {
 
         var add = key
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else { throw AgentError.keychain(addStatus) }
+    }
+
+    func remove(agentId: String) throws {
+        let status = SecItemDelete(baseQuery(agentId: agentId) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw AgentError.keychain(status)
+        }
+    }
+
+    private func baseQuery(agentId: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: agentId,
+        ]
     }
 }
