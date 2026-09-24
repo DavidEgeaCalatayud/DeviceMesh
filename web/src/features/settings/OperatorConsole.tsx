@@ -16,6 +16,7 @@ import {
   queueRemoteOperation,
   setSyntheticMonitorEnabled,
 } from '../../shared/api/client'
+import { DistributedSyntheticsPanel } from './DistributedSyntheticsPanel'
 
 const operationTypes: RemoteOperationType[] = ['telemetry.collect', 'inventory.refresh', 'agent.health_check']
 
@@ -163,7 +164,7 @@ export function OperatorConsole() {
 
   return <main className="shell operatorConsole">
     <section className="hero">
-      <div><div className="eyebrow">V1.2 operations</div><h1>Operator Console</h1><p>Controlled maintenance, allowlisted remote operations and service-level synthetic monitoring.</p></div>
+      <div><div className="eyebrow">V1.3 operations & observability</div><h1>Operator Console</h1><p>Controlled maintenance, allowlisted remote operations, synthetic service monitoring and distributed probe consensus.</p></div>
       <a className="status" href="#/">Back to dashboard</a>
     </section>
     {error && <section className="errorBanner">{error}</section>}
@@ -211,5 +212,6 @@ export function OperatorConsole() {
         return <div key={monitor.id} className="compactItem"><div><strong>{monitor.name}</strong><span>{monitor.kind.toUpperCase()} · {monitor.target}{monitor.port ? `:${monitor.port}` : ''}</span></div><div><strong>{day?.availabilityPercent == null ? 'No SLA yet' : `${day.availabilityPercent.toFixed(2)}% / 24h`}</strong><span>{day?.meanLatencyMs == null ? 'No latency yet' : `${day.meanLatencyMs.toFixed(0)} ms avg · ${day.p95LatencyMs?.toFixed(0) ?? '—'} ms p95`}</span></div><button type="button" disabled={!token} onClick={() => void setSyntheticMonitorEnabled(token, monitor.id, !monitor.enabled).then(refreshPublic).catch((reason: unknown) => setError(String(reason)))}>{monitor.enabled ? 'Disable' : 'Enable'}</button></div>
       })}</div>
     </form>
+    <DistributedSyntheticsPanel token={token} monitors={monitors} />
   </main>
 }
