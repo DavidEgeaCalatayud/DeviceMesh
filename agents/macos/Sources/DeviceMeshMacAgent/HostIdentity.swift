@@ -17,11 +17,11 @@ struct MacHostIdentityCollector {
     private func architecture() -> String? {
         var systemInfo = utsname()
         guard uname(&systemInfo) == 0 else { return nil }
-        return withUnsafePointer(to: &systemInfo.machine) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: systemInfo.machine)) {
-                String(cString: $0)
-            }
+        let identifier = Mirror(reflecting: systemInfo.machine).children.reduce(into: "") { result, child in
+            guard let value = child.value as? Int8, value != 0 else { return }
+            result.append(Character(UnicodeScalar(UInt8(value))))
         }
+        return identifier.nilIfEmpty
     }
 
     private func ipAddresses() -> [String] {
