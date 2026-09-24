@@ -4,10 +4,12 @@ import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
 import type { DeviceHealth, Outage } from '../../entities/health/types'
 import type { DeviceService } from '../../entities/network/types'
+import type { SyntheticHealth } from '../../entities/synthetic/types'
 import type { MetricSample } from '../../entities/telemetry/types'
 import {
   getDeviceHealth,
   getDeviceOutages,
+  getDeviceServiceHealth,
   listAlerts,
   listDevices,
   listEvents,
@@ -17,6 +19,8 @@ import {
 import { AlertPanel } from '../alerts/AlertPanel'
 import { EventTimeline } from '../events/EventTimeline'
 import { DeviceHealthPanel } from '../health/DeviceHealthPanel'
+import { ServiceHealthPanel } from '../health/ServiceHealthPanel'
+import { OperatorConsole } from '../operations/OperatorConsole'
 import { TelemetryHistoryPanel } from '../telemetry/TelemetryHistoryPanel'
 
 function metric(metrics: MetricSample[], name: string): MetricSample | undefined {
@@ -161,6 +165,8 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
   const [events, setEvents] = useState<DeviceEvent[]>([])
   const [health, setHealth] = useState<DeviceHealth | null>(null)
   const [outages, setOutages] = useState<Outage[]>([])
+  const [serviceHealth, setServiceHealth] = useState<SyntheticHealth[]>([])
+  const [reloadVersion, setReloadVersion] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -174,6 +180,7 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
       listEvents(controller.signal, 200),
       getDeviceHealth(deviceId, controller.signal),
       getDeviceOutages(deviceId, 30, controller.signal),
+      getDeviceServiceHealth(deviceId, controller.signal),
     ])
       .then(([
         nextDevices,
@@ -183,6 +190,7 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
         nextEvents,
         nextHealth,
         nextOutages,
+        nextServiceHealth,
       ]) => {
         setDevices(nextDevices)
         setMetrics(nextMetrics)
@@ -191,6 +199,7 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
         setEvents(nextEvents)
         setHealth(nextHealth)
         setOutages(nextOutages)
+        setServiceHealth(nextServiceHealth)
         setError(null)
       })
       .catch((reason: unknown) => {
@@ -200,7 +209,7 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [deviceId])
+  }, [deviceId, reloadVersion])
 
   const device = useMemo(() => devices.find((item) => item.id === deviceId), [deviceId, devices])
 
@@ -211,6 +220,8 @@ export function DeviceDetailPage({ deviceId }: { deviceId: string }) {
   return <main className="shell deviceDetailShell">
     <DeviceOverview device={device} metrics={metrics} services={services} alerts={alerts} events={events} />
     {health && <DeviceHealthPanel health={health} outages={outages} />}
+    <ServiceHealthPanel services={serviceHealth} />
+    <OperatorConsole deviceId={device.id} onChanged={() => setReloadVersion((value) => value + 1)} />
     <TelemetryHistoryPanel devices={[device]} />
   </main>
 }
