@@ -105,7 +105,7 @@ final class DeviceMeshMacAgent {
 
     func runForever() async {
         logger.info(
-            "Starting macOS agent \(AgentVersion.current) for \(config.agentId) with protocol v\(AgentVersion.protocolVersion)"
+            "Starting macOS agent \(DeviceMeshMacAgentVersion.current) for \(config.agentId) with protocol v\(DeviceMeshMacAgentVersion.protocolVersion)"
         )
         while !Task.isCancelled {
             do {
