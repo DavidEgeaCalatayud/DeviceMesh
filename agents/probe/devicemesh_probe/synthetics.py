@@ -101,14 +101,14 @@ def _execute_http(monitor: SyntheticMonitorSpec) -> SyntheticExecutionResult:
             status_code = response.status
     except HTTPError as exc:
         status_code = exc.code
-    except (socket.timeout, TimeoutError):
+    except TimeoutError:
         return _failure(monitor.id, observed_at, started, "timeout")
     except ssl.SSLError:
         return _failure(monitor.id, observed_at, started, "tls_error")
     except URLError as exc:
         if isinstance(exc.reason, socket.gaierror):
             reason = "dns_error"
-        elif isinstance(exc.reason, (socket.timeout, TimeoutError)):
+        elif isinstance(exc.reason, TimeoutError):
             reason = "timeout"
         else:
             reason = "connection_error"
@@ -147,7 +147,7 @@ def _execute_tcp(monitor: SyntheticMonitorSpec) -> SyntheticExecutionResult:
             timeout=monitor.timeout_seconds,
         ):
             pass
-    except (socket.timeout, TimeoutError):
+    except TimeoutError:
         return _failure(monitor.id, observed_at, started, "timeout")
     except socket.gaierror:
         return _failure(monitor.id, observed_at, started, "dns_error")
