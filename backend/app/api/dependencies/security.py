@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime
 from typing import Annotated
 
@@ -23,6 +24,17 @@ def require_operator(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="operator authentication required",
+        )
+
+
+def require_probe(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> None:
+    expected = f"Probe {get_settings().probe_token}"
+    if authorization is None or not hmac.compare_digest(authorization, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="probe authentication required",
         )
 
 
