@@ -9,9 +9,9 @@ from devicemesh_probe.discovery import DiscoveryScope
 class ProbeConfig:
     server_url: str
     source: str
-    probe_id: str
-    probe_token: str | None
     scopes: tuple[DiscoveryScope, ...]
+    probe_id: str = "network-probe"
+    probe_token: str | None = None
     tcp_ports: tuple[int, ...] = ()
 
     @classmethod
@@ -45,9 +45,9 @@ class ProbeConfig:
         return cls(
             server_url=os.environ.get("DEVICEMESH_SERVER_URL", "http://localhost:8000").rstrip("/"),
             source=os.environ.get("DEVICEMESH_PROBE_SOURCE", "network-probe"),
+            scopes=scopes,
             probe_id=os.environ.get("DEVICEMESH_PROBE_ID", socket.gethostname()),
             probe_token=os.environ.get("DEVICEMESH_PROBE_TOKEN"),
-            scopes=scopes,
             tcp_ports=ports,
         )
 
