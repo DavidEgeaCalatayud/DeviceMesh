@@ -7,6 +7,7 @@ final class DeviceMeshMacAgent {
     private let identityCollector: MacHostIdentityCollector
     private let metricsCollector: MacHostMetricsCollector
     private let operationExecutor = RemoteOperationExecutor()
+    private let logger: AgentLogger
     private var credential: String?
 
     init(
@@ -14,13 +15,15 @@ final class DeviceMeshMacAgent {
         api: DeviceMeshAgentAPI? = nil,
         credentialStore: AgentCredentialStore = KeychainCredentialStore(),
         identityCollector: MacHostIdentityCollector = .init(),
-        metricsCollector: MacHostMetricsCollector = .init()
+        metricsCollector: MacHostMetricsCollector = .init(),
+        logger: AgentLogger = .init()
     ) {
         self.config = config
         self.api = api ?? DeviceMeshAPIClient(serverURL: config.serverURL)
         self.credentialStore = credentialStore
         self.identityCollector = identityCollector
         self.metricsCollector = metricsCollector
+        self.logger = logger
     }
 
     func ensureCredential() async throws -> String {
@@ -34,11 +37,15 @@ final class DeviceMeshMacAgent {
             return stored
         }
         guard let enrollmentToken = config.enrollmentToken else {
-            throw AgentError.configuration("No Keychain credential found and DEVICEMESH_ENROLLMENT_TOKEN is not set")
+            throw AgentError.configuration(
+                "No Keychain credential found and DEVICEMESH_ENROLLMENT_TOKEN is not set"
+            )
         }
+
         let enrolled = try await api.enroll(token: enrollmentToken, agentId: config.agentId)
         try credentialStore.save(enrolled, agentId: config.agentId)
         credential = enrolled
+        logger.info("Enrollment completed for agent \(config.agentId)")
         return enrolled
     }
 
@@ -64,7 +71,13 @@ final class DeviceMeshMacAgent {
 
     func processOneOperation() async throws {
         let credential = try await ensureCredential()
-        guard let operation = try await api.claimOperation(credential: credential, agentId: config.agentId) else { return }
+        guard let operation = try await api.claimOperation(
+            credential: credential,
+            agentId: config.agentId
+        ) else {
+            return
+        }
+
         let outcome = await operationExecutor.execute(
             operation,
             agentId: config.agentId,
@@ -76,7 +89,12 @@ final class DeviceMeshMacAgent {
             result: outcome.result,
             error: outcome.error.map { String($0.prefix(1024)) }
         )
-        try await api.completeOperation(operation.id, completion: completion, credential: credential, agentId: config.agentId)
+        try await api.completeOperation(
+            operation.id,
+            completion: completion,
+            credential: credential,
+            agentId: config.agentId
+        )
     }
 
     func runCycle() async throws {
@@ -86,14 +104,26 @@ final class DeviceMeshMacAgent {
     }
 
     func runForever() async {
+        logger.info(
+            "Starting macOS agent \(AgentVersion.current) for \(config.agentId) with protocol v\(AgentVersion.protocolVersion)"
+        )
         while !Task.isCancelled {
             do {
                 try await runCycle()
+            } catch is CancellationError {
+                break
             } catch {
-                FileHandle.standardError.write(Data("DeviceMesh macOS agent error: \(error)\n".utf8))
+                logger.warning("Agent cycle failed: \(String(describing: error))")
             }
-            let nanoseconds = config.intervalSeconds.multipliedReportingOverflow(by: 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds.overflow ? UInt64.max : nanoseconds.partialValue)
+
+            do {
+                try await Task.sleep(nanoseconds: config.intervalSeconds * 1_000_000_000)
+            } catch is CancellationError {
+                break
+            } catch {
+                logger.warning("Agent sleep interrupted: \(String(describing: error))")
+            }
         }
+        logger.info("macOS agent stopped for \(config.agentId)")
     }
 }
