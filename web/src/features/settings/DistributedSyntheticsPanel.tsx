@@ -104,16 +104,21 @@ export function DistributedSyntheticsPanel({ token, monitors }: DistributedSynth
             return [monitor.id, nextConsensus, nextIncidents] as const
           }),
         )
-        const operatorData = token
-          ? await Promise.all([listSyntheticProbes(token), listSyntheticProbeAssignments(token)])
-          : [[], []] as const
+        let nextProbes: SyntheticProbe[] = []
+        let nextAssignments: SyntheticProbeAssignment[] = []
+        if (token) {
+          ;[nextProbes, nextAssignments] = await Promise.all([
+            listSyntheticProbes(token),
+            listSyntheticProbeAssignments(token),
+          ])
+        }
         if (!active) return
         setConsensus(Object.fromEntries(publicEntries.map(([id, value]) => [id, value])))
         setIncidents(Object.fromEntries(publicEntries.map(([id, , value]) => [id, value])))
-        setProbes(operatorData[0])
-        setAssignments(operatorData[1])
+        setProbes(nextProbes)
+        setAssignments(nextAssignments)
         setMonitorId((current) => current || monitors[0]?.id || '')
-        setProbeId((current) => current || operatorData[0][0]?.id || '')
+        setProbeId((current) => current || nextProbes[0]?.id || '')
         setError(null)
       } catch (reason) {
         if (active) setError(String(reason))
