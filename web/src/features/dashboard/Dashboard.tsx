@@ -115,7 +115,7 @@ export function Dashboard() {
   return <main className="shell">
     <section className="hero">
       <div><div className="eyebrow">Local-first device observability</div><h1>DeviceMesh</h1><p>Discover, identify and monitor the devices that make up your network.</p></div>
-      <div className="status">V1 network observability</div>
+      <div className="heroActions"><a className="status" href="#/operator">Operator Console</a><div className="status">V1.2 service observability</div></div>
     </section>
     <section className="grid">
       <article className="card"><div className="muted">Known devices</div><div className="metric">{devices.length}</div></article>

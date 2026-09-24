@@ -17,13 +17,18 @@ from app.api.routers import (
     network,
     operational_health,
     operations,
+    synthetics,
     telemetry,
 )
 from app.api.websocket.manager import ConnectionManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.domain.events.models import DeviceEvent
-from app.runtime import offline_device_sweeper, realtime_event_publisher
+from app.runtime import (
+    offline_device_sweeper,
+    realtime_event_publisher,
+    synthetic_probe_worker,
+)
 
 configure_logging()
 manager = ConnectionManager()
@@ -55,12 +60,20 @@ async def _sweep_offline_devices() -> None:
         await asyncio.sleep(settings.device_offline_sweep_interval_seconds)
 
 
+async def _run_synthetic_probes() -> None:
+    settings = get_settings()
+    while True:
+        await synthetic_probe_worker.run_due(datetime.now(UTC))
+        await asyncio.sleep(settings.synthetic_probe_sweep_interval_seconds)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     realtime_event_publisher.bind(asyncio.get_running_loop())
     tasks = [
         asyncio.create_task(_forward_realtime_events()),
         asyncio.create_task(_sweep_offline_devices()),
+        asyncio.create_task(_run_synthetic_probes()),
     ]
     try:
         yield
@@ -91,6 +104,7 @@ app.include_router(alerts.router)
 app.include_router(network.router)
 app.include_router(operational_health.router)
 app.include_router(operations.router)
+app.include_router(synthetics.router)
 
 
 @app.websocket("/ws/events")

@@ -3,9 +3,15 @@ import type { Device } from '../../entities/device/types'
 import type { DeviceEvent } from '../../entities/event/types'
 import type { DeviceHealth, MaintenanceWindow, Outage } from '../../entities/health/types'
 import type { DeviceService, NetworkTopology } from '../../entities/network/types'
+import type { RemoteOperation, RemoteOperationType } from '../../entities/operations/types'
+import type { SyntheticCheck, SyntheticHealth, SyntheticMonitor, SyntheticMonitorKind } from '../../entities/synthetic/types'
 import type { MetricSample, MetricSeries, NetworkDiagnostic } from '../../entities/telemetry/types'
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+
+function operatorHeaders(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+}
 
 export async function listDevices(signal?: AbortSignal): Promise<Device[]> {
   const response = await fetch(`${apiBase}/api/v1/devices`, { signal })
@@ -53,48 +59,127 @@ export async function getNetworkDiagnostic(
   windowMinutes = 15,
   signal?: AbortSignal,
 ): Promise<NetworkDiagnostic> {
-  const params = new URLSearchParams({
-    deviceId,
-    windowMinutes: String(windowMinutes),
-  })
+  const params = new URLSearchParams({ deviceId, windowMinutes: String(windowMinutes) })
   const response = await fetch(`${apiBase}/api/v1/telemetry/network-diagnostics?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Network diagnostics API failed: ${response.status}`)
   return response.json() as Promise<NetworkDiagnostic>
 }
 
-export async function getDeviceHealth(
-  deviceId: string,
-  signal?: AbortSignal,
-): Promise<DeviceHealth> {
+export async function getDeviceHealth(deviceId: string, signal?: AbortSignal): Promise<DeviceHealth> {
   const response = await fetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/health`, { signal })
   if (!response.ok) throw new Error(`Device health API failed: ${response.status}`)
   return response.json() as Promise<DeviceHealth>
 }
 
-export async function getDeviceOutages(
-  deviceId: string,
-  days = 30,
-  signal?: AbortSignal,
-): Promise<Outage[]> {
+export async function getDeviceOutages(deviceId: string, days = 30, signal?: AbortSignal): Promise<Outage[]> {
   const params = new URLSearchParams({ days: String(days), limit: '100' })
-  const response = await fetch(
-    `${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/outages?${params.toString()}`,
-    { signal },
-  )
+  const response = await fetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/outages?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Device outage API failed: ${response.status}`)
   return response.json() as Promise<Outage[]>
 }
 
-export async function listMaintenanceWindows(
-  signal?: AbortSignal,
-  deviceId?: string,
-  activeOnly = false,
-): Promise<MaintenanceWindow[]> {
+export async function listMaintenanceWindows(signal?: AbortSignal, deviceId?: string, activeOnly = false): Promise<MaintenanceWindow[]> {
   const params = new URLSearchParams({ activeOnly: String(activeOnly), limit: '100' })
   if (deviceId) params.set('deviceId', deviceId)
   const response = await fetch(`${apiBase}/api/v1/maintenance-windows?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Maintenance API failed: ${response.status}`)
   return response.json() as Promise<MaintenanceWindow[]>
+}
+
+export async function createMaintenanceWindow(
+  token: string,
+  input: { deviceId: string | null; startsAt: string; endsAt: string; reason: string },
+): Promise<MaintenanceWindow> {
+  const response = await fetch(`${apiBase}/api/v1/operator/maintenance-windows`, {
+    method: 'POST',
+    headers: operatorHeaders(token),
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw new Error(`Create maintenance failed: ${response.status}`)
+  return response.json() as Promise<MaintenanceWindow>
+}
+
+export async function cancelMaintenanceWindow(token: string, windowId: number): Promise<MaintenanceWindow> {
+  const response = await fetch(`${apiBase}/api/v1/operator/maintenance-windows/${windowId}/cancel`, {
+    method: 'POST',
+    headers: operatorHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Cancel maintenance failed: ${response.status}`)
+  return response.json() as Promise<MaintenanceWindow>
+}
+
+export async function listRemoteOperations(token: string, deviceId?: string): Promise<RemoteOperation[]> {
+  const params = new URLSearchParams({ limit: '100' })
+  if (deviceId) params.set('deviceId', deviceId)
+  const response = await fetch(`${apiBase}/api/v1/operator/remote-operations?${params.toString()}`, {
+    headers: operatorHeaders(token),
+  })
+  if (!response.ok) throw new Error(`Remote operation API failed: ${response.status}`)
+  return response.json() as Promise<RemoteOperation[]>
+}
+
+export async function queueRemoteOperation(token: string, deviceId: string, operationType: RemoteOperationType): Promise<RemoteOperation> {
+  const response = await fetch(`${apiBase}/api/v1/operator/remote-operations`, {
+    method: 'POST',
+    headers: operatorHeaders(token),
+    body: JSON.stringify({ deviceId, operationType, arguments: {}, ttlSeconds: 300 }),
+  })
+  if (!response.ok) throw new Error(`Queue remote operation failed: ${response.status}`)
+  return response.json() as Promise<RemoteOperation>
+}
+
+export async function listSyntheticMonitors(signal?: AbortSignal, deviceId?: string): Promise<SyntheticMonitor[]> {
+  const params = new URLSearchParams()
+  if (deviceId) params.set('deviceId', deviceId)
+  const suffix = params.size ? `?${params.toString()}` : ''
+  const response = await fetch(`${apiBase}/api/v1/synthetic-monitors${suffix}`, { signal })
+  if (!response.ok) throw new Error(`Synthetic monitor API failed: ${response.status}`)
+  return response.json() as Promise<SyntheticMonitor[]>
+}
+
+export async function createSyntheticMonitor(
+  token: string,
+  input: {
+    name: string
+    kind: SyntheticMonitorKind
+    target: string
+    port: number | null
+    deviceId: string | null
+    intervalSeconds: number
+    timeoutSeconds: number
+    httpMethod: 'GET' | 'HEAD' | null
+    expectedStatus: number | null
+  },
+): Promise<SyntheticMonitor> {
+  const response = await fetch(`${apiBase}/api/v1/operator/synthetic-monitors`, {
+    method: 'POST',
+    headers: operatorHeaders(token),
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) throw new Error(`Create synthetic monitor failed: ${response.status}`)
+  return response.json() as Promise<SyntheticMonitor>
+}
+
+export async function setSyntheticMonitorEnabled(token: string, monitorId: string, enabled: boolean): Promise<SyntheticMonitor> {
+  const response = await fetch(`${apiBase}/api/v1/operator/synthetic-monitors/${encodeURIComponent(monitorId)}/state`, {
+    method: 'PATCH',
+    headers: operatorHeaders(token),
+    body: JSON.stringify({ enabled }),
+  })
+  if (!response.ok) throw new Error(`Update synthetic monitor failed: ${response.status}`)
+  return response.json() as Promise<SyntheticMonitor>
+}
+
+export async function getSyntheticHealth(monitorId: string, signal?: AbortSignal): Promise<SyntheticHealth> {
+  const response = await fetch(`${apiBase}/api/v1/synthetic-monitors/${encodeURIComponent(monitorId)}/health`, { signal })
+  if (!response.ok) throw new Error(`Synthetic health API failed: ${response.status}`)
+  return response.json() as Promise<SyntheticHealth>
+}
+
+export async function getSyntheticResults(monitorId: string, signal?: AbortSignal): Promise<SyntheticCheck[]> {
+  const response = await fetch(`${apiBase}/api/v1/synthetic-monitors/${encodeURIComponent(monitorId)}/results?limit=50`, { signal })
+  if (!response.ok) throw new Error(`Synthetic results API failed: ${response.status}`)
+  return response.json() as Promise<SyntheticCheck[]>
 }
 
 export async function listAlerts(signal?: AbortSignal, activeOnly = false): Promise<AlertIncident[]> {

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     agent_nonce_retention_seconds: int = 900
     device_offline_after_seconds: int = 90
     device_offline_sweep_interval_seconds: int = 15
+    synthetic_probe_sweep_interval_seconds: int = 5
+    synthetic_probe_batch_size: int = 10
+    synthetic_probe_id: str = "backend-probe"
 
 
 @lru_cache

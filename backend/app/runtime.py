@@ -20,7 +20,10 @@ from app.infrastructure.repositories.sqlalchemy import (
     SqlAlchemyDeviceRepository,
     SqlAlchemyTelemetryRepository,
 )
+from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
+from app.infrastructure.synthetic_worker import SyntheticProbeWorker
+from app.infrastructure.synthetics import SyntheticProbeExecutor
 
 settings = get_settings()
 realtime_event_publisher = InProcessEventPublisher()
@@ -29,6 +32,14 @@ event_repository = PublishingEventRepository(raw_event_repository, realtime_even
 health_repository = SqlAlchemyHealthRepository(SessionFactory)
 maintenance_repository = SqlAlchemyMaintenanceRepository(SessionFactory)
 remote_operation_repository = SqlAlchemyRemoteOperationRepository(SessionFactory)
+synthetic_repository = SqlAlchemySyntheticRepository(SessionFactory)
+synthetic_probe_executor = SyntheticProbeExecutor()
+synthetic_probe_worker = SyntheticProbeWorker(
+    synthetic_repository,
+    synthetic_probe_executor,
+    probe_id=settings.synthetic_probe_id,
+    batch_size=settings.synthetic_probe_batch_size,
+)
 raw_device_repository = SqlAlchemyDeviceRepository(SessionFactory)
 device_repository = EventRecordingDeviceRepository(
     raw_device_repository,
@@ -98,3 +109,7 @@ def get_maintenance_repository() -> SqlAlchemyMaintenanceRepository:
 
 def get_remote_operation_repository() -> SqlAlchemyRemoteOperationRepository:
     return remote_operation_repository
+
+
+def get_synthetic_repository() -> SqlAlchemySyntheticRepository:
+    return synthetic_repository

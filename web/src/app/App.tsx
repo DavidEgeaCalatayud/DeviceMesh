@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Dashboard } from '../features/dashboard/Dashboard'
 import { DeviceDetailPage } from '../features/devices/DeviceDetailPage'
+import { OperatorConsole } from '../features/settings/OperatorConsole'
 
-function routeFromHash(hash: string): { kind: 'dashboard' } | { kind: 'device'; deviceId: string } {
+type Route = { kind: 'dashboard' } | { kind: 'device'; deviceId: string } | { kind: 'operator' }
+
+function routeFromHash(hash: string): Route {
+  if (hash === '#/operator') return { kind: 'operator' }
   const match = hash.match(/^#\/devices\/(.+)$/)
   if (!match) return { kind: 'dashboard' }
   try {
@@ -23,5 +27,6 @@ export function App() {
 
   const route = routeFromHash(hash)
   if (route.kind === 'device') return <DeviceDetailPage deviceId={route.deviceId} />
+  if (route.kind === 'operator') return <OperatorConsole />
   return <Dashboard />
 }
