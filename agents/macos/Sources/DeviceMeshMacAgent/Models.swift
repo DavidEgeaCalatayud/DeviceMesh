@@ -6,7 +6,7 @@ enum AgentOperation: String, CaseIterable, Sendable {
     case agentHealthCheck = "agent.health_check"
 }
 
-struct DeviceIdentity: Codable, Equatable, Sendable {
+struct DeviceIdentity: Encodable, Equatable, Sendable {
     let hostname: String?
     let operatingSystem: String?
     let operatingSystemVersion: String?
@@ -16,7 +16,7 @@ struct DeviceIdentity: Codable, Equatable, Sendable {
     let macAddresses: [String]
 }
 
-struct HeartbeatPayload: Codable, Equatable, Sendable {
+struct HeartbeatPayload: Encodable, Equatable, Sendable {
     let type = "heartbeat"
     let protocolVersion = 1
     let agentId: String
@@ -24,13 +24,13 @@ struct HeartbeatPayload: Codable, Equatable, Sendable {
     let device: DeviceIdentity
 }
 
-struct MetricPayload: Codable, Equatable, Sendable {
+struct MetricPayload: Encodable, Equatable, Sendable {
     let name: String
     let value: Double
     let unit: String
 }
 
-struct TelemetryPayload: Codable, Equatable, Sendable {
+struct TelemetryPayload: Encodable, Equatable, Sendable {
     let type = "telemetry"
     let protocolVersion = 1
     let agentId: String
@@ -70,23 +70,23 @@ enum JSONValue: Codable, Equatable, Sendable {
     }
 }
 
-struct ClaimedOperation: Codable, Equatable, Sendable {
+struct ClaimedOperation: Decodable, Equatable, Sendable {
     let id: String
     let operationType: String
     let arguments: [String: JSONValue]
 }
 
-struct OperationCompletion: Codable, Sendable {
+struct OperationCompletion: Encodable, Sendable {
     let status: String
     let result: [String: JSONValue]
     let error: String?
 }
 
-struct EnrollmentRequest: Codable, Sendable {
+struct EnrollmentRequest: Encodable, Sendable {
     let token: String
     let agentId: String
 }
 
-struct EnrollmentResponse: Codable, Sendable {
+struct EnrollmentResponse: Decodable, Sendable {
     let credential: String
 }
