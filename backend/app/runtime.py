@@ -20,6 +20,7 @@ from app.infrastructure.repositories.sqlalchemy import (
     SqlAlchemyDeviceRepository,
     SqlAlchemyTelemetryRepository,
 )
+from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
 
 settings = get_settings()
@@ -29,6 +30,7 @@ event_repository = PublishingEventRepository(raw_event_repository, realtime_even
 health_repository = SqlAlchemyHealthRepository(SessionFactory)
 maintenance_repository = SqlAlchemyMaintenanceRepository(SessionFactory)
 remote_operation_repository = SqlAlchemyRemoteOperationRepository(SessionFactory)
+synthetic_repository = SqlAlchemySyntheticRepository(SessionFactory)
 raw_device_repository = SqlAlchemyDeviceRepository(SessionFactory)
 device_repository = EventRecordingDeviceRepository(
     raw_device_repository,
@@ -98,3 +100,7 @@ def get_maintenance_repository() -> SqlAlchemyMaintenanceRepository:
 
 def get_remote_operation_repository() -> SqlAlchemyRemoteOperationRepository:
     return remote_operation_repository
+
+
+def get_synthetic_repository() -> SqlAlchemySyntheticRepository:
+    return synthetic_repository
