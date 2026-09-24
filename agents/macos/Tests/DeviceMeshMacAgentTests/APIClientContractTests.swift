@@ -53,7 +53,7 @@ final class APIClientContractTests: XCTestCase {
         URLProtocolStub.storage.handler = { request in
             XCTAssertEqual(request.url?.path, "/api/v1/agents/enroll")
             XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try requestBodyData(request)
             let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
             XCTAssertEqual(object["token"], "one-time")
             XCTAssertEqual(object["agentId"], "mac-01")
@@ -119,6 +119,31 @@ final class APIClientContractTests: XCTestCase {
     }
 }
 
+private func requestBodyData(_ request: URLRequest) throws -> Data {
+    if let body = request.httpBody {
+        return body
+    }
+    guard let stream = request.httpBodyStream else {
+        throw StubError.missingRequestBody
+    }
+
+    stream.open()
+    defer { stream.close() }
+    var result = Data()
+    var buffer = [UInt8](repeating: 0, count: 1024)
+    while true {
+        let read = stream.read(&buffer, maxLength: buffer.count)
+        if read > 0 {
+            result.append(contentsOf: buffer[0..<read])
+        } else if read == 0 {
+            break
+        } else {
+            throw stream.streamError ?? StubError.requestBodyReadFailed
+        }
+    }
+    return result
+}
+
 private func stubResponse(_ request: URLRequest, status: Int) -> (HTTPURLResponse, Data) {
     let response = HTTPURLResponse(
         url: request.url!,
@@ -173,4 +198,6 @@ private final class HandlerStorage: @unchecked Sendable {
 
 private enum StubError: Error {
     case missingHandler
+    case missingRequestBody
+    case requestBodyReadFailed
 }
