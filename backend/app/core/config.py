@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     synthetic_probe_sweep_interval_seconds: int = 5
     synthetic_probe_batch_size: int = 10
     synthetic_probe_id: str = "backend-probe"
+    synthetic_probe_offline_after_seconds: int = 120
+    synthetic_probe_work_lease_seconds: int = 60
 
 
 @lru_cache
