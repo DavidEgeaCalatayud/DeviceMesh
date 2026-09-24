@@ -192,7 +192,7 @@ class SyntheticProbeExecutor:
                 asyncio.open_connection(monitor.target, monitor.port),
                 timeout=monitor.timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise TimeoutError from exc
         del reader
         writer.close()
