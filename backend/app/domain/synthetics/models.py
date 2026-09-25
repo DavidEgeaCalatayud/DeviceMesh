@@ -7,10 +7,13 @@ class SyntheticMonitorKind(StrEnum):
     HTTP = "http"
     TCP = "tcp"
     ICMP = "icmp"
+    DNS = "dns"
+    TLS = "tls"
 
 
 class SyntheticCheckErrorKind(StrEnum):
     DNS = "dns"
+    TLS = "tls"
     TIMEOUT = "timeout"
     CONNECTION = "connection"
     HTTP_STATUS = "http_status"

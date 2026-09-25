@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import math
+import platform
 import random
+import shutil
 import socket
+import ssl
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -54,17 +58,19 @@ def _address_allowed(address: str) -> bool:
     )
 
 
-async def _validate_hostname(hostname: str, port: int) -> None:
+async def _resolved_addresses(hostname: str, port: int, *, sock_type: int = socket.SOCK_STREAM) -> set[str]:
+    if not hostname or len(hostname) > 253:
+        raise ValueError("target hostname is invalid")
     loop = asyncio.get_running_loop()
-    infos = await loop.getaddrinfo(
-        hostname,
-        port,
-        type=socket.SOCK_STREAM,
-        proto=socket.IPPROTO_TCP,
-    )
+    infos = await loop.getaddrinfo(hostname, port, type=sock_type)
     addresses = {info[4][0] for info in infos}
     if not addresses:
-        raise ValueError("target DNS resolution returned no addresses")
+        raise socket.gaierror("target DNS resolution returned no addresses")
+    return addresses
+
+
+async def _validate_hostname(hostname: str, port: int) -> None:
+    addresses = await _resolved_addresses(hostname, port)
     rejected = sorted(address for address in addresses if not _address_allowed(address))
     if rejected:
         raise ValueError(f"target resolves to a prohibited address: {rejected[0]}")
@@ -107,6 +113,34 @@ def _parse_work(payload: list[dict[str, object]]) -> list[SyntheticWork]:
     return items
 
 
+async def _execute_icmp(target: str, timeout_seconds: float) -> tuple[bool, str | None]:
+    ping = shutil.which("ping")
+    if ping is None:
+        return False, "ping executable is not installed in the probe runtime"
+
+    system = platform.system()
+    if system == "Darwin":
+        args = [ping, "-n", "-c", "1", "-W", str(max(1, int(timeout_seconds * 1000))), target]
+    else:
+        args = [ping, "-n", "-c", "1", "-W", str(max(1, math.ceil(timeout_seconds))), target]
+
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        _, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds + 1.0)
+    except TimeoutError:
+        process.kill()
+        await process.wait()
+        raise
+    if process.returncode == 0:
+        return True, None
+    message = stderr.decode(errors="replace").strip()[:512]
+    return False, message or f"ping exited with status {process.returncode}"
+
+
 async def execute_work(work: SyntheticWork) -> ProbeOutcome:
     monitor = work.monitor
     started = time.perf_counter()
@@ -136,11 +170,7 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
                     error_kind="http_status",
                     error=f"expected HTTP {expected}, received {response.status_code}",
                 )
-            return ProbeOutcome(
-                success=True,
-                latency_ms=latency,
-                http_status=response.status_code,
-            )
+            return ProbeOutcome(success=True, latency_ms=latency, http_status=response.status_code)
 
         if monitor.kind == "tcp":
             if monitor.port is None:
@@ -152,16 +182,47 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
             )
             writer.close()
             await writer.wait_closed()
+            return ProbeOutcome(success=True, latency_ms=(time.perf_counter() - started) * 1000.0)
+
+        if monitor.kind == "dns":
+            addresses = await _resolved_addresses(monitor.target, 443)
+            rejected = sorted(address for address in addresses if not _address_allowed(address))
+            if rejected:
+                raise ValueError(f"target resolves to a prohibited address: {rejected[0]}")
+            return ProbeOutcome(success=True, latency_ms=(time.perf_counter() - started) * 1000.0)
+
+        if monitor.kind == "tls":
+            port = monitor.port or 443
+            await _validate_hostname(monitor.target, port)
+            context = ssl.create_default_context()
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(
+                    monitor.target,
+                    port,
+                    ssl=context,
+                    server_hostname=monitor.target,
+                ),
+                timeout=monitor.timeout_seconds,
+            )
+            writer.close()
+            await writer.wait_closed()
+            return ProbeOutcome(success=True, latency_ms=(time.perf_counter() - started) * 1000.0)
+
+        if monitor.kind == "icmp":
+            await _validate_hostname(monitor.target, 443)
+            success, error = await _execute_icmp(monitor.target, monitor.timeout_seconds)
             return ProbeOutcome(
-                success=True,
+                success=success,
                 latency_ms=(time.perf_counter() - started) * 1000.0,
+                error_kind=None if success else "connection",
+                error=error,
             )
 
         return ProbeOutcome(
             success=False,
             latency_ms=(time.perf_counter() - started) * 1000.0,
             error_kind="unsupported",
-            error="ICMP requires an explicitly privileged probe runtime",
+            error=f"unsupported synthetic monitor kind: {monitor.kind}",
         )
     except TimeoutError:
         return ProbeOutcome(
@@ -183,6 +244,13 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
             latency_ms=(time.perf_counter() - started) * 1000.0,
             error_kind="dns",
             error="target DNS resolution failed",
+        )
+    except (ssl.SSLError, ssl.CertificateError) as exc:
+        return ProbeOutcome(
+            success=False,
+            latency_ms=(time.perf_counter() - started) * 1000.0,
+            error_kind="tls",
+            error=f"TLS validation failed: {exc}"[:1024],
         )
     except ValueError as exc:
         return ProbeOutcome(
@@ -237,13 +305,13 @@ class DistributedSyntheticClient:
 
     async def submit(self, work: SyntheticWork, outcome: ProbeOutcome) -> None:
         self.outbox.enqueue({
-                "workId": work.work_id,
-                "checkedAt": datetime.now(UTC).isoformat(),
-                "success": outcome.success,
-                "latencyMs": outcome.latency_ms,
-                "httpStatus": outcome.http_status,
-                "errorKind": outcome.error_kind,
-                "error": outcome.error,
+            "workId": work.work_id,
+            "checkedAt": datetime.now(UTC).isoformat(),
+            "success": outcome.success,
+            "latencyMs": outcome.latency_ms,
+            "httpStatus": outcome.http_status,
+            "errorKind": outcome.error_kind,
+            "error": outcome.error,
         })
 
     async def flush(self) -> None:
@@ -266,13 +334,17 @@ class DistributedSyntheticClient:
             lock = targets.setdefault(target, asyncio.Semaphore(1))
             async with lock:
                 try:
-                    # Bounds DNS, connect, headers and response processing together.
                     async with asyncio.timeout(work.monitor.timeout_seconds):
                         outcome = await execute_work(work)
                 except TimeoutError:
-                    outcome = ProbeOutcome(False, work.monitor.timeout_seconds * 1000,
-                                           error_kind="timeout", error="total check deadline exceeded")
+                    outcome = ProbeOutcome(
+                        False,
+                        work.monitor.timeout_seconds * 1000,
+                        error_kind="timeout",
+                        error="total check deadline exceeded",
+                    )
                 await self.submit(work, outcome)
+
         await asyncio.gather(*(run(work) for work in work_items))
         await self.flush()
         return len(work_items)
@@ -293,6 +365,8 @@ async def run_synthetic_loop(config: ProbeConfig, *, once: bool = False) -> None
                 print(f"synthetic probe server unavailable: {type(exc).__name__}; queued results retained")
             if once:
                 return
-            await asyncio.sleep(min(300, config.synthetic_poll_seconds * (2 ** failures)) * random.uniform(0.8, 1.2))
+            await asyncio.sleep(
+                min(300, config.synthetic_poll_seconds * (2**failures)) * random.uniform(0.8, 1.2)
+            )
     finally:
         await client.close()

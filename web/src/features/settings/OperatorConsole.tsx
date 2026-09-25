@@ -144,11 +144,12 @@ export function OperatorConsole() {
   const submitMonitor = async (event: FormEvent) => {
     event.preventDefault()
     try {
+      const usesPort = monitorKind === 'tcp' || monitorKind === 'tls'
       await createSyntheticMonitor(token, {
         name: monitorName || `${monitorKind.toUpperCase()} ${monitorTarget}`,
         kind: monitorKind,
         target: monitorTarget,
-        port: monitorKind === 'tcp' ? Number(monitorPort) : null,
+        port: usesPort ? Number(monitorPort) : null,
         deviceId: deviceId || null,
         intervalSeconds: 60,
         timeoutSeconds: 5,
@@ -201,9 +202,9 @@ export function OperatorConsole() {
       <div className="eyebrow">Service health</div><h2>Synthetic monitors</h2>
       <div className="operatorGrid">
         <label>Name<input value={monitorName} onChange={(event) => setMonitorName(event.target.value)} placeholder="Public API" /></label>
-        <label>Kind<select value={monitorKind} onChange={(event) => setMonitorKind(event.target.value as SyntheticMonitorKind)}><option value="http">HTTP</option><option value="tcp">TCP</option><option value="icmp">ICMP</option></select></label>
+        <label>Kind<select value={monitorKind} onChange={(event) => setMonitorKind(event.target.value as SyntheticMonitorKind)}><option value="http">HTTP</option><option value="tcp">TCP</option><option value="icmp">ICMP</option><option value="dns">DNS</option><option value="tls">TLS</option></select></label>
         <label>Target<input value={monitorTarget} onChange={(event) => setMonitorTarget(event.target.value)} /></label>
-        {monitorKind === 'tcp' && <label>Port<input type="number" min="1" max="65535" value={monitorPort} onChange={(event) => setMonitorPort(event.target.value)} /></label>}
+        {(monitorKind === 'tcp' || monitorKind === 'tls') && <label>Port<input type="number" min="1" max="65535" value={monitorPort} onChange={(event) => setMonitorPort(event.target.value)} /></label>}
       </div>
       <button type="submit" disabled={!token}>Create monitor</button>
       <div className="compactList syntheticList">{monitors.map((monitor) => {

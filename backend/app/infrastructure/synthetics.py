@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
+import ssl
 import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -40,27 +41,32 @@ def _address_allowed(address: str) -> bool:
     )
 
 
-async def validate_hostname(hostname: str, port: int) -> None:
+async def _resolved_addresses(hostname: str, port: int, *, sock_type: int = socket.SOCK_STREAM) -> set[str]:
     if not hostname or len(hostname) > 253:
         raise SyntheticTargetPolicyError("target hostname is invalid")
     loop = asyncio.get_running_loop()
-    try:
-        infos = await loop.getaddrinfo(
-            hostname,
-            port,
-            type=socket.SOCK_STREAM,
-            proto=socket.IPPROTO_TCP,
-        )
-    except socket.gaierror as exc:
-        raise SyntheticTargetPolicyError("target DNS resolution failed") from exc
+    infos = await loop.getaddrinfo(hostname, port, type=sock_type)
     addresses = {info[4][0] for info in infos}
     if not addresses:
-        raise SyntheticTargetPolicyError("target DNS resolution returned no addresses")
+        raise socket.gaierror("target DNS resolution returned no addresses")
+    return addresses
+
+
+async def validate_hostname(hostname: str, port: int) -> None:
+    try:
+        addresses = await _resolved_addresses(hostname, port)
+    except socket.gaierror as exc:
+        raise SyntheticTargetPolicyError("target DNS resolution failed") from exc
     rejected = sorted(address for address in addresses if not _address_allowed(address))
     if rejected:
         raise SyntheticTargetPolicyError(
             f"target resolves to a prohibited address: {rejected[0]}"
         )
+
+
+def _validate_host_only(target: str, label: str) -> None:
+    if "://" in target or not target or len(target) > 253:
+        raise SyntheticTargetPolicyError(f"{label} target must be a hostname or IP, not a URL")
 
 
 def validate_monitor_definition(
@@ -95,8 +101,7 @@ def validate_monitor_definition(
         return
 
     if kind is SyntheticMonitorKind.TCP:
-        if "://" in target:
-            raise SyntheticTargetPolicyError("TCP target must be a hostname or IP, not a URL")
+        _validate_host_only(target, "TCP")
         if port is None or not 1 <= port <= 65535:
             raise SyntheticTargetPolicyError("TCP monitor requires a valid port")
         if http_method is not None or expected_status is not None:
@@ -104,10 +109,23 @@ def validate_monitor_definition(
         return
 
     if kind is SyntheticMonitorKind.ICMP:
-        if "://" in target:
-            raise SyntheticTargetPolicyError("ICMP target must be a hostname or IP, not a URL")
+        _validate_host_only(target, "ICMP")
         if port is not None or http_method is not None or expected_status is not None:
             raise SyntheticTargetPolicyError("ICMP monitor does not accept port or HTTP fields")
+        return
+
+    if kind is SyntheticMonitorKind.DNS:
+        _validate_host_only(target, "DNS")
+        if port is not None or http_method is not None or expected_status is not None:
+            raise SyntheticTargetPolicyError("DNS monitor does not accept port or HTTP fields")
+        return
+
+    if kind is SyntheticMonitorKind.TLS:
+        _validate_host_only(target, "TLS")
+        if port is not None and not 1 <= port <= 65535:
+            raise SyntheticTargetPolicyError("TLS monitor port must be between 1 and 65535")
+        if http_method is not None or expected_status is not None:
+            raise SyntheticTargetPolicyError("TLS monitor does not accept HTTP fields")
         return
 
     raise SyntheticTargetPolicyError("unsupported synthetic monitor kind")
@@ -121,11 +139,15 @@ class SyntheticProbeExecutor:
                 return await self._http(monitor, started)
             if monitor.kind is SyntheticMonitorKind.TCP:
                 return await self._tcp(monitor, started)
+            if monitor.kind is SyntheticMonitorKind.DNS:
+                return await self._dns(monitor, started)
+            if monitor.kind is SyntheticMonitorKind.TLS:
+                return await self._tls(monitor, started)
             return ProbeOutcome(
                 success=False,
                 latency_ms=(time.perf_counter() - started) * 1000.0,
                 error_kind=SyntheticCheckErrorKind.UNSUPPORTED,
-                error="ICMP requires an explicitly privileged probe runtime and is unsupported here",
+                error="ICMP requires an explicitly privileged distributed probe runtime",
             )
         except SyntheticTargetPolicyError as exc:
             return ProbeOutcome(
@@ -134,7 +156,28 @@ class SyntheticProbeExecutor:
                 error_kind=SyntheticCheckErrorKind.POLICY,
                 error=str(exc),
             )
+        except socket.gaierror:
+            return ProbeOutcome(
+                success=False,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                error_kind=SyntheticCheckErrorKind.DNS,
+                error="target DNS resolution failed",
+            )
+        except (ssl.SSLError, ssl.CertificateError) as exc:
+            return ProbeOutcome(
+                success=False,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                error_kind=SyntheticCheckErrorKind.TLS,
+                error=f"TLS validation failed: {exc}"[:1024],
+            )
         except TimeoutError:
+            return ProbeOutcome(
+                success=False,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                error_kind=SyntheticCheckErrorKind.TIMEOUT,
+                error="probe timed out",
+            )
+        except httpx.TimeoutException:
             return ProbeOutcome(
                 success=False,
                 latency_ms=(time.perf_counter() - started) * 1000.0,
@@ -147,13 +190,6 @@ class SyntheticProbeExecutor:
                 latency_ms=(time.perf_counter() - started) * 1000.0,
                 error_kind=SyntheticCheckErrorKind.CONNECTION,
                 error=str(exc)[:1024],
-            )
-        except httpx.TimeoutException:
-            return ProbeOutcome(
-                success=False,
-                latency_ms=(time.perf_counter() - started) * 1000.0,
-                error_kind=SyntheticCheckErrorKind.TIMEOUT,
-                error="probe timed out",
             )
 
     async def _http(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
@@ -187,13 +223,37 @@ class SyntheticProbeExecutor:
     async def _tcp(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
         assert monitor.port is not None
         await validate_hostname(monitor.target, monitor.port)
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(monitor.target, monitor.port),
-                timeout=monitor.timeout_seconds,
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(monitor.target, monitor.port),
+            timeout=monitor.timeout_seconds,
+        )
+        del reader
+        writer.close()
+        await writer.wait_closed()
+        return ProbeOutcome(success=True, latency_ms=(time.perf_counter() - started) * 1000.0)
+
+    async def _dns(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
+        addresses = await _resolved_addresses(monitor.target, 443)
+        rejected = sorted(address for address in addresses if not _address_allowed(address))
+        if rejected:
+            raise SyntheticTargetPolicyError(
+                f"target resolves to a prohibited address: {rejected[0]}"
             )
-        except TimeoutError as exc:
-            raise TimeoutError from exc
+        return ProbeOutcome(success=True, latency_ms=(time.perf_counter() - started) * 1000.0)
+
+    async def _tls(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
+        port = monitor.port or 443
+        await validate_hostname(monitor.target, port)
+        context = ssl.create_default_context()
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(
+                monitor.target,
+                port,
+                ssl=context,
+                server_hostname=monitor.target,
+            ),
+            timeout=monitor.timeout_seconds,
+        )
         del reader
         writer.close()
         await writer.wait_closed()
