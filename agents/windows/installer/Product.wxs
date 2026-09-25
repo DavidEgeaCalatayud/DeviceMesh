@@ -1,0 +1,43 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="DeviceMesh Agent"
+    Manufacturer="DeviceMesh"
+    Version="$(Version)"
+    UpgradeCode="52B9FA64-F41D-45D4-BD99-1553B731913B"
+    Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DeviceMesh Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="DeviceMeshDirectory" Name="DeviceMesh">
+        <Directory Id="INSTALLFOLDER" Name="Agent" />
+      </Directory>
+    </StandardDirectory>
+
+    <Component Id="AgentService" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="AgentExecutable" Source="$(PublishDir)\DeviceMesh.Agent.Host.exe" KeyPath="yes" />
+      <File Id="AgentSettings" Source="$(PublishDir)\appsettings.json" />
+      <ServiceInstall
+        Id="InstallAgentService"
+        Name="DeviceMeshAgent"
+        DisplayName="DeviceMesh Agent"
+        Description="DeviceMesh authenticated Windows telemetry and operations agent"
+        Type="ownProcess"
+        Start="auto"
+        ErrorControl="normal"
+        Account="LocalSystem" />
+      <ServiceControl
+        Id="ControlAgentService"
+        Name="DeviceMeshAgent"
+        Start="install"
+        Stop="both"
+        Remove="uninstall"
+        Wait="yes" />
+    </Component>
+
+    <Feature Id="AgentFeature" Title="DeviceMesh Agent" Level="1">
+      <ComponentRef Id="AgentService" />
+    </Feature>
+  </Package>
+</Wix>
