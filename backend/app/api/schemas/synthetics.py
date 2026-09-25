@@ -3,10 +3,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+SyntheticKind = Literal["http", "tcp", "dns", "tls", "icmp"]
+
 
 class SyntheticMonitorCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    kind: Literal["http", "tcp", "icmp"]
+    kind: SyntheticKind
     target: str = Field(min_length=1, max_length=2048)
     port: int | None = Field(default=None, ge=1, le=65535)
     deviceId: str | None = Field(default=None, max_length=128)
@@ -79,7 +81,7 @@ class SyntheticHealthResponse(BaseModel):
 class SyntheticProbeCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     location: str = Field(min_length=1, max_length=128)
-    capabilities: list[Literal["http", "tcp", "icmp"]] = Field(min_length=1, max_length=3)
+    capabilities: list[SyntheticKind] = Field(min_length=1, max_length=5)
 
 
 class SyntheticProbeResponse(BaseModel):
@@ -147,6 +149,7 @@ class SyntheticWorkResultRequest(BaseModel):
     httpStatus: int | None = Field(default=None, ge=100, le=599)
     errorKind: Literal[
         "dns",
+        "tls",
         "timeout",
         "connection",
         "http_status",
