@@ -1,0 +1,67 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Leader elected",
+      "id": 1,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "max(devicemesh_worker_leader)"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Offline sweep age",
+      "id": 2,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "time() - max(devicemesh_worker_last_success_timestamp_seconds{job=\"offline\"})"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Synthetic scheduler age",
+      "id": 3,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "time() - max(devicemesh_worker_last_success_timestamp_seconds{job=\"synthetics\"})"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Distributed probes online",
+      "id": 4,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "devicemesh_probes_online"}],
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker success/failure rate",
+      "id": 5,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (job, outcome) (rate(devicemesh_worker_runs_total[5m]))", "legendFormat": "{{job}} / {{outcome}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "Open incidents",
+      "id": 6,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "devicemesh_incidents_open"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["devicemesh", "workers", "synthetics"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "DeviceMesh / Workers & Synthetics",
+  "uid": "devicemesh-workers",
+  "version": 1
+}

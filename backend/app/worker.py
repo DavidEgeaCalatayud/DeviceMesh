@@ -2,13 +2,15 @@
 import asyncio
 import logging
 import signal
+import time
 from datetime import UTC, datetime
 
+from prometheus_client import start_http_server
 from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
-from app.core.metrics import worker_runs
+from app.core.metrics import worker_last_success, worker_leader, worker_runs
 from app.infrastructure.database import engine
 from app.runtime import offline_device_sweeper, synthetic_probe_worker
 
@@ -30,6 +32,7 @@ async def run_jobs(stop: asyncio.Event) -> None:
                 else:
                     await synthetic_probe_worker.run_due(datetime.now(UTC))
                 worker_runs.labels(name, "success").inc()
+                worker_last_success.labels(name).set(time.time())
             except Exception:
                 worker_runs.labels(name, "failure").inc()
                 logger.exception("background job failed; retrying", extra={"route": name})
@@ -41,6 +44,9 @@ async def run_jobs(stop: asyncio.Event) -> None:
 
 async def main() -> None:
     configure_logging()
+    settings = get_settings()
+    start_http_server(settings.worker_metrics_port, addr=settings.worker_metrics_host)
+    logger.info("worker metrics server started", extra={"route": f"{settings.worker_metrics_host}:{settings.worker_metrics_port}"})
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -50,6 +56,7 @@ async def main() -> None:
         try:
             with engine.connect() as connection:
                 if connection.scalar(text("SELECT pg_try_advisory_lock(684291017)")):
+                    worker_leader.set(1)
                     try:
                         # Verify lock ownership connection before each bounded iteration.
                         while not stop.is_set():
@@ -64,8 +71,12 @@ async def main() -> None:
                                 iteration_stop.set()
                                 await task
                     finally:
+                        worker_leader.set(0)
                         connection.execute(text("SELECT pg_advisory_unlock(684291017)"))
+                else:
+                    worker_leader.set(0)
         except Exception:
+            worker_leader.set(0)
             logger.exception("worker database unavailable; retrying")
         try:
             await asyncio.wait_for(stop.wait(), 5)

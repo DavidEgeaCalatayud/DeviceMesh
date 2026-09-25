@@ -83,6 +83,10 @@ services:
   worker:
     <<: *api
     command: [python, -m, app.worker]
+    environment:
+      <<: *runtime
+      DEVICEMESH_WORKER_METRICS_HOST: 0.0.0.0
+      DEVICEMESH_WORKER_METRICS_PORT: "9100"
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -106,6 +110,44 @@ services:
     restart: unless-stopped
     logging: *logging
     mem_limit: 128m
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    secrets: [operator_token]
+    depends_on:
+      api: {condition: service_healthy}
+      worker: {condition: service_started}
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 384m
+    security_opt: [no-new-privileges:true]
+  grafana:
+    image: grafana/grafana:12.0.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    secrets: [grafana_admin_password]
+    depends_on:
+      prometheus: {condition: service_started}
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 256m
+    security_opt: [no-new-privileges:true]
   proxy:
     image: caddy:2-alpine
     environment:
@@ -125,6 +167,8 @@ services:
 
 volumes:
   devicemesh-postgres:
+  prometheus-data:
+  grafana-data:
   caddy-data:
   caddy-config:
 
@@ -134,3 +178,4 @@ secrets:
   application_url: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/application_url"}
   migration_url: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/migration_url"}
   operator_token: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/operator_token"}
+  grafana_admin_password: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/grafana_admin_password"}

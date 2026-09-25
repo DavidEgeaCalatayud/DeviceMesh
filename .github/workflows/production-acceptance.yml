@@ -27,12 +27,34 @@ jobs:
           YAML
       - name: Build and start migrated production services
         run: |
-          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/acceptance.override.yml up -d --build --wait --wait-timeout 180 api worker web
+          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/acceptance.override.yml up -d --build --wait --wait-timeout 180 api worker web prometheus grafana
       - name: Authenticated enrollment to realtime inventory
         run: |
           pip install httpx websockets
           python tools/deployment/acceptance.py --token-file .secrets/operator_token
           curl --fail http://localhost:15173/
+      - name: Verify bundled observability
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:9090/-/ready >/dev/null && curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            sleep 2
+          done
+          check_prometheus() {
+            local encoded_query="$1"
+            curl --fail --silent "http://127.0.0.1:9090/api/v1/query?query=${encoded_query}" \
+              | python -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "success" and d["data"]["result"] and d["data"]["result"][0]["value"][1] == "1", d'
+          }
+          for attempt in {1..30}; do
+            if check_prometheus 'up%7Bjob%3D%22devicemesh-api%22%7D' && check_prometheus 'up%7Bjob%3D%22devicemesh-worker%22%7D'; then break; fi
+            if [[ "$attempt" == 30 ]]; then exit 1; fi
+            sleep 2
+          done
+          for attempt in {1..30}; do
+            dashboards="$(curl --fail --silent http://127.0.0.1:3000/api/search?query=DeviceMesh -u admin:$(cat .secrets/grafana_admin_password) | python -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+            if [[ "$dashboards" -ge 2 ]]; then break; fi
+            if [[ "$attempt" == 30 ]]; then echo "Expected at least two provisioned dashboards, got $dashboards" >&2; exit 1; fi
+            sleep 2
+          done
       - name: Restore a production-format backup into an isolated database
         run: tools/deployment/verify-backup.sh
       - name: Restart and verify persisted canary
