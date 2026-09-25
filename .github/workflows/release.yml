@@ -62,8 +62,13 @@ jobs:
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           for image in devicemesh-api devicemesh-web devicemesh-probe; do
             ref="ghcr.io/$owner/$image:$tag"
-            docker push "$ref"
-            digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$ref" | sed 's/^.*@//')"
+            output="$(docker push "$ref")"
+            printf '%s\n' "$output"
+            digest="$(printf '%s\n' "$output" | sed -n 's/^.*digest: \(sha256:[0-9a-f]\{64\}\).*$/\1/p' | tail -1)"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Could not resolve pushed digest for $ref" >&2
+              exit 1
+            fi
             echo "$image=$digest" >> "$GITHUB_OUTPUT"
           done
       - name: Attest API image provenance
@@ -71,21 +76,21 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ steps.image.outputs.owner }}/devicemesh-api
-          subject-digest: ${{ steps.publish.outputs.devicemesh-api }}
+          subject-digest: ${{ steps.publish.outputs['devicemesh-api'] }}
           push-to-registry: true
       - name: Attest web image provenance
         if: github.ref_type == 'tag'
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ steps.image.outputs.owner }}/devicemesh-web
-          subject-digest: ${{ steps.publish.outputs.devicemesh-web }}
+          subject-digest: ${{ steps.publish.outputs['devicemesh-web'] }}
           push-to-registry: true
       - name: Attest probe image provenance
         if: github.ref_type == 'tag'
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ steps.image.outputs.owner }}/devicemesh-probe
-          subject-digest: ${{ steps.publish.outputs.devicemesh-probe }}
+          subject-digest: ${{ steps.publish.outputs['devicemesh-probe'] }}
           push-to-registry: true
 
   windows-agent:
@@ -124,15 +129,18 @@ jobs:
       - name: Build MSI
         shell: pwsh
         run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $asset = "DeviceMesh-Agent-$version-x64.msi"
+          $checksum = "DeviceMesh-Agent-$version-x64.SHA256SUMS"
           dotnet tool install --global wix --version 4.0.5
           wix build agents/windows/installer/Product.wxs `
-            -d Version=${{ steps.version.outputs.version }} `
+            -d Version=$version `
             -d PublishDir="$((Resolve-Path artifacts/windows-agent/publish).Path)" `
             -arch x64 `
-            -o artifacts/windows-agent/DeviceMesh-Agent-${{ steps.version.outputs.version }}-x64.msi
-          Get-FileHash artifacts/windows-agent/DeviceMesh-Agent-${{ steps.version.outputs.version }}-x64.msi -Algorithm SHA256 |
+            -o "artifacts/windows-agent/$asset"
+          Get-FileHash "artifacts/windows-agent/$asset" -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } |
-            Set-Content artifacts/windows-agent/SHA256SUMS
+            Set-Content "artifacts/windows-agent/$checksum"
       - name: Attest MSI build provenance
         if: github.ref_type == 'tag'
         uses: actions/attest@v4
@@ -143,7 +151,7 @@ jobs:
           name: windows-agent-msi
           path: |
             artifacts/windows-agent/*.msi
-            artifacts/windows-agent/SHA256SUMS
+            artifacts/windows-agent/*.SHA256SUMS
 
   linux-agent:
     runs-on: ubuntu-latest
@@ -182,7 +190,10 @@ jobs:
           sudo apt-get install -y rpm
           sudo gem install --no-document fpm
       - name: Build deb and rpm
-        run: bash agents/linux/package/build.sh '${{ steps.version.outputs.version }}' artifacts/linux-agent
+        run: |
+          version='${{ steps.version.outputs.version }}'
+          bash agents/linux/package/build.sh "$version" artifacts/linux-agent
+          mv artifacts/linux-agent/SHA256SUMS "artifacts/linux-agent/DeviceMesh-Linux-Agent-$version.SHA256SUMS"
       - name: Attest Linux package provenance
         if: github.ref_type == 'tag'
         uses: actions/attest@v4
@@ -196,7 +207,7 @@ jobs:
           path: |
             artifacts/linux-agent/*.deb
             artifacts/linux-agent/*.rpm
-            artifacts/linux-agent/SHA256SUMS
+            artifacts/linux-agent/*.SHA256SUMS
 
   macos-agent:
     runs-on: macos-latest
@@ -234,14 +245,16 @@ jobs:
           set -euo pipefail
           version='${{ steps.version.outputs.version }}'
           root="../../artifacts/macos-agent/DeviceMesh-Mac-Agent-$version"
+          archive="DeviceMesh-Mac-Agent-$version-macos.tar.gz"
+          checksum="DeviceMesh-Mac-Agent-$version-macos.SHA256SUMS"
           mkdir -p "$root"
           cp .build/release/devicemesh-macos-agent "$root/"
           cp launchd/io.github.davidegeacalatayud.devicemesh.macos-agent.plist "$root/"
           cp README.md "$root/README.md"
           chmod 0755 "$root/devicemesh-macos-agent"
-          tar -C ../../artifacts/macos-agent -czf "../../artifacts/macos-agent/DeviceMesh-Mac-Agent-$version-macos.tar.gz" "DeviceMesh-Mac-Agent-$version"
+          tar -C ../../artifacts/macos-agent -czf "../../artifacts/macos-agent/$archive" "DeviceMesh-Mac-Agent-$version"
           cd ../../artifacts/macos-agent
-          shasum -a 256 "DeviceMesh-Mac-Agent-$version-macos.tar.gz" > SHA256SUMS
+          shasum -a 256 "$archive" > "$checksum"
       - name: Attest macOS package provenance
         if: github.ref_type == 'tag'
         uses: actions/attest@v4
@@ -252,46 +265,11 @@ jobs:
           name: macos-agent-package
           path: |
             artifacts/macos-agent/*.tar.gz
-            artifacts/macos-agent/SHA256SUMS
-
-  probe-package:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
-      - name: Test probe
-        working-directory: agents/probe
-        run: |
-          pip install -e ".[dev]"
-          ruff check devicemesh_probe tests
-          pytest -q
-      - name: Build probe wheel
-        working-directory: agents/probe
-        run: |
-          python -m pip install 'build>=1.2,<2'
-          python -m build --wheel --outdir ../../artifacts/probe
-          cd ../../artifacts/probe
-          sha256sum *.whl > SHA256SUMS
-      - name: Attest probe package provenance
-        if: github.ref_type == 'tag'
-        uses: actions/attest@v4
-        with:
-          subject-path: artifacts/probe/*.whl
-      - uses: actions/upload-artifact@v4
-        with:
-          name: distributed-probe-package
-          path: |
-            artifacts/probe/*.whl
-            artifacts/probe/SHA256SUMS
+            artifacts/macos-agent/*.SHA256SUMS
 
   github-release:
     if: github.ref_type == 'tag'
-    needs: [container-images, windows-agent, linux-agent, macos-agent, probe-package]
+    needs: [container-images, windows-agent, linux-agent, macos-agent]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -307,9 +285,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(find release-artifacts -type f \( -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.whl' -o -name 'SHA256SUMS' \) -print | sort)
-          if [[ ${#files[@]} -lt 5 ]]; then
-            echo "Expected release assets from all production-capable package jobs" >&2
+          mapfile -t files < <(find release-artifacts -type f \( -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.SHA256SUMS' \) -print | sort)
+          if [[ ${#files[@]} -lt 7 ]]; then
+            echo "Expected Windows, Linux and macOS release assets plus checksums" >&2
             find release-artifacts -type f -print >&2
             exit 1
           fi
