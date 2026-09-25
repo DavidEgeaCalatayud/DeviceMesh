@@ -1,4 +1,4 @@
-export type SyntheticMonitorKind = 'http' | 'tcp' | 'icmp'
+export type SyntheticMonitorKind = 'http' | 'tcp' | 'icmp' | 'dns' | 'tls'
 export type ServiceConsensusClassification = 'healthy' | 'global_outage' | 'regional_degradation' | 'insufficient_data'
 
 export interface SyntheticMonitor {
