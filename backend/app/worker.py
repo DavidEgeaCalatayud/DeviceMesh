@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from prometheus_client import start_http_server
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 async def run_jobs(stop: asyncio.Event) -> None:
+    """Run scheduled work while this process owns the scheduler lease."""
     settings = get_settings()
     next_offline = 0.0
     next_retention = 0.0
@@ -56,13 +58,7 @@ async def run_jobs(stop: asyncio.Event) -> None:
                     retention_deleted.labels("device_events").inc(result.events_deleted)
                     retention_deleted.labels("synthetic_checks").inc(result.synthetic_checks_deleted)
                     next_retention = asyncio.get_running_loop().time() + settings.retention_run_interval_seconds
-                    logger.info(
-                        "retention policy enforced",
-                        extra={
-                            "route": "retention",
-                            "status": "success",
-                        },
-                    )
+                    logger.info("retention policy enforced", extra={"route": "retention", "status": "success"})
                 else:
                     await synthetic_probe_worker.run_due(datetime.now(UTC))
                 worker_runs.labels(name, "success").inc()
@@ -74,6 +70,23 @@ async def run_jobs(stop: asyncio.Event) -> None:
             await asyncio.wait_for(stop.wait(), settings.synthetic_probe_sweep_interval_seconds)
         except TimeoutError:
             pass
+
+
+async def run_as_leader(connection: Connection, stop: asyncio.Event) -> None:
+    """Keep one scheduler alive for the full lifetime of the advisory lock connection."""
+    scheduler_stop = asyncio.Event()
+    scheduler = asyncio.create_task(run_jobs(scheduler_stop))
+    try:
+        while not stop.is_set():
+            # Advisory locks are connection-scoped. This also detects a dead DB session.
+            await asyncio.to_thread(connection.execute, text("SELECT 1"))
+            try:
+                await asyncio.wait_for(stop.wait(), 10)
+            except TimeoutError:
+                pass
+    finally:
+        scheduler_stop.set()
+        await scheduler
 
 
 async def main() -> None:
@@ -92,18 +105,7 @@ async def main() -> None:
                 if connection.scalar(text("SELECT pg_try_advisory_lock(684291017)")):
                     worker_leader.set(1)
                     try:
-                        # Verify lock ownership connection before each bounded iteration.
-                        while not stop.is_set():
-                            connection.execute(text("SELECT 1"))
-                            iteration_stop = asyncio.Event()
-                            task = asyncio.create_task(run_jobs(iteration_stop))
-                            try:
-                                await asyncio.wait_for(stop.wait(), 10)
-                            except TimeoutError:
-                                pass
-                            finally:
-                                iteration_stop.set()
-                                await task
+                        await run_as_leader(connection, stop)
                     finally:
                         worker_leader.set(0)
                         connection.execute(text("SELECT pg_advisory_unlock(684291017)"))
