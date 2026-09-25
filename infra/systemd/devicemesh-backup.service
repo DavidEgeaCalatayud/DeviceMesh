@@ -1,0 +1,10 @@
+[Unit]
+Description=DeviceMesh database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/devicemesh
+ExecStart=/opt/devicemesh/tools/deployment/backup.sh
+UMask=0077

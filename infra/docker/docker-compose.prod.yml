@@ -1,9 +1,133 @@
+# Standalone production stack. Run through tools/deployment/compose.sh.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+x-api: &api
+  image: devicemesh-api:${DEVICEMESH_IMAGE_TAG:-local}
+  build: {context: backend}
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+  mem_limit: 768m
+  cpus: 1.0
+  environment: &runtime
+    DEVICEMESH_ENV: production
+    DEVICEMESH_PUBLIC_READS: "false"
+    DEVICEMESH_EMBEDDED_WORKERS: "false"
+    DEVICEMESH_EVENT_BACKEND: redis
+    DEVICEMESH_REDIS_URL: redis://redis:6379/0
+    DEVICEMESH_DATABASE_URL_FILE: /run/secrets/application_url
+    DEVICEMESH_OPERATOR_TOKEN_FILE: /run/secrets/operator_token
+    DEVICEMESH_CORS_ORIGINS: ${DEVICEMESH_CORS_ORIGINS:?set the HTTPS origin}
+  secrets: [application_url, operator_token]
+
 services:
-  api:
-    restart: unless-stopped
   postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: devicemesh
+      POSTGRES_USER: devicemesh_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password, application_password]
+    volumes:
+      - devicemesh-postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init/10-application-role.sh:/docker-entrypoint-initdb.d/10-application-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U devicemesh_owner -d devicemesh"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 1g
+    security_opt: [no-new-privileges:true]
   redis:
+    image: redis:7-alpine
+    command: [redis-server, --save, "", --appendonly, "no", --maxmemory, 128mb, --maxmemory-policy, allkeys-lru]
+    read_only: true
+    user: redis
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 192m
+  migrate:
+    <<: *api
+    command: [alembic, upgrade, head]
+    environment:
+      <<: *runtime
+      DEVICEMESH_DATABASE_URL_FILE: /run/secrets/migration_url
+    secrets: [migration_url, operator_token]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+  api:
+    <<: *api
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --no-access-log]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+  worker:
+    <<: *api
+    command: [python, -m, app.worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    stop_grace_period: 60s
   web:
+    image: devicemesh-web:${DEVICEMESH_IMAGE_TAG:-local}
+    build: {context: web}
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 128m
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      DEVICEMESH_DOMAIN: ${DEVICEMESH_DOMAIN:?set a DNS name pointing to this host}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api: {condition: service_healthy}
+      web: {condition: service_healthy}
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 192m
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  devicemesh-postgres:
+  caddy-data:
+  caddy-config:
+
+secrets:
+  postgres_password: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/postgres_password"}
+  application_password: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/application_password"}
+  application_url: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/application_url"}
+  migration_url: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/migration_url"}
+  operator_token: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/operator_token"}

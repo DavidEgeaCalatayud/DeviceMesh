@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
-from app.api.dependencies.security import require_operator
+from app.api.dependencies.security import require_admin, require_operator
 from app.api.schemas.synthetics import (
     ProbeServiceStateResponse,
     ServiceConsensusResponse,
@@ -313,7 +313,7 @@ def synthetic_monitor_incidents(
 )
 def create_synthetic_probe(
     request: SyntheticProbeCreateRequest,
-    _: Operator,
+    _: Annotated[None, Depends(require_admin)],
     repository: SyntheticRepository,
 ) -> SyntheticProbeRegistrationResponse:
     now = datetime.now(UTC)
@@ -348,7 +348,7 @@ def list_synthetic_probes(
 def set_synthetic_probe_state(
     probe_id: str,
     request: SyntheticProbeStateRequest,
-    _: Operator,
+    _: Annotated[None, Depends(require_admin)],
     repository: SyntheticRepository,
 ) -> SyntheticProbeResponse:
     now = datetime.now(UTC)
@@ -504,6 +504,8 @@ def submit_synthetic_probe_result(
         )
     except SyntheticWorkNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="work item not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return SyntheticCheckResponse(
         id=result.id,
         monitorId=result.monitor_id,

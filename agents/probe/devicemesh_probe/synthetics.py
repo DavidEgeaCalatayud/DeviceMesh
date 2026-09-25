@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import random
 import socket
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
 
 from devicemesh_probe.config import ProbeConfig
+from devicemesh_probe.outbox import ResultOutbox
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,9 +208,12 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
 
 
 class DistributedSyntheticClient:
-    def __init__(self, config: ProbeConfig) -> None:
+    def __init__(self, config: ProbeConfig, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self.config = config
+        self.outbox = ResultOutbox(Path(config.result_queue_path))
         token = config.require_synthetic_token()
         self._client = httpx.AsyncClient(
+            transport=transport,
             base_url=config.server_url.rstrip("/"),
             headers={"Authorization": f"Bearer {token}"},
             timeout=httpx.Timeout(20.0),
@@ -215,6 +221,7 @@ class DistributedSyntheticClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+        self.outbox.close()
 
     async def heartbeat(self) -> None:
         response = await self._client.post("/api/v1/probes/heartbeat")
@@ -229,9 +236,7 @@ class DistributedSyntheticClient:
         return _parse_work(payload)
 
     async def submit(self, work: SyntheticWork, outcome: ProbeOutcome) -> None:
-        response = await self._client.post(
-            "/api/v1/probes/results",
-            json={
+        self.outbox.enqueue({
                 "workId": work.work_id,
                 "checkedAt": datetime.now(UTC).isoformat(),
                 "success": outcome.success,
@@ -239,31 +244,55 @@ class DistributedSyntheticClient:
                 "httpStatus": outcome.http_status,
                 "errorKind": outcome.error_kind,
                 "error": outcome.error,
-            },
-        )
-        response.raise_for_status()
+        })
+
+    async def flush(self) -> None:
+        for work_id, payload in self.outbox.pending():
+            response = await self._client.post("/api/v1/probes/results", json=payload)
+            response.raise_for_status()
+            self.outbox.acknowledge(work_id)
 
     async def run_once(self) -> int:
         await self.heartbeat()
-        work_items = await self.claim()
-        for work in work_items:
-            outcome = await execute_work(work)
-            await self.submit(work, outcome)
+        await self.flush()
+        capacity = min(self.config.max_concurrent_checks, self.outbox.capacity - self.outbox.count())
+        if capacity <= 0:
+            return 0
+        work_items = await self.claim(limit=capacity)
+        targets: dict[str, asyncio.Semaphore] = {}
+
+        async def run(work: SyntheticWork) -> None:
+            target = urlsplit(work.monitor.target).hostname or work.monitor.target
+            lock = targets.setdefault(target, asyncio.Semaphore(1))
+            async with lock:
+                try:
+                    # Bounds DNS, connect, headers and response processing together.
+                    async with asyncio.timeout(work.monitor.timeout_seconds):
+                        outcome = await execute_work(work)
+                except TimeoutError:
+                    outcome = ProbeOutcome(False, work.monitor.timeout_seconds * 1000,
+                                           error_kind="timeout", error="total check deadline exceeded")
+                await self.submit(work, outcome)
+        await asyncio.gather(*(run(work) for work in work_items))
+        await self.flush()
         return len(work_items)
 
 
 async def run_synthetic_loop(config: ProbeConfig, *, once: bool = False) -> None:
     client = DistributedSyntheticClient(config)
+    failures = 0
     try:
         while True:
             try:
                 count = await client.run_once()
+                failures = 0
                 if count:
                     print(f"completed {count} synthetic work item(s)")
             except httpx.HTTPError as exc:
-                print(f"synthetic probe server error: {exc}")
+                failures = min(failures + 1, 6)
+                print(f"synthetic probe server unavailable: {type(exc).__name__}; queued results retained")
             if once:
                 return
-            await asyncio.sleep(config.synthetic_poll_seconds)
+            await asyncio.sleep(min(300, config.synthetic_poll_seconds * (2 ** failures)) * random.uniform(0.8, 1.2))
     finally:
         await client.close()

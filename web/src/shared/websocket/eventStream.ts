@@ -1,3 +1,4 @@
+import { getToken } from '../api/session'
 import type { DeviceEvent } from '../../entities/event/types'
 
 export type EventEnvelope = { type: string; payload: unknown }
@@ -8,7 +9,7 @@ export function isDeviceEventEnvelope(event: EventEnvelope): event is { type: 'd
 }
 
 export function connectEventStream(onEvent: (event: EventEnvelope) => void): () => void {
-  const url = import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8000'
+  const url = import.meta.env.VITE_WS_BASE_URL ?? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
   let stopped = false
   let socket: WebSocket | null = null
   let reconnectTimer: number | null = null
@@ -25,6 +26,7 @@ export function connectEventStream(onEvent: (event: EventEnvelope) => void): () 
     socket = new WebSocket(`${url}/ws/events`)
     socket.onopen = () => {
       retryDelay = 1000
+      if (getToken()) socket?.send(JSON.stringify({ token: getToken() }))
       clearHeartbeat()
       heartbeatTimer = window.setInterval(() => {
         if (socket?.readyState === WebSocket.OPEN) socket.send('ping')

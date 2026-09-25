@@ -18,6 +18,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from app.core.config import get_settings
+from app.infrastructure.query_metrics import instrument_engine
 
 
 class Base(DeclarativeBase):
@@ -237,7 +238,9 @@ class SecurityAuditEventRow(Base):
 
 
 def create_database_engine(database_url: str | None = None) -> Engine:
-    return create_engine(database_url or get_settings().database_url, pool_pre_ping=True)
+    created = create_engine(database_url or get_settings().database_url, pool_pre_ping=True)
+    instrument_engine(created)
+    return created
 
 
 engine = create_database_engine()

@@ -624,7 +624,8 @@ class SqlAlchemySyntheticRepository:
     ) -> SyntheticCheckResult:
         current = checked_at or datetime.now(UTC)
         with self._session_factory() as session:
-            work = session.get(SyntheticProbeWorkRow, work_id)
+            work = session.scalar(select(SyntheticProbeWorkRow).where(
+                SyntheticProbeWorkRow.id == work_id).with_for_update())
             if work is None or work.probe_id != probe_id:
                 raise SyntheticWorkNotFoundError(work_id)
             existing = session.scalar(
@@ -634,6 +635,10 @@ class SqlAlchemySyntheticRepository:
             )
             if existing is not None:
                 return _result(existing)
+            if current.tzinfo is None or current > datetime.now(UTC) + timedelta(seconds=300):
+                raise ValueError("invalid probe check timestamp")
+            if current < work.assigned_at - timedelta(seconds=300) or current > work.lease_expires_at + timedelta(seconds=300):
+                raise ValueError("check timestamp is outside the assigned work interval")
             probe = session.get(SyntheticProbeRow, probe_id)
             if probe is None:
                 raise SyntheticProbeNotFoundError(probe_id)
@@ -652,8 +657,8 @@ class SqlAlchemySyntheticRepository:
             )
             work.status = "completed"
             work.completed_at = current
-            probe.last_seen_at = current
-            probe.updated_at = current
+            probe.last_seen_at = datetime.now(UTC)
+            probe.updated_at = datetime.now(UTC)
             self._evaluate_incident(session, work.monitor_id, current)
             session.commit()
             session.refresh(result)
@@ -858,13 +863,17 @@ class SqlAlchemySyntheticRepository:
         )
 
     def _evaluate_incident(self, session: Session, monitor_id: str, now: datetime) -> None:
-        monitor = session.get(SyntheticMonitorRow, monitor_id)
+        from app.infrastructure.repositories.platform import IncidentManagementRow, timeline
+        monitor = session.scalar(select(SyntheticMonitorRow).where(
+            SyntheticMonitorRow.id == monitor_id).with_for_update())
         if monitor is None:
             return
         consensus = self._consensus_for_session(session, monitor_id, now)
         if consensus.classification is ServiceConsensusClassification.INSUFFICIENT_DATA:
             return
         state = session.get(ServiceIncidentStateRow, monitor_id)
+        if state is not None and now < state.updated_at:
+            return  # Delayed outbox results enrich history without regressing live state.
         if state is None:
             state = ServiceIncidentStateRow(
                 monitor_id=monitor_id,
@@ -913,6 +922,9 @@ class SqlAlchemySyntheticRepository:
                     total_probes=len(consensus.states),
                 )
                 session.add(open_incident)
+                session.flush()
+                timeline(session, open_incident.id, "system", "incident.opened",
+                         {"classification": incident_classification.value}, now=now)
             elif open_incident is not None:
                 open_incident.classification = (
                     ServiceIncidentClassification.SERVICE_OUTAGE.value
@@ -931,6 +943,11 @@ class SqlAlchemySyntheticRepository:
                 if state.recovery_streak >= monitor.recovery_threshold:
                     open_incident.state = ServiceIncidentState.RESOLVED.value
                     open_incident.resolved_at = now
+                    workflow = session.get(IncidentManagementRow, open_incident.id)
+                    if workflow:
+                        workflow.status = "resolved"
+                    timeline(session, open_incident.id, "system", "incident.resolved",
+                             {"reason": "synthetic recovery threshold reached"}, now=now)
         state.updated_at = now
 
     @staticmethod

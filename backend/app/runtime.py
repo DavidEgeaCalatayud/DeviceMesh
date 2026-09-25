@@ -4,7 +4,12 @@ from app.application.use_cases.record_telemetry import RecordTelemetry
 from app.core.config import get_settings
 from app.infrastructure.database import SessionFactory
 from app.infrastructure.offline import OfflineDeviceSweeper
-from app.infrastructure.realtime.events import InProcessEventPublisher, PublishingEventRepository
+from app.infrastructure.realtime.events import (
+    EventPublisher,
+    InProcessEventPublisher,
+    PublishingEventRepository,
+)
+from app.infrastructure.realtime.redis_events import RedisEventPublisher
 from app.infrastructure.repositories.alerting_telemetry import AlertingTelemetryRepository
 from app.infrastructure.repositories.alerts import SqlAlchemyAlertRepository
 from app.infrastructure.repositories.event_recording import EventRecordingDeviceRepository
@@ -26,7 +31,10 @@ from app.infrastructure.synthetic_worker import SyntheticProbeWorker
 from app.infrastructure.synthetics import SyntheticProbeExecutor
 
 settings = get_settings()
-realtime_event_publisher = InProcessEventPublisher()
+realtime_event_publisher: EventPublisher = (
+    RedisEventPublisher(settings.redis_url) if settings.event_backend == "redis"
+    else InProcessEventPublisher()
+)
 raw_event_repository = SqlAlchemyEventRepository(SessionFactory)
 event_repository = PublishingEventRepository(raw_event_repository, realtime_event_publisher)
 health_repository = SqlAlchemyHealthRepository(SessionFactory)

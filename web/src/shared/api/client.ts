@@ -7,26 +7,26 @@ import type { RemoteOperation, RemoteOperationType } from '../../entities/operat
 import type { SyntheticCheck, SyntheticHealth, SyntheticMonitor, SyntheticMonitorKind } from '../../entities/synthetic/types'
 import type { MetricSample, MetricSeries, NetworkDiagnostic } from '../../entities/telemetry/types'
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+import { apiBase, apiFetch } from './session'
 
 function operatorHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
 
 export async function listDevices(signal?: AbortSignal): Promise<Device[]> {
-  const response = await fetch(`${apiBase}/api/v1/devices`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/devices`, { signal })
   if (!response.ok) throw new Error(`Device API failed: ${response.status}`)
   return response.json() as Promise<Device[]>
 }
 
 export async function listEvents(signal?: AbortSignal, limit = 50): Promise<DeviceEvent[]> {
-  const response = await fetch(`${apiBase}/api/v1/events?limit=${limit}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/events?limit=${limit}`, { signal })
   if (!response.ok) throw new Error(`Event API failed: ${response.status}`)
   return response.json() as Promise<DeviceEvent[]>
 }
 
 export async function listLatestTelemetry(signal?: AbortSignal): Promise<MetricSample[]> {
-  const response = await fetch(`${apiBase}/api/v1/telemetry/latest`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/telemetry/latest`, { signal })
   if (!response.ok) throw new Error(`Telemetry API failed: ${response.status}`)
   return response.json() as Promise<MetricSample[]>
 }
@@ -49,7 +49,7 @@ export async function getMetricHistory(
     limit: '1200',
     resolution,
   })
-  const response = await fetch(`${apiBase}/api/v1/telemetry/history?${params.toString()}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/telemetry/history?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Telemetry history API failed: ${response.status}`)
   return response.json() as Promise<MetricSeries>
 }
@@ -60,20 +60,20 @@ export async function getNetworkDiagnostic(
   signal?: AbortSignal,
 ): Promise<NetworkDiagnostic> {
   const params = new URLSearchParams({ deviceId, windowMinutes: String(windowMinutes) })
-  const response = await fetch(`${apiBase}/api/v1/telemetry/network-diagnostics?${params.toString()}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/telemetry/network-diagnostics?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Network diagnostics API failed: ${response.status}`)
   return response.json() as Promise<NetworkDiagnostic>
 }
 
 export async function getDeviceHealth(deviceId: string, signal?: AbortSignal): Promise<DeviceHealth> {
-  const response = await fetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/health`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/health`, { signal })
   if (!response.ok) throw new Error(`Device health API failed: ${response.status}`)
   return response.json() as Promise<DeviceHealth>
 }
 
 export async function getDeviceOutages(deviceId: string, days = 30, signal?: AbortSignal): Promise<Outage[]> {
   const params = new URLSearchParams({ days: String(days), limit: '100' })
-  const response = await fetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/outages?${params.toString()}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/devices/${encodeURIComponent(deviceId)}/outages?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Device outage API failed: ${response.status}`)
   return response.json() as Promise<Outage[]>
 }
@@ -81,7 +81,7 @@ export async function getDeviceOutages(deviceId: string, days = 30, signal?: Abo
 export async function listMaintenanceWindows(signal?: AbortSignal, deviceId?: string, activeOnly = false): Promise<MaintenanceWindow[]> {
   const params = new URLSearchParams({ activeOnly: String(activeOnly), limit: '100' })
   if (deviceId) params.set('deviceId', deviceId)
-  const response = await fetch(`${apiBase}/api/v1/maintenance-windows?${params.toString()}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/maintenance-windows?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Maintenance API failed: ${response.status}`)
   return response.json() as Promise<MaintenanceWindow[]>
 }
@@ -90,7 +90,7 @@ export async function createMaintenanceWindow(
   token: string,
   input: { deviceId: string | null; startsAt: string; endsAt: string; reason: string },
 ): Promise<MaintenanceWindow> {
-  const response = await fetch(`${apiBase}/api/v1/operator/maintenance-windows`, {
+  const response = await apiFetch(`${apiBase}/api/v1/operator/maintenance-windows`, {
     method: 'POST',
     headers: operatorHeaders(token),
     body: JSON.stringify(input),
@@ -100,7 +100,7 @@ export async function createMaintenanceWindow(
 }
 
 export async function cancelMaintenanceWindow(token: string, windowId: number): Promise<MaintenanceWindow> {
-  const response = await fetch(`${apiBase}/api/v1/operator/maintenance-windows/${windowId}/cancel`, {
+  const response = await apiFetch(`${apiBase}/api/v1/operator/maintenance-windows/${windowId}/cancel`, {
     method: 'POST',
     headers: operatorHeaders(token),
   })
@@ -111,7 +111,7 @@ export async function cancelMaintenanceWindow(token: string, windowId: number): 
 export async function listRemoteOperations(token: string, deviceId?: string): Promise<RemoteOperation[]> {
   const params = new URLSearchParams({ limit: '100' })
   if (deviceId) params.set('deviceId', deviceId)
-  const response = await fetch(`${apiBase}/api/v1/operator/remote-operations?${params.toString()}`, {
+  const response = await apiFetch(`${apiBase}/api/v1/operator/remote-operations?${params.toString()}`, {
     headers: operatorHeaders(token),
   })
   if (!response.ok) throw new Error(`Remote operation API failed: ${response.status}`)
@@ -119,7 +119,7 @@ export async function listRemoteOperations(token: string, deviceId?: string): Pr
 }
 
 export async function queueRemoteOperation(token: string, deviceId: string, operationType: RemoteOperationType): Promise<RemoteOperation> {
-  const response = await fetch(`${apiBase}/api/v1/operator/remote-operations`, {
+  const response = await apiFetch(`${apiBase}/api/v1/operator/remote-operations`, {
     method: 'POST',
     headers: operatorHeaders(token),
     body: JSON.stringify({ deviceId, operationType, arguments: {}, ttlSeconds: 300 }),
@@ -132,7 +132,7 @@ export async function listSyntheticMonitors(signal?: AbortSignal, deviceId?: str
   const params = new URLSearchParams()
   if (deviceId) params.set('deviceId', deviceId)
   const suffix = params.size ? `?${params.toString()}` : ''
-  const response = await fetch(`${apiBase}/api/v1/synthetic-monitors${suffix}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/synthetic-monitors${suffix}`, { signal })
   if (!response.ok) throw new Error(`Synthetic monitor API failed: ${response.status}`)
   return response.json() as Promise<SyntheticMonitor[]>
 }
@@ -151,7 +151,7 @@ export async function createSyntheticMonitor(
     expectedStatus: number | null
   },
 ): Promise<SyntheticMonitor> {
-  const response = await fetch(`${apiBase}/api/v1/operator/synthetic-monitors`, {
+  const response = await apiFetch(`${apiBase}/api/v1/operator/synthetic-monitors`, {
     method: 'POST',
     headers: operatorHeaders(token),
     body: JSON.stringify(input),
@@ -161,7 +161,7 @@ export async function createSyntheticMonitor(
 }
 
 export async function setSyntheticMonitorEnabled(token: string, monitorId: string, enabled: boolean): Promise<SyntheticMonitor> {
-  const response = await fetch(`${apiBase}/api/v1/operator/synthetic-monitors/${encodeURIComponent(monitorId)}/state`, {
+  const response = await apiFetch(`${apiBase}/api/v1/operator/synthetic-monitors/${encodeURIComponent(monitorId)}/state`, {
     method: 'PATCH',
     headers: operatorHeaders(token),
     body: JSON.stringify({ enabled }),
@@ -171,25 +171,25 @@ export async function setSyntheticMonitorEnabled(token: string, monitorId: strin
 }
 
 export async function getSyntheticHealth(monitorId: string, signal?: AbortSignal): Promise<SyntheticHealth> {
-  const response = await fetch(`${apiBase}/api/v1/synthetic-monitors/${encodeURIComponent(monitorId)}/health`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/synthetic-monitors/${encodeURIComponent(monitorId)}/health`, { signal })
   if (!response.ok) throw new Error(`Synthetic health API failed: ${response.status}`)
   return response.json() as Promise<SyntheticHealth>
 }
 
 export async function getSyntheticResults(monitorId: string, signal?: AbortSignal): Promise<SyntheticCheck[]> {
-  const response = await fetch(`${apiBase}/api/v1/synthetic-monitors/${encodeURIComponent(monitorId)}/results?limit=50`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/synthetic-monitors/${encodeURIComponent(monitorId)}/results?limit=50`, { signal })
   if (!response.ok) throw new Error(`Synthetic results API failed: ${response.status}`)
   return response.json() as Promise<SyntheticCheck[]>
 }
 
 export async function listAlerts(signal?: AbortSignal, activeOnly = false): Promise<AlertIncident[]> {
-  const response = await fetch(`${apiBase}/api/v1/alerts?activeOnly=${activeOnly}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/alerts?activeOnly=${activeOnly}`, { signal })
   if (!response.ok) throw new Error(`Alert API failed: ${response.status}`)
   return response.json() as Promise<AlertIncident[]>
 }
 
 export async function listAlertRules(signal?: AbortSignal): Promise<AlertRule[]> {
-  const response = await fetch(`${apiBase}/api/v1/alert-rules`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/alert-rules`, { signal })
   if (!response.ok) throw new Error(`Alert rule API failed: ${response.status}`)
   return response.json() as Promise<AlertRule[]>
 }
@@ -197,13 +197,13 @@ export async function listAlertRules(signal?: AbortSignal): Promise<AlertRule[]>
 export async function listServices(signal?: AbortSignal, deviceId?: string): Promise<DeviceService[]> {
   const params = new URLSearchParams({ activeOnly: 'true' })
   if (deviceId) params.set('deviceId', deviceId)
-  const response = await fetch(`${apiBase}/api/v1/services?${params.toString()}`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/services?${params.toString()}`, { signal })
   if (!response.ok) throw new Error(`Service inventory API failed: ${response.status}`)
   return response.json() as Promise<DeviceService[]>
 }
 
 export async function getNetworkTopology(signal?: AbortSignal): Promise<NetworkTopology> {
-  const response = await fetch(`${apiBase}/api/v1/network/topology`, { signal })
+  const response = await apiFetch(`${apiBase}/api/v1/network/topology`, { signal })
   if (!response.ok) throw new Error(`Network topology API failed: ${response.status}`)
   return response.json() as Promise<NetworkTopology>
 }

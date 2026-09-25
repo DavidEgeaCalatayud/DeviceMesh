@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.api.dependencies.security import require_operator
+from app.api.dependencies.security import require_admin
 from app.api.schemas.enrollment import (
     AgentCredentialResponse,
     AgentEnrollmentRequest,
@@ -19,7 +19,7 @@ from app.runtime import get_agent_auth_service
 
 router = APIRouter(prefix="/api/v1", tags=["agent-security"])
 AuthService = Annotated[AgentAuthService, Depends(get_agent_auth_service)]
-Operator = Annotated[None, Depends(require_operator)]
+Operator = Annotated[None, Depends(require_admin)]
 
 
 @router.post("/operator/agent-enrollment-tokens", response_model=EnrollmentTokenResponse)

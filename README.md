@@ -4,7 +4,9 @@
 
 DeviceMesh discovers devices on networks you control, models stable device identity, ingests optional agent telemetry and builds a realtime inventory, event timeline, alerting surface and observed network view.
 
-> **Current status:** the core platform includes PostgreSQL persistence, stable device identity, bounded LAN discovery, authenticated Windows/Linux agents, host telemetry and SLA, maintenance windows, controlled remote operations, service inventory, metric history, synthetic service monitoring, distributed probes, service incidents/MTTR and a React Operator Console. A native Swift macOS host agent is being added. Android/iOS clients, ESP32 capabilities, richer NMS topology and release-hardening remain roadmap items.
+> **Current status:** V1.3 plus a platform/deployment candidate. Windows/Linux/macOS agents, distributed probes and monitor incidents are implemented. This branch adds human sessions/RBAC, a logical service catalogue, incident workflow/timeline, check-based SLOs, Redis fan-out, a separate worker, durable probe delivery, metrics and production deployment/restore tooling. Clean-host, Docker/PostgreSQL acceptance and scale/soak validation are still release gates. Android, iOS and ESP32 remain scaffolds.
+
+See the [57-point implementation ledger](docs/product/IMPLEMENTATION_57_POINTS.md) for the exact scope and remaining work, [production deployment](docs/operations/PRODUCTION_DEPLOYMENT.md), [platform API/security](docs/operations/PLATFORM_API.md), [backup/restore](docs/operations/BACKUP_RESTORE.md) and [probe daemon](docs/operations/PROBE_DAEMON.md).
 
 ## Architecture at a glance
 

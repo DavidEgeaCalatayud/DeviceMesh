@@ -12,6 +12,8 @@ class ProbeConfig:
     tcp_ports: tuple[int, ...] = ()
     synthetic_token: str | None = None
     synthetic_poll_seconds: float = 5.0
+    max_concurrent_checks: int = 4
+    result_queue_path: str = "data/probe-results.sqlite3"
 
     @classmethod
     def from_environment(cls) -> "ProbeConfig":
@@ -43,6 +45,10 @@ class ProbeConfig:
         if poll_seconds < 1.0 or poll_seconds > 300.0:
             raise ValueError("DEVICEMESH_PROBE_POLL_SECONDS must be between 1 and 300")
 
+        concurrency = int(os.environ.get("DEVICEMESH_PROBE_CONCURRENCY", "4"))
+        if not 1 <= concurrency <= 32:
+            raise ValueError("DEVICEMESH_PROBE_CONCURRENCY must be between 1 and 32")
+
         return cls(
             server_url=os.environ.get("DEVICEMESH_SERVER_URL", "http://localhost:8000"),
             source=os.environ.get("DEVICEMESH_PROBE_SOURCE", "network-probe"),
@@ -50,6 +56,8 @@ class ProbeConfig:
             tcp_ports=ports,
             synthetic_token=os.environ.get("DEVICEMESH_PROBE_TOKEN") or None,
             synthetic_poll_seconds=poll_seconds,
+            max_concurrent_checks=concurrency,
+            result_queue_path=os.environ.get("DEVICEMESH_PROBE_QUEUE_PATH", "data/probe-results.sqlite3"),
         )
 
     def require_allowed(self, requested: DiscoveryScope) -> None:

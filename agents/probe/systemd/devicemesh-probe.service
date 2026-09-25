@@ -1,0 +1,23 @@
+[Unit]
+Description=DeviceMesh distributed synthetic probe
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=true
+StateDirectory=devicemesh-probe
+EnvironmentFile=/etc/devicemesh/probe.env
+Environment=DEVICEMESH_PROBE_QUEUE_PATH=/var/lib/devicemesh-probe/results.sqlite3
+ExecStart=/opt/devicemesh-probe/bin/devicemesh-probe --synthetic
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
