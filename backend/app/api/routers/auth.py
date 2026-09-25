@@ -120,7 +120,7 @@ def _audit_query(
     request_id: str,
     since: datetime | None,
     until: datetime | None,
-) -> Select[tuple[AuditRow]]:
+) -> Select[AuditRow]:
     query = select(AuditRow)
     if actor:
         query = query.where(AuditRow.actor == actor)
