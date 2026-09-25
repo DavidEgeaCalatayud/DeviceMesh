@@ -28,7 +28,10 @@ jobs:
         run: pip install -e .
       - name: Render API endpoint catalog
         run: python tools/docs/render_api_catalog.py --output /tmp/ENDPOINT_CATALOG.md
+      - name: Verify committed endpoint catalog is current
+        run: diff -u docs/api/ENDPOINT_CATALOG.md /tmp/ENDPOINT_CATALOG.md
       - uses: actions/upload-artifact@v4
+        if: failure()
         with:
           name: generated-api-catalog
           path: /tmp/ENDPOINT_CATALOG.md
