@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
-from app.core.logging import configure_logging
+from app.core.logging import bind_log_context, configure_logging, reset_log_context
 from app.core.metrics import (
     retention_deleted,
     retention_rollups,
@@ -43,10 +43,14 @@ async def run_jobs(stop: asyncio.Event) -> None:
         for name, due in jobs:
             if not due:
                 continue
+            context_token = bind_log_context(job=name)
             try:
                 if name == "offline":
                     await asyncio.to_thread(offline_device_sweeper.sweep, datetime.now(UTC))
-                    next_offline = asyncio.get_running_loop().time() + settings.device_offline_sweep_interval_seconds
+                    next_offline = (
+                        asyncio.get_running_loop().time()
+                        + settings.device_offline_sweep_interval_seconds
+                    )
                 elif name == "retention":
                     result = await asyncio.to_thread(
                         telemetry_retention_repository.enforce_policy,
@@ -60,9 +64,17 @@ async def run_jobs(stop: asyncio.Event) -> None:
                     retention_deleted.labels("telemetry_raw").inc(result.raw_samples_deleted)
                     retention_deleted.labels("telemetry_hourly").inc(result.hourly_rollups_deleted)
                     retention_deleted.labels("device_events").inc(result.events_deleted)
-                    retention_deleted.labels("synthetic_checks").inc(result.synthetic_checks_deleted)
-                    next_retention = asyncio.get_running_loop().time() + settings.retention_run_interval_seconds
-                    logger.info("retention policy enforced", extra={"route": "retention", "status": "success"})
+                    retention_deleted.labels("synthetic_checks").inc(
+                        result.synthetic_checks_deleted
+                    )
+                    next_retention = (
+                        asyncio.get_running_loop().time()
+                        + settings.retention_run_interval_seconds
+                    )
+                    logger.info(
+                        "retention policy enforced",
+                        extra={"route": "retention", "status": "success"},
+                    )
                 else:
                     await synthetic_probe_worker.run_due(datetime.now(UTC))
                 worker_runs.labels(name, "success").inc()
@@ -70,6 +82,8 @@ async def run_jobs(stop: asyncio.Event) -> None:
             except Exception:
                 worker_runs.labels(name, "failure").inc()
                 logger.exception("background job failed; retrying", extra={"route": name})
+            finally:
+                reset_log_context(context_token)
         try:
             await asyncio.wait_for(stop.wait(), settings.synthetic_probe_sweep_interval_seconds)
         except TimeoutError:
@@ -94,10 +108,13 @@ async def run_as_leader(connection: Connection, stop: asyncio.Event) -> None:
 
 
 async def main() -> None:
-    configure_logging()
+    configure_logging(service_name="scheduler-worker")
     settings = get_settings()
     start_http_server(settings.worker_metrics_port, addr=settings.worker_metrics_host)
-    logger.info("worker metrics server started", extra={"route": f"{settings.worker_metrics_host}:{settings.worker_metrics_port}"})
+    logger.info(
+        "worker metrics server started",
+        extra={"route": f"{settings.worker_metrics_host}:{settings.worker_metrics_port}"},
+    )
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
