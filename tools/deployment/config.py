@@ -8,7 +8,8 @@ import re
 import secrets
 
 ROOT = Path(__file__).resolve().parents[2]
-SECRET_NAMES = ("postgres_password", "application_password", "application_url", "migration_url", "operator_token")
+CORE_SECRET_NAMES = ("postgres_password", "application_password", "application_url", "migration_url", "operator_token")
+SECRET_NAMES = CORE_SECRET_NAMES + ("grafana_admin_password",)
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -53,26 +54,37 @@ def validate(values: dict[str, str], check_secrets: bool = True) -> Path:
     return directory
 
 
+def _write_secret(directory: Path, name: str, value: str) -> None:
+    file = directory / name
+    fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(fd, "w") as stream:
+        stream.write(value + "\n")
+    # Parent is private. Compose grants each container only the requested files;
+    # file modes must allow the container's unprivileged application UID to read.
+    file.chmod(0o644)
+
+
 def initialize(directory: Path) -> None:
     if directory.exists() and any(directory.iterdir()):
-        if not all((directory / name).is_file() for name in SECRET_NAMES):
+        if not all((directory / name).is_file() for name in CORE_SECRET_NAMES):
             raise ValueError("partial secrets directory: restore it before continuing")
+        # Upgrade-safe addition for deployments created before bundled observability.
+        if not (directory / "grafana_admin_password").exists():
+            _write_secret(directory, "grafana_admin_password", secrets.token_urlsafe(36))
         return
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory.chmod(0o700)
     owner, application = secrets.token_hex(32), secrets.token_hex(32)
-    values = {"postgres_password": owner, "application_password": application,
-              "operator_token": secrets.token_hex(32),
-              "application_url": f"postgresql+psycopg://devicemesh_app:{application}@postgres:5432/devicemesh",
-              "migration_url": f"postgresql+psycopg://devicemesh_owner:{owner}@postgres:5432/devicemesh"}
+    values = {
+        "postgres_password": owner,
+        "application_password": application,
+        "operator_token": secrets.token_hex(32),
+        "grafana_admin_password": secrets.token_urlsafe(36),
+        "application_url": f"postgresql+psycopg://devicemesh_app:{application}@postgres:5432/devicemesh",
+        "migration_url": f"postgresql+psycopg://devicemesh_owner:{owner}@postgres:5432/devicemesh",
+    }
     for name, value in values.items():
-        file = directory / name
-        fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        with os.fdopen(fd, "w") as stream:
-            stream.write(value + "\n")
-        # Parent is private. Compose grants each container only the requested files;
-        # file modes must allow the container's unprivileged application UID to read.
-        file.chmod(0o644)
+        _write_secret(directory, name, value)
 
 
 def main() -> None:
