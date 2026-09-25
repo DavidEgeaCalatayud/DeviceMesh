@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     synthetic_probe_id: str = "backend-probe"
     synthetic_probe_offline_after_seconds: int = 120
     synthetic_probe_work_lease_seconds: int = 60
+    synthetic_probe_credential_ttl_days: int = Field(default=90, ge=1, le=3650)
     synthetic_consensus_quorum_ratio: float = Field(default=0.5, ge=0.5, lt=1.0)
     synthetic_consensus_minimum_quorum: int = Field(default=1, ge=1, le=32)
     synthetic_consensus_round_window_seconds: int = Field(default=30, ge=1, le=300)
@@ -65,10 +66,11 @@ class Settings(BaseSettings):
         for field in (
             "device_offline_after_seconds", "device_offline_sweep_interval_seconds",
             "synthetic_probe_sweep_interval_seconds", "synthetic_probe_batch_size",
-            "synthetic_probe_work_lease_seconds", "synthetic_consensus_minimum_quorum",
-            "synthetic_consensus_round_window_seconds", "retention_run_interval_seconds",
-            "telemetry_raw_retention_days", "telemetry_hourly_retention_days",
-            "event_retention_days", "synthetic_check_retention_days",
+            "synthetic_probe_work_lease_seconds", "synthetic_probe_credential_ttl_days",
+            "synthetic_consensus_minimum_quorum", "synthetic_consensus_round_window_seconds",
+            "retention_run_interval_seconds", "telemetry_raw_retention_days",
+            "telemetry_hourly_retention_days", "event_retention_days",
+            "synthetic_check_retention_days",
         ):
             if getattr(self, field) <= 0:
                 raise ValueError(f"{field} must be positive")
