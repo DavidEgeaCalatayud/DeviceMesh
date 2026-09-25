@@ -1,0 +1,108 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Agents online",
+      "id": 1,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "devicemesh_agents_online"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Probes online",
+      "id": 2,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "devicemesh_probes_online"}],
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Open incidents",
+      "id": 3,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "devicemesh_incidents_open"}],
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Scheduler leader",
+      "id": 4,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "max(devicemesh_worker_leader)"}],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "No leader"}, "1": {"text": "Healthy"}}}]}, "overrides": []},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP request rate",
+      "id": 5,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (route) (rate(devicemesh_http_requests_total[5m]))", "legendFormat": "{{route}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP p95 latency",
+      "id": 6,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(devicemesh_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{route}}"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx response rate",
+      "id": 7,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(devicemesh_http_requests_total{status=~\"5..\"}[5m]))"}],
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 13}
+    },
+    {
+      "type": "timeseries",
+      "title": "Agent ingestion",
+      "id": 8,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (kind) (rate(devicemesh_agents_ingestion_total[5m]))", "legendFormat": "{{kind}}"}],
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 13}
+    },
+    {
+      "type": "timeseries",
+      "title": "WebSocket clients",
+      "id": 9,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "devicemesh_ws_connections"}],
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 13}
+    },
+    {
+      "type": "timeseries",
+      "title": "Database query p95",
+      "id": 10,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(devicemesh_db_query_duration_seconds_bucket[5m])))"}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 20}
+    },
+    {
+      "type": "timeseries",
+      "title": "Background job outcomes",
+      "id": 11,
+      "datasource": {"type": "prometheus", "uid": "devicemesh-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (job, outcome) (rate(devicemesh_worker_runs_total[5m]))", "legendFormat": "{{job}} / {{outcome}}"}],
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 20}
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["devicemesh", "operations"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "DeviceMesh / Overview",
+  "uid": "devicemesh-overview",
+  "version": 1
+}
