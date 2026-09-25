@@ -92,7 +92,8 @@ services:
     image: devicemesh-web:${DEVICEMESH_IMAGE_TAG:-local}
     build: {context: web}
     read_only: true
-    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+    # Match the unprivileged nginx user in the web image; tmpfs hides image ownership.
+    tmpfs: ["/var/cache/nginx:uid=101,gid=101,mode=0755", "/var/run:uid=101,gid=101,mode=0755", /tmp]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     healthcheck:
@@ -100,6 +101,8 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+    depends_on:
+      api: {condition: service_healthy}
     restart: unless-stopped
     logging: *logging
     mem_limit: 128m
