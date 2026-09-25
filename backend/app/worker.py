@@ -10,9 +10,15 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
-from app.core.metrics import worker_last_success, worker_leader, worker_runs
+from app.core.metrics import (
+    retention_deleted,
+    retention_rollups,
+    worker_last_success,
+    worker_leader,
+    worker_runs,
+)
 from app.infrastructure.database import engine
-from app.runtime import offline_device_sweeper, synthetic_probe_worker
+from app.runtime import offline_device_sweeper, synthetic_probe_worker, telemetry_retention_repository
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +26,43 @@ logger = logging.getLogger(__name__)
 async def run_jobs(stop: asyncio.Event) -> None:
     settings = get_settings()
     next_offline = 0.0
+    next_retention = 0.0
     while not stop.is_set():
-        for name, due in (("offline", asyncio.get_running_loop().time() >= next_offline),
-                          ("synthetics", True)):
+        loop_time = asyncio.get_running_loop().time()
+        jobs = (
+            ("offline", loop_time >= next_offline),
+            ("synthetics", True),
+            ("retention", loop_time >= next_retention),
+        )
+        for name, due in jobs:
             if not due:
                 continue
             try:
                 if name == "offline":
                     await asyncio.to_thread(offline_device_sweeper.sweep, datetime.now(UTC))
                     next_offline = asyncio.get_running_loop().time() + settings.device_offline_sweep_interval_seconds
+                elif name == "retention":
+                    result = await asyncio.to_thread(
+                        telemetry_retention_repository.enforce_policy,
+                        datetime.now(UTC),
+                        raw_retention_days=settings.telemetry_raw_retention_days,
+                        hourly_retention_days=settings.telemetry_hourly_retention_days,
+                        event_retention_days=settings.event_retention_days,
+                        synthetic_check_retention_days=settings.synthetic_check_retention_days,
+                    )
+                    retention_rollups.inc(result.rollups_touched)
+                    retention_deleted.labels("telemetry_raw").inc(result.raw_samples_deleted)
+                    retention_deleted.labels("telemetry_hourly").inc(result.hourly_rollups_deleted)
+                    retention_deleted.labels("device_events").inc(result.events_deleted)
+                    retention_deleted.labels("synthetic_checks").inc(result.synthetic_checks_deleted)
+                    next_retention = asyncio.get_running_loop().time() + settings.retention_run_interval_seconds
+                    logger.info(
+                        "retention policy enforced",
+                        extra={
+                            "route": "retention",
+                            "status": "success",
+                        },
+                    )
                 else:
                     await synthetic_probe_worker.run_due(datetime.now(UTC))
                 worker_runs.labels(name, "success").inc()
