@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     public_reads: bool = True
     embedded_workers: bool = True
     event_backend: str = "memory"
+    worker_metrics_host: str = "0.0.0.0"
+    worker_metrics_port: int = Field(default=9100, ge=1, le=65535)
     session_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     refresh_ttl_seconds: int = Field(default=604800, ge=3600, le=2592000)
     agent_enrollment_ttl_seconds: int = 900
