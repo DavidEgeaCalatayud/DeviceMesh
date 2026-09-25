@@ -38,7 +38,7 @@ from app.runtime import (
 )
 from app.worker import run_jobs
 
-configure_logging()
+configure_logging(service_name="api")
 manager = ConnectionManager()
 
 
