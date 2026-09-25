@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Device } from '../../entities/device/types'
 import { listDevices } from '../../shared/api/client'
 import { platformApi } from '../../shared/api/session'
@@ -40,21 +40,8 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null)
   const loaded = useRef(false)
 
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setOpen(true)
-        queueMicrotask(() => inputRef.current?.focus())
-      }
-      if (event.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('keydown', shortcut)
-    return () => window.removeEventListener('keydown', shortcut)
-  }, [])
-
-  useEffect(() => {
-    if (!open || loaded.current) return
+  const loadResources = useCallback(() => {
+    if (loaded.current) return
     loaded.current = true
     setLoading(true)
     setError('')
@@ -73,7 +60,25 @@ export function GlobalSearch() {
         setError(reason instanceof Error ? reason.message : 'Search data could not be loaded')
       })
       .finally(() => setLoading(false))
-  }, [open])
+  }, [])
+
+  const openSearch = useCallback(() => {
+    setOpen(true)
+    loadResources()
+    queueMicrotask(() => inputRef.current?.focus())
+  }, [loadResources])
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        openSearch()
+      }
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', shortcut)
+    return () => window.removeEventListener('keydown', shortcut)
+  }, [openSearch])
 
   const rows = useMemo<SearchRow[]>(() => {
     const deviceRows = devices.map(device => ({
@@ -118,8 +123,13 @@ export function GlobalSearch() {
     window.location.hash = href.slice(1)
   }
 
+  function retry() {
+    loaded.current = false
+    loadResources()
+  }
+
   return <>
-    <button className="global-search-trigger" type="button" onClick={() => { setOpen(true); queueMicrotask(() => inputRef.current?.focus()) }}>
+    <button className="global-search-trigger" type="button" onClick={openSearch}>
       Search <kbd>Ctrl K</kbd>
     </button>
     {open && <div className="global-search-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false) }}>
@@ -136,7 +146,7 @@ export function GlobalSearch() {
           <button type="button" onClick={() => setOpen(false)} aria-label="Close search">Close</button>
         </div>
         {loading && <p role="status">Loading searchable resources…</p>}
-        {error && <p role="alert">{error} <button type="button" onClick={() => { loaded.current = false; setOpen(false); queueMicrotask(() => setOpen(true)) }}>Retry</button></p>}
+        {error && <p role="alert">{error} <button type="button" onClick={retry}>Retry</button></p>}
         {!loading && !error && matches.length === 0 && <p>No resources match “{query}”.</p>}
         {!loading && !error && matches.length > 0 && <ul className="global-search-results">
           {matches.map(row => <li key={row.id}>
