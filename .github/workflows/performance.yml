@@ -1,0 +1,55 @@
+name: Performance gate
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "infra/docker/**"
+      - "tools/benchmarking/**"
+      - ".github/workflows/performance.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ingestion-10-100-1000:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Prepare isolated production configuration
+        run: |
+          cp .env.production.example .env.production
+          sed -i 's/mesh.example.com/mesh.performance.invalid/g' .env.production
+          python tools/deployment/config.py --init-secrets
+          cat > infra/docker/performance.override.yml <<'YAML'
+          services:
+            api:
+              ports: ["127.0.0.1:18000:8000"]
+          YAML
+      - name: Start production API and worker
+        run: |
+          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/performance.override.yml up -d --build --wait --wait-timeout 180 api worker
+      - name: Run authenticated load gate
+        run: |
+          pip install "httpx>=0.27,<1"
+          python tools/benchmarking/load.py \
+            --server http://127.0.0.1:18000 \
+            --token-file .secrets/operator_token \
+            --scales 10 100 1000 \
+            --concurrency 32 \
+            --max-p95-ms 3000 \
+            --min-rps 10 \
+            --output benchmark-results.json
+          cat benchmark-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results
+          path: benchmark-results.json
+          if-no-files-found: ignore
+      - if: failure()
+        run: tools/deployment/compose.sh logs --tail 100
+      - if: always()
+        run: |
+          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/performance.override.yml down -v --remove-orphans
