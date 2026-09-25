@@ -7,5 +7,5 @@ compose config --quiet
 compose build --pull api web
 compose up -d postgres redis
 compose run --rm migrate
-compose up -d --wait --wait-timeout 180 api worker web proxy
+compose up -d --wait --wait-timeout 180 api worker web prometheus grafana proxy
 "$ROOT/tools/deployment/smoke.sh"
