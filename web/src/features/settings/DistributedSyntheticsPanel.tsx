@@ -50,6 +50,8 @@ export function DistributedSyntheticsPanel({ token, monitors }: DistributedSynth
   const [httpCapability, setHttpCapability] = useState(true)
   const [tcpCapability, setTcpCapability] = useState(true)
   const [icmpCapability, setIcmpCapability] = useState(false)
+  const [dnsCapability, setDnsCapability] = useState(true)
+  const [tlsCapability, setTlsCapability] = useState(true)
   const [newProbeToken, setNewProbeToken] = useState<string | null>(null)
   const [monitorId, setMonitorId] = useState('')
   const [probeId, setProbeId] = useState('')
@@ -134,6 +136,8 @@ export function DistributedSyntheticsPanel({ token, monitors }: DistributedSynth
     if (httpCapability) capabilities.push('http')
     if (tcpCapability) capabilities.push('tcp')
     if (icmpCapability) capabilities.push('icmp')
+    if (dnsCapability) capabilities.push('dns')
+    if (tlsCapability) capabilities.push('tls')
     try {
       const registration = await createSyntheticProbe(token, {
         name: probeName || `${probeLocation} probe`,
@@ -161,6 +165,8 @@ export function DistributedSyntheticsPanel({ token, monitors }: DistributedSynth
     }
   }
 
+  const hasCapability = httpCapability || tcpCapability || icmpCapability || dnsCapability || tlsCapability
+
   return <section className="card panel distributedSynthetics">
     <div className="panelHeader">
       <div>
@@ -183,8 +189,10 @@ export function DistributedSyntheticsPanel({ token, monitors }: DistributedSynth
           <label><input type="checkbox" checked={httpCapability} onChange={(event) => setHttpCapability(event.target.checked)} /> HTTP</label>
           <label><input type="checkbox" checked={tcpCapability} onChange={(event) => setTcpCapability(event.target.checked)} /> TCP</label>
           <label><input type="checkbox" checked={icmpCapability} onChange={(event) => setIcmpCapability(event.target.checked)} /> ICMP</label>
+          <label><input type="checkbox" checked={dnsCapability} onChange={(event) => setDnsCapability(event.target.checked)} /> DNS</label>
+          <label><input type="checkbox" checked={tlsCapability} onChange={(event) => setTlsCapability(event.target.checked)} /> TLS</label>
         </div>
-        <button type="submit" disabled={!token || (!httpCapability && !tcpCapability && !icmpCapability)}>Create probe</button>
+        <button type="submit" disabled={!token || !hasCapability}>Create probe</button>
         {newProbeToken && <div className="compactItem"><div><strong>One-time probe token</strong><span>Store it as DEVICEMESH_PROBE_TOKEN. DeviceMesh stores only its hash.</span></div><code>{newProbeToken}</code></div>}
       </form>
 
