@@ -33,8 +33,8 @@ jobs:
       DEVICE_COUNT: ${{ github.event_name == 'workflow_dispatch' && inputs.devices || '10' }}
       ROUND_COUNT: ${{ github.event_name == 'workflow_dispatch' && inputs.rounds || '3' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Prepare isolated production configuration
@@ -79,7 +79,7 @@ jobs:
             exec -T postgres psql -U devicemesh_owner -d devicemesh -Atc \
             "SELECT json_build_object('databaseBytes', pg_database_size(current_database()), 'metricSamples', (SELECT count(*) FROM metric_samples), 'devices', (SELECT count(*) FROM devices));" \
             > artifacts/postgres-summary.json || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: performance-${{ env.DEVICE_COUNT }}
