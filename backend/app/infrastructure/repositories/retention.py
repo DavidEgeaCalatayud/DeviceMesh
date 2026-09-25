@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import (
     BigInteger,
@@ -15,7 +15,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
-from app.infrastructure.database import Base, MetricSampleRow
+from app.infrastructure.database import Base, DeviceEventRow, MetricSampleRow
+from app.infrastructure.repositories.synthetics import SyntheticCheckResultRow
 
 
 class MetricHourlyRollupRow(Base):
@@ -65,6 +66,19 @@ class TelemetryCompactionResult:
     cutoff: datetime
     rollups_touched: int
     raw_samples_deleted: int
+
+
+@dataclass(frozen=True, slots=True)
+class RetentionPolicyResult:
+    raw_cutoff: datetime
+    hourly_cutoff: datetime
+    event_cutoff: datetime
+    synthetic_cutoff: datetime
+    rollups_touched: int
+    raw_samples_deleted: int
+    hourly_rollups_deleted: int
+    events_deleted: int
+    synthetic_checks_deleted: int
 
 
 class SqlAlchemyTelemetryRetentionRepository:
@@ -144,6 +158,60 @@ class SqlAlchemyTelemetryRetentionRepository:
             cutoff=cutoff,
             rollups_touched=len(aggregates),
             raw_samples_deleted=raw_samples_deleted,
+        )
+
+    def enforce_policy(
+        self,
+        now: datetime,
+        *,
+        raw_retention_days: int,
+        hourly_retention_days: int,
+        event_retention_days: int,
+        synthetic_check_retention_days: int,
+    ) -> RetentionPolicyResult:
+        if now.tzinfo is None:
+            raise ValueError("now must include a timezone")
+        if hourly_retention_days <= raw_retention_days:
+            raise ValueError("hourly retention must exceed raw retention")
+
+        raw_cutoff = now - timedelta(days=raw_retention_days)
+        hourly_cutoff = now - timedelta(days=hourly_retention_days)
+        event_cutoff = now - timedelta(days=event_retention_days)
+        synthetic_cutoff = now - timedelta(days=synthetic_check_retention_days)
+
+        compaction = self.compact_before(raw_cutoff)
+        with self._session_factory.begin() as session:
+            hourly_rollups_deleted = session.scalar(
+                select(func.count(MetricHourlyRollupRow.id)).where(
+                    MetricHourlyRollupRow.bucket_start < hourly_cutoff
+                )
+            ) or 0
+            events_deleted = session.scalar(
+                select(func.count(DeviceEventRow.id)).where(DeviceEventRow.timestamp < event_cutoff)
+            ) or 0
+            synthetic_checks_deleted = session.scalar(
+                select(func.count(SyntheticCheckResultRow.id)).where(
+                    SyntheticCheckResultRow.checked_at < synthetic_cutoff
+                )
+            ) or 0
+            session.execute(delete(MetricHourlyRollupRow).where(
+                MetricHourlyRollupRow.bucket_start < hourly_cutoff
+            ))
+            session.execute(delete(DeviceEventRow).where(DeviceEventRow.timestamp < event_cutoff))
+            session.execute(delete(SyntheticCheckResultRow).where(
+                SyntheticCheckResultRow.checked_at < synthetic_cutoff
+            ))
+
+        return RetentionPolicyResult(
+            raw_cutoff=raw_cutoff,
+            hourly_cutoff=hourly_cutoff,
+            event_cutoff=event_cutoff,
+            synthetic_cutoff=synthetic_cutoff,
+            rollups_touched=compaction.rollups_touched,
+            raw_samples_deleted=compaction.raw_samples_deleted,
+            hourly_rollups_deleted=int(hourly_rollups_deleted),
+            events_deleted=int(events_deleted),
+            synthetic_checks_deleted=int(synthetic_checks_deleted),
         )
 
     def list_hourly(
