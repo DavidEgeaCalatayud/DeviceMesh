@@ -61,5 +61,6 @@ class MutationAuditMiddleware:
                     source_ip=source_ip,
                     request_id=request_id,
                 )
-        except Exception:  # noqa: BLE001 - audit failure must be visible without corrupting a sent response
+        except Exception:
+            # The HTTP response has already been sent; make persistence failure explicit in logs.
             logger.exception("failed to persist mutation audit", extra={"route": route, "status": status_code})
