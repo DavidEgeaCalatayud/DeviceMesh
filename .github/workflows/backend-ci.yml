@@ -32,9 +32,31 @@ jobs:
         run: pip install -e ".[dev]"
       - working-directory: backend
         run: alembic upgrade head
-      - working-directory: backend
-        run: ruff check app tests
-      - working-directory: backend
-        run: mypy app
+      - id: ruff
+        working-directory: backend
+        run: |
+          set +e
+          ruff check app tests --output-format=json > ../ruff-report.json
+          status=$?
+          cat ../ruff-report.json
+          exit "$status"
+      - if: failure() && steps.ruff.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-ruff-report
+          path: ruff-report.json
+      - id: mypy
+        working-directory: backend
+        run: |
+          set +e
+          mypy app --show-error-codes --no-color-output > ../mypy-report.txt 2>&1
+          status=$?
+          cat ../mypy-report.txt
+          exit "$status"
+      - if: failure() && steps.mypy.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-mypy-report
+          path: mypy-report.txt
       - working-directory: backend
         run: pytest --cov=app --cov-report=term-missing
