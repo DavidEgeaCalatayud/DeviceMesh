@@ -31,7 +31,7 @@ def _numeric_semver(value: str) -> tuple[int, int, int] | None:
     parts = value.split(".")
     if len(parts) != 3 or any(not part.isdigit() for part in parts):
         return None
-    return tuple(int(part) for part in parts)  # type: ignore[return-value]
+    return int(parts[0]), int(parts[1]), int(parts[2])
 
 
 def evaluate_component_compatibility(
