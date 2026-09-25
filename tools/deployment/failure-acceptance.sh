@@ -22,12 +22,6 @@ compose() {
     -f infra/docker/failure.override.yml "$@"
 }
 
-cleanup() {
-  compose down -v --remove-orphans || true
-  rm -f infra/docker/failure.override.yml
-}
-trap cleanup EXIT
-
 wait_http_code() {
   local url="$1" expected="$2" label="$3"
   for attempt in {1..40}; do
@@ -65,6 +59,23 @@ operator_get() {
     "http://127.0.0.1:18000$path"
 }
 
+wait_realtime_recovery() {
+  # Redis subscriptions reconnect with bounded exponential backoff (up to 30 s).
+  # Keep the API process alive and retry the end-to-end acceptance flow across
+  # that real recovery window instead of masking recovery with an API restart.
+  for attempt in {1..4}; do
+    if python tools/deployment/acceptance.py --token-file .secrets/operator_token; then
+      echo "realtime: Redis subscriber recovered"
+      return 0
+    fi
+    if [[ "$attempt" == 4 ]]; then
+      echo "realtime: subscriber did not recover within the bounded retry window" >&2
+      return 1
+    fi
+    sleep 10
+  done
+}
+
 echo "[baseline] starting production services"
 compose up -d --build --wait --wait-timeout 180 api worker
 wait_http_code http://127.0.0.1:18000/ready 200 "baseline readiness"
@@ -99,7 +110,7 @@ for attempt in {1..30}; do
   if [[ "$attempt" == 30 ]]; then echo "Redis did not recover" >&2; exit 1; fi
   sleep 2
 done
-python tools/deployment/acceptance.py --token-file .secrets/operator_token
+wait_realtime_recovery
 
 echo "[api] forcing process outage"
 compose stop api
