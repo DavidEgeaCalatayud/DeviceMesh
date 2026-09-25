@@ -9,9 +9,11 @@ from app.api.schemas.telemetry import (
     MetricSeriesPointResponse,
     MetricSeriesResponse,
     NetworkDiagnosticResponse,
+    RetentionPolicyResponse,
     TelemetryCompactionResponse,
 )
 from app.application.use_cases.network_diagnostics import NetworkDiagnostics
+from app.core.config import get_settings
 from app.infrastructure.repositories.retention import SqlAlchemyTelemetryRetentionRepository
 from app.runtime import get_telemetry_retention_repository, telemetry_repository
 
@@ -157,6 +159,18 @@ def network_diagnostics(
             for signal in result.signals
         ],
         reasons=list(result.reasons),
+    )
+
+
+@operator_router.get("/retention-policy", response_model=RetentionPolicyResponse)
+def retention_policy(_: Operator) -> RetentionPolicyResponse:
+    settings = get_settings()
+    return RetentionPolicyResponse(
+        runIntervalSeconds=settings.retention_run_interval_seconds,
+        telemetryRawDays=settings.telemetry_raw_retention_days,
+        telemetryHourlyDays=settings.telemetry_hourly_retention_days,
+        deviceEventsDays=settings.event_retention_days,
+        syntheticChecksDays=settings.synthetic_check_retention_days,
     )
 
 
