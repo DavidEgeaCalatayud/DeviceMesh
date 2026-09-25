@@ -9,7 +9,7 @@ User=devicemesh
 Group=devicemesh
 EnvironmentFile=-/etc/devicemesh/agent.env
 Environment=DEVICEMESH_CREDENTIAL_FILE=/var/lib/devicemesh/agent.credential
-ExecStart=/opt/devicemesh/venv/bin/devicemesh-linux-agent
+ExecStart=/opt/devicemesh/bin/devicemesh-linux-agent
 Restart=on-failure
 RestartSec=5s
 StateDirectory=devicemesh
