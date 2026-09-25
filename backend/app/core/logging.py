@@ -5,7 +5,7 @@ from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 
 request_id_context: ContextVar[str] = ContextVar("request_id", default="")
-log_context: ContextVar[dict[str, object]] = ContextVar("log_context", default={})
+log_context: ContextVar[dict[str, object] | None] = ContextVar("log_context", default=None)
 
 _service_name = "devicemesh"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -28,14 +28,18 @@ def sanitize_request_id(value: str | None) -> str | None:
     return value
 
 
-def bind_log_context(**fields: object) -> Token[dict[str, object]]:
+def bind_log_context(**fields: object) -> Token[dict[str, object] | None]:
     """Bind safe domain fields to the current async/thread context."""
-    current = log_context.get()
-    accepted = {key: value for key, value in fields.items() if key in _CONTEXT_FIELDS and value is not None}
+    current = log_context.get() or {}
+    accepted = {
+        key: value
+        for key, value in fields.items()
+        if key in _CONTEXT_FIELDS and value is not None
+    }
     return log_context.set({**current, **accepted})
 
 
-def reset_log_context(token: Token[dict[str, object]]) -> None:
+def reset_log_context(token: Token[dict[str, object] | None]) -> None:
     log_context.reset(token)
 
 
@@ -54,7 +58,7 @@ class JsonFormatter(logging.Formatter):
         # database URLs and bearer credentials can occur in those values.
         if record.exc_info and record.exc_info[0]:
             data["exception_type"] = record.exc_info[0].__name__
-        context = log_context.get()
+        context = log_context.get() or {}
         for field in _CONTEXT_FIELDS:
             if hasattr(record, field):
                 data[field] = getattr(record, field)
