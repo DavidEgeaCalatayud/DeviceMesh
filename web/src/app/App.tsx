@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Dashboard } from '../features/dashboard/Dashboard'
 import { DeviceDetailPage } from '../features/devices/DeviceDetailPage'
 import './platform.css'
+import './global-search.css'
 import { AdministrationPage, IncidentsPage, LoginPage, ServicesPage } from '../features/platform/PlatformPages'
 import { AuditPage } from '../features/platform/AuditPage'
+import { GlobalSearch } from '../features/platform/GlobalSearch'
 import { getToken, signOut } from '../shared/api/session'
 import { OperatorConsole } from '../features/settings/OperatorConsole'
 
@@ -42,6 +44,7 @@ export function App() {
   return <><nav className="platform-nav" aria-label="Main navigation">
     <a href="#/">Overview</a><a href="#/services">Services</a><a href="#/incidents">Incidents</a>
     <a href="#/operator">Operations & probes</a><a href="#/administration">Administration</a><a href="#/audit">Audit</a>
+    <GlobalSearch />
     {getToken() ? <button onClick={() => void signOut()}>Sign out</button> : <a href="#/login">Sign in</a>}
   </nav>{page}</>
 
