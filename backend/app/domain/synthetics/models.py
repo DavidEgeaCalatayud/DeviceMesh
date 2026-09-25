@@ -6,11 +6,14 @@ from enum import StrEnum
 class SyntheticMonitorKind(StrEnum):
     HTTP = "http"
     TCP = "tcp"
+    DNS = "dns"
+    TLS = "tls"
     ICMP = "icmp"
 
 
 class SyntheticCheckErrorKind(StrEnum):
     DNS = "dns"
+    TLS = "tls"
     TIMEOUT = "timeout"
     CONNECTION = "connection"
     HTTP_STATUS = "http_status"
@@ -138,42 +141,3 @@ class ProbeServiceState:
     success: bool
     checked_at: datetime
     latency_ms: float
-
-
-@dataclass(frozen=True, slots=True)
-class ServiceConsensus:
-    monitor_id: str
-    generated_at: datetime
-    classification: ServiceConsensusClassification
-    healthy_probes: int
-    failing_probes: int
-    states: tuple[ProbeServiceState, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ServiceIncident:
-    id: str
-    monitor_id: str
-    state: ServiceIncidentState
-    classification: ServiceIncidentClassification
-    opened_at: datetime
-    resolved_at: datetime | None
-    last_observed_at: datetime
-    failure_threshold: int
-    recovery_threshold: int
-    maintenance_active_at_open: bool
-    host_offline_at_open: bool
-    failing_probes: int
-    total_probes: int
-
-    def duration_seconds(self, now: datetime) -> float:
-        return max(0.0, ((self.resolved_at or now) - self.opened_at).total_seconds())
-
-
-@dataclass(frozen=True, slots=True)
-class ServiceIncidentSummary:
-    monitor_id: str
-    open_incident: ServiceIncident | None
-    incidents: tuple[ServiceIncident, ...]
-    resolved_count: int
-    mean_recovery_seconds: float | None
