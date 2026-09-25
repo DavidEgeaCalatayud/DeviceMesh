@@ -32,14 +32,21 @@ const pageSize = 100
 const formatDate = (value: string) => new Date(value).toLocaleString()
 const errorText = (value: unknown) => value instanceof Error ? value.message : 'Request failed'
 
-function queryString(filters: Filters, offset = 0) {
-  const query = new URLSearchParams({ limit: String(pageSize), offset: String(offset) })
+function appendFilters(query: URLSearchParams, filters: Filters) {
   for (const [key, value] of Object.entries(filters)) {
     if (!value) continue
-    if ((key === 'since' || key === 'until') && value) query.set(key, new Date(value).toISOString())
+    if (key === 'since' || key === 'until') query.set(key, new Date(value).toISOString())
     else query.set(key, value)
   }
-  return query.toString()
+  return query
+}
+
+function queryString(filters: Filters, offset = 0) {
+  return appendFilters(new URLSearchParams({ limit: String(pageSize), offset: String(offset) }), filters).toString()
+}
+
+function exportQueryString(filters: Filters) {
+  return appendFilters(new URLSearchParams(), filters).toString()
 }
 
 export function AuditPage() {
@@ -54,7 +61,6 @@ export function AuditPage() {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
     platformApi<Audit[]>(`/admin/audit-log?${query}`)
       .then(data => { if (active) { setEvents(data); setError('') } })
       .catch(reason => { if (active) setError(errorText(reason)) })
@@ -64,15 +70,33 @@ export function AuditPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setLoading(true)
     setOffset(0)
     setApplied(filters)
+  }
+
+  function clearFilters() {
+    setLoading(true)
+    setFilters(emptyFilters)
+    setApplied(emptyFilters)
+    setOffset(0)
+  }
+
+  function previousPage() {
+    setLoading(true)
+    setOffset(value => Math.max(0, value - pageSize))
+  }
+
+  function nextPage() {
+    setLoading(true)
+    setOffset(value => value + pageSize)
   }
 
   async function exportCsv() {
     setExporting(true); setError('')
     try {
-      const exportQuery = queryString(applied).replace(/(^|&)limit=100(&|$)/, '$1').replace(/(^|&)offset=0(&|$)/, '$1')
-      const response = await apiFetch(`${apiBase}/api/v1/admin/audit-log.csv?${exportQuery}`)
+      const exportQuery = exportQueryString(applied)
+      const response = await apiFetch(`${apiBase}/api/v1/admin/audit-log.csv${exportQuery ? `?${exportQuery}` : ''}`)
       if (!response.ok) throw new Error(`Export failed (${response.status})`)
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
@@ -97,13 +121,13 @@ export function AuditPage() {
       <label>Request ID<input value={filters.requestId} maxLength={64} onChange={e => setFilters(v => ({ ...v, requestId: e.target.value }))} /></label>
       <label>From<input type="datetime-local" value={filters.since} onChange={e => setFilters(v => ({ ...v, since: e.target.value }))} /></label>
       <label>To<input type="datetime-local" value={filters.until} onChange={e => setFilters(v => ({ ...v, until: e.target.value }))} /></label>
-      <div className="platform-actions"><button type="submit">Apply filters</button><button type="button" onClick={() => { setFilters(emptyFilters); setApplied(emptyFilters); setOffset(0) }}>Clear</button><button type="button" disabled={exporting} onClick={() => void exportCsv()}>{exporting ? 'Exporting…' : 'Export CSV'}</button></div>
+      <div className="platform-actions"><button type="submit">Apply filters</button><button type="button" onClick={clearFilters}>Clear</button><button type="button" disabled={exporting} onClick={() => void exportCsv()}>{exporting ? 'Exporting…' : 'Export CSV'}</button></div>
     </form>
     {loading && <p role="status">Loading audit events…</p>}
     {!loading && events.length === 0 && <p>No audit events match this view.</p>}
     <div className="table-scroll"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Source</th><th>Request</th><th>Metadata</th></tr></thead><tbody>{events.map(event => <tr key={event.id}>
       <td>{formatDate(event.timestamp)}</td><td>{event.actor}</td><td>{event.action}</td><td>{event.resource}</td><td>{event.sourceIp ?? '—'}</td><td><code>{event.requestId ?? '—'}</code></td><td><details><summary>Details</summary><pre>{JSON.stringify(event.metadata, null, 2)}</pre></details></td>
     </tr>)}</tbody></table></div>
-    <div className="platform-actions"><button disabled={offset === 0 || loading} onClick={() => setOffset(value => Math.max(0, value - pageSize))}>Previous</button><span>{offset + 1}–{offset + events.length}</span><button disabled={events.length < pageSize || loading} onClick={() => setOffset(value => value + pageSize)}>Next</button></div>
+    <div className="platform-actions"><button disabled={offset === 0 || loading} onClick={previousPage}>Previous</button><span>{offset + 1}–{offset + events.length}</span><button disabled={events.length < pageSize || loading} onClick={nextPage}>Next</button></div>
   </main>
 }
