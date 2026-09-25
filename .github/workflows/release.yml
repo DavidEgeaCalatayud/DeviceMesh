@@ -6,20 +6,87 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - "backend/**"
+      - "web/**"
       - "agents/windows/**"
       - "agents/linux/**"
+      - "agents/macos/**"
+      - "agents/probe/**"
       - ".github/workflows/release.yml"
 
 permissions:
   contents: read
 
 jobs:
-  backend-image:
-    if: github.event_name != 'pull_request'
+  container-images:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t devicemesh-api:${GITHUB_REF_NAME} backend
+      - name: Resolve image tags
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="validation-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Build production images
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner='${{ steps.image.outputs.owner }}'
+          tag='${{ steps.image.outputs.tag }}'
+          docker build -t "ghcr.io/$owner/devicemesh-api:$tag" backend
+          docker build -t "ghcr.io/$owner/devicemesh-web:$tag" web
+          docker build -t "ghcr.io/$owner/devicemesh-probe:$tag" agents/probe
+      - name: Publish tagged images to GHCR
+        if: github.ref_type == 'tag'
+        id: publish
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner='${{ steps.image.outputs.owner }}'
+          tag='${{ steps.image.outputs.tag }}'
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for image in devicemesh-api devicemesh-web devicemesh-probe; do
+            ref="ghcr.io/$owner/$image:$tag"
+            docker push "$ref"
+            digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$ref" | sed 's/^.*@//')"
+            echo "$image=$digest" >> "$GITHUB_OUTPUT"
+          done
+      - name: Attest API image provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ steps.image.outputs.owner }}/devicemesh-api
+          subject-digest: ${{ steps.publish.outputs.devicemesh-api }}
+          push-to-registry: true
+      - name: Attest web image provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ steps.image.outputs.owner }}/devicemesh-web
+          subject-digest: ${{ steps.publish.outputs.devicemesh-web }}
+          push-to-registry: true
+      - name: Attest probe image provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ steps.image.outputs.owner }}/devicemesh-probe
+          subject-digest: ${{ steps.publish.outputs.devicemesh-probe }}
+          push-to-registry: true
 
   windows-agent:
     runs-on: windows-latest
@@ -52,6 +119,7 @@ jobs:
           dotnet publish agents/windows/src/DeviceMesh.Agent.Host/DeviceMesh.Agent.Host.csproj `
             -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+            -p:Version=${{ steps.version.outputs.version }} `
             -o artifacts/windows-agent/publish
       - name: Build MSI
         shell: pwsh
@@ -66,7 +134,7 @@ jobs:
             ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } |
             Set-Content artifacts/windows-agent/SHA256SUMS
       - name: Attest MSI build provenance
-        if: github.event_name != 'pull_request'
+        if: github.ref_type == 'tag'
         uses: actions/attest@v4
         with:
           subject-path: artifacts/windows-agent/*.msi
@@ -90,7 +158,7 @@ jobs:
       - name: Resolve package version
         id: version
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             version="${GITHUB_REF_NAME#v}"
           else
             version="0.2.${GITHUB_RUN_NUMBER}"
@@ -116,7 +184,7 @@ jobs:
       - name: Build deb and rpm
         run: bash agents/linux/package/build.sh '${{ steps.version.outputs.version }}' artifacts/linux-agent
       - name: Attest Linux package provenance
-        if: github.event_name != 'pull_request'
+        if: github.ref_type == 'tag'
         uses: actions/attest@v4
         with:
           subject-path: |
@@ -129,3 +197,120 @@ jobs:
             artifacts/linux-agent/*.deb
             artifacts/linux-agent/*.rpm
             artifacts/linux-agent/SHA256SUMS
+
+  macos-agent:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        working-directory: agents/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.1.${GITHUB_RUN_NUMBER}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package version must be numeric major.minor.patch: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build and test macOS agent
+        run: |
+          swift build -c release -Xswiftc -warnings-as-errors
+          swift test
+          plutil -lint launchd/io.github.davidegeacalatayud.devicemesh.macos-agent.plist
+      - name: Package macOS agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          root="../../artifacts/macos-agent/DeviceMesh-Mac-Agent-$version"
+          mkdir -p "$root"
+          cp .build/release/devicemesh-macos-agent "$root/"
+          cp launchd/io.github.davidegeacalatayud.devicemesh.macos-agent.plist "$root/"
+          cp README.md "$root/README.md"
+          chmod 0755 "$root/devicemesh-macos-agent"
+          tar -C ../../artifacts/macos-agent -czf "../../artifacts/macos-agent/DeviceMesh-Mac-Agent-$version-macos.tar.gz" "DeviceMesh-Mac-Agent-$version"
+          cd ../../artifacts/macos-agent
+          shasum -a 256 "DeviceMesh-Mac-Agent-$version-macos.tar.gz" > SHA256SUMS
+      - name: Attest macOS package provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@v4
+        with:
+          subject-path: artifacts/macos-agent/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-agent-package
+          path: |
+            artifacts/macos-agent/*.tar.gz
+            artifacts/macos-agent/SHA256SUMS
+
+  probe-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Test probe
+        working-directory: agents/probe
+        run: |
+          pip install -e ".[dev]"
+          ruff check devicemesh_probe tests
+          pytest -q
+      - name: Build probe wheel
+        working-directory: agents/probe
+        run: |
+          python -m pip install 'build>=1.2,<2'
+          python -m build --wheel --outdir ../../artifacts/probe
+          cd ../../artifacts/probe
+          sha256sum *.whl > SHA256SUMS
+      - name: Attest probe package provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@v4
+        with:
+          subject-path: artifacts/probe/*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributed-probe-package
+          path: |
+            artifacts/probe/*.whl
+            artifacts/probe/SHA256SUMS
+
+  github-release:
+    if: github.ref_type == 'tag'
+    needs: [container-images, windows-agent, linux-agent, macos-agent, probe-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-*"
+          path: release-artifacts
+          merge-multiple: false
+      - name: Create GitHub Release and upload distributables
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find release-artifacts -type f \( -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.whl' -o -name 'SHA256SUMS' \) -print | sort)
+          if [[ ${#files[@]} -lt 5 ]]; then
+            echo "Expected release assets from all production-capable package jobs" >&2
+            find release-artifacts -type f -print >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --verify-tag --generate-notes --title "DeviceMesh $GITHUB_REF_NAME"
