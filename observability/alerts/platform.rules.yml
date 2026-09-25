@@ -1,0 +1,116 @@
+groups:
+  - name: devicemesh-platform-availability
+    rules:
+      - alert: DeviceMeshApiUnavailable
+        expr: up{job="devicemesh-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: DeviceMesh API is not being scraped
+          description: Prometheus has been unable to scrape the DeviceMesh API for at least two minutes.
+
+      - alert: DeviceMeshWorkerUnavailable
+        expr: up{job="devicemesh-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: worker
+        annotations:
+          summary: DeviceMesh scheduler worker is not being scraped
+          description: Prometheus has been unable to scrape the independent scheduler worker for at least two minutes.
+
+      - alert: DeviceMeshSchedulerWithoutLeader
+        expr: (sum(devicemesh_worker_leader) < 1) and (sum(up{job="devicemesh-worker"}) > 0)
+        for: 2m
+        labels:
+          severity: critical
+          component: worker
+        annotations:
+          summary: No DeviceMesh scheduler leader is active
+          description: Worker metrics are reachable, but no process reports ownership of the scheduler advisory lock.
+
+  - name: devicemesh-worker-freshness
+    rules:
+      - alert: DeviceMeshSyntheticWorkerStalled
+        expr: time() - max(devicemesh_worker_last_success_timestamp_seconds{job="synthetics"}) > 120
+        for: 2m
+        labels:
+          severity: warning
+          component: synthetics
+        annotations:
+          summary: Synthetic scheduling has stopped making progress
+          description: No successful synthetic worker iteration has been recorded for more than two minutes.
+
+      - alert: DeviceMeshOfflineSweepStalled
+        expr: time() - max(devicemesh_worker_last_success_timestamp_seconds{job="offline"}) > 180
+        for: 2m
+        labels:
+          severity: warning
+          component: inventory
+        annotations:
+          summary: Offline-device sweeps have stopped making progress
+          description: The offline-device worker has not completed successfully for more than three minutes.
+
+      - alert: DeviceMeshRetentionWorkerStalled
+        expr: time() - max(devicemesh_worker_last_success_timestamp_seconds{job="retention"}) > 5400
+        for: 5m
+        labels:
+          severity: warning
+          component: retention
+        annotations:
+          summary: Retention enforcement is stale
+          description: No successful retention-policy iteration has been recorded for more than ninety minutes.
+
+  - name: devicemesh-api-quality
+    rules:
+      - record: devicemesh:http_error_ratio5m
+        expr: |
+          sum(rate(devicemesh_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(devicemesh_http_requests_total[5m])), 0.001)
+
+      - record: devicemesh:http_request_p95_seconds5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(devicemesh_http_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: devicemesh:db_query_p95_seconds5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(devicemesh_db_query_duration_seconds_bucket[5m]))
+          )
+
+      - alert: DeviceMeshElevatedHttpErrors
+        expr: devicemesh:http_error_ratio5m > 0.05 and sum(rate(devicemesh_http_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: DeviceMesh API 5xx ratio is elevated
+          description: More than five percent of API requests have returned 5xx responses for five minutes.
+
+      - alert: DeviceMeshSlowHttpRequests
+        expr: devicemesh:http_request_p95_seconds5m > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: DeviceMesh API p95 latency is high
+          description: The five-minute HTTP p95 has remained above one second for ten minutes.
+
+      - alert: DeviceMeshSlowDatabaseQueries
+        expr: devicemesh:db_query_p95_seconds5m > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: DeviceMesh database query p95 is high
+          description: The five-minute database-query p95 has remained above 500 ms for ten minutes.

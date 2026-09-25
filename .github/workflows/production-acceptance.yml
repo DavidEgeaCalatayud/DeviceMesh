@@ -1,7 +1,7 @@
 name: Production acceptance
 on:
   pull_request:
-    paths: ["backend/**", "web/**", "infra/**", "tools/deployment/**", ".github/workflows/production-acceptance.yml"]
+    paths: ["backend/**", "web/**", "infra/**", "observability/**", "tools/deployment/**", ".github/workflows/production-acceptance.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -49,6 +49,8 @@ jobs:
             if [[ "$attempt" == 30 ]]; then exit 1; fi
             sleep 2
           done
+          curl --fail --silent 'http://127.0.0.1:9090/api/v1/rules' \
+            | python -c 'import json,sys; d=json.load(sys.stdin); names={r["name"] for g in d["data"]["groups"] for r in g["rules"]}; expected={"DeviceMeshApiUnavailable","DeviceMeshWorkerUnavailable","DeviceMeshSchedulerWithoutLeader","DeviceMeshSyntheticWorkerStalled","DeviceMeshElevatedHttpErrors","devicemesh:http_error_ratio5m"}; missing=expected-names; assert d["status"] == "success" and not missing, f"missing rules: {sorted(missing)}"'
           for attempt in {1..30}; do
             dashboards="$(curl --fail --silent http://127.0.0.1:3000/api/search?query=DeviceMesh -u admin:$(cat .secrets/grafana_admin_password) | python -c 'import json,sys; print(len(json.load(sys.stdin)))')"
             if [[ "$dashboards" -ge 2 ]]; then break; fi
