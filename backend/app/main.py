@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.dependencies.security import human_access_gate, require_human
+from app.api.mutation_audit import MutationAuditMiddleware
 from app.api.routers import (
     agents,
     alerts,
@@ -92,6 +93,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="DeviceMesh API", version=SERVER_VERSION, lifespan=lifespan,
               dependencies=[Depends(human_access_gate)])
 app.add_middleware(RequestMetricsMiddleware)
+app.add_middleware(MutationAuditMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
