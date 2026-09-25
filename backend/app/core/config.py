@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     synthetic_probe_id: str = "backend-probe"
     synthetic_probe_offline_after_seconds: int = 120
     synthetic_probe_work_lease_seconds: int = 60
+    retention_run_interval_seconds: int = Field(default=3600, ge=60, le=86400)
+    telemetry_raw_retention_days: int = Field(default=7, ge=1, le=90)
+    telemetry_hourly_retention_days: int = Field(default=365, ge=30, le=3650)
+    event_retention_days: int = Field(default=90, ge=7, le=3650)
+    synthetic_check_retention_days: int = Field(default=90, ge=7, le=3650)
 
     @model_validator(mode="after")
     def validate_runtime(self) -> Self:
@@ -56,10 +61,14 @@ class Settings(BaseSettings):
         for field in (
             "device_offline_after_seconds", "device_offline_sweep_interval_seconds",
             "synthetic_probe_sweep_interval_seconds", "synthetic_probe_batch_size",
-            "synthetic_probe_work_lease_seconds",
+            "synthetic_probe_work_lease_seconds", "retention_run_interval_seconds",
+            "telemetry_raw_retention_days", "telemetry_hourly_retention_days",
+            "event_retention_days", "synthetic_check_retention_days",
         ):
             if getattr(self, field) <= 0:
                 raise ValueError(f"{field} must be positive")
+        if self.telemetry_hourly_retention_days <= self.telemetry_raw_retention_days:
+            raise ValueError("telemetry_hourly_retention_days must be greater than telemetry_raw_retention_days")
         return self
 
 
