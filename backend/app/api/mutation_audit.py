@@ -3,7 +3,7 @@ import logging
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.infrastructure.database import SessionFactory
+from app.api.dependencies import security
 from app.infrastructure.security.human_auth import audit
 
 logger = logging.getLogger("devicemesh.audit")
@@ -50,7 +50,8 @@ class MutationAuditMiddleware:
         request_id = scope.get("state", {}).get("request_id")
         route = getattr(scope.get("route"), "path", path)
         try:
-            with SessionFactory.begin() as session:
+            auth = security.get_human_auth_service()
+            with auth.sessions.begin() as session:
                 audit(
                     session,
                     str(actor),
