@@ -7,7 +7,16 @@ from starlette.responses import Response
 from app.api.dependencies.security import require_operator
 from app.core.config import get_settings
 from app.core.metrics import agents_online, incidents_open, probes_online
-from app.core.version import PROTOCOL_VERSION, SCHEMA_REVISION, SERVER_VERSION
+from app.core.version import (
+    API_VERSION,
+    COMPONENT_PROTOCOL_COMPATIBILITY,
+    MAX_PROTOCOL_VERSION,
+    MIN_PROTOCOL_VERSION,
+    PROTOCOL_VERSION,
+    SCHEMA_REVISION,
+    SERVER_VERSION,
+    SUPPORTED_PROTOCOL_VERSIONS,
+)
 from app.infrastructure.database import engine
 
 router = APIRouter(tags=["health"])
@@ -32,8 +41,19 @@ def ready() -> dict[str, str]:
 
 @router.get("/api/v1/system/version")
 def system_version() -> dict[str, object]:
-    return {"serverVersion": SERVER_VERSION, "protocolVersion": PROTOCOL_VERSION,
-            "supportedProtocolVersions": [1], "schemaRevision": SCHEMA_REVISION}
+    return {
+        "serverVersion": SERVER_VERSION,
+        "apiVersion": API_VERSION,
+        "protocolVersion": PROTOCOL_VERSION,
+        "supportedProtocolVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
+        "minProtocolVersion": MIN_PROTOCOL_VERSION,
+        "maxProtocolVersion": MAX_PROTOCOL_VERSION,
+        "schemaRevision": SCHEMA_REVISION,
+        "componentCompatibility": {
+            component: {"protocolVersions": list(versions)}
+            for component, versions in COMPONENT_PROTOCOL_COMPATIBILITY.items()
+        },
+    }
 
 
 @router.get("/metrics", dependencies=[Depends(require_operator)], include_in_schema=False)
