@@ -32,8 +32,19 @@ jobs:
         run: pip install -e ".[dev]"
       - working-directory: backend
         run: alembic upgrade head
-      - working-directory: backend
-        run: ruff check app tests
+      - id: ruff
+        working-directory: backend
+        run: |
+          set +e
+          ruff check app tests --output-format=json > ../ruff-report.json
+          status=$?
+          cat ../ruff-report.json
+          exit "$status"
+      - if: failure() && steps.ruff.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-ruff-report
+          path: ruff-report.json
       - working-directory: backend
         run: mypy app
       - working-directory: backend
