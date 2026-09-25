@@ -21,6 +21,7 @@ from app.api.routers import (
     operational_health,
     operations,
     platform,
+    probe_credentials,
     synthetics,
     telemetry,
 )
@@ -116,6 +117,7 @@ app.include_router(network.router)
 app.include_router(operational_health.router)
 app.include_router(operations.router)
 app.include_router(synthetics.router)
+app.include_router(probe_credentials.router)
 
 
 @app.websocket("/ws/events")
