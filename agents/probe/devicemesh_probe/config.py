@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from devicemesh_probe.discovery import DiscoveryScope
 
@@ -49,12 +50,21 @@ class ProbeConfig:
         if not 1 <= concurrency <= 32:
             raise ValueError("DEVICEMESH_PROBE_CONCURRENCY must be between 1 and 32")
 
+        token = os.environ.get("DEVICEMESH_PROBE_TOKEN") or None
+        token_file = os.environ.get("DEVICEMESH_PROBE_TOKEN_FILE") or None
+        if token and token_file:
+            raise ValueError("configure only one of DEVICEMESH_PROBE_TOKEN or DEVICEMESH_PROBE_TOKEN_FILE")
+        if token_file:
+            token = Path(token_file).read_text(encoding="utf-8").strip()
+            if not token:
+                raise ValueError("DEVICEMESH_PROBE_TOKEN_FILE is empty")
+
         return cls(
             server_url=os.environ.get("DEVICEMESH_SERVER_URL", "http://localhost:8000"),
             source=os.environ.get("DEVICEMESH_PROBE_SOURCE", "network-probe"),
             scopes=scopes,
             tcp_ports=ports,
-            synthetic_token=os.environ.get("DEVICEMESH_PROBE_TOKEN") or None,
+            synthetic_token=token,
             synthetic_poll_seconds=poll_seconds,
             max_concurrent_checks=concurrency,
             result_queue_path=os.environ.get("DEVICEMESH_PROBE_QUEUE_PATH", "data/probe-results.sqlite3"),
@@ -69,5 +79,5 @@ class ProbeConfig:
 
     def require_synthetic_token(self) -> str:
         if not self.synthetic_token:
-            raise ValueError("DEVICEMESH_PROBE_TOKEN is required for synthetic probe mode")
+            raise ValueError("DEVICEMESH_PROBE_TOKEN or DEVICEMESH_PROBE_TOKEN_FILE is required for synthetic probe mode")
         return self.synthetic_token
