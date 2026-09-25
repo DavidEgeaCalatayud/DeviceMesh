@@ -1,6 +1,6 @@
 # DeviceMesh Linux Agent
 
-The Linux agent is a Python 3.12 agent that implements the same DeviceMesh V1 protocol used by the Windows agent:
+The Linux agent is a Python 3.12 agent that implements the same DeviceMesh V1 protocol used by the Windows and macOS agents:
 
 - enrollment and persistent agent credentials
 - authenticated heartbeat with host/network identity
@@ -64,37 +64,41 @@ The Linux V1.1 executor accepts only:
 - `inventory.refresh`
 - `agent.health_check`
 
-The V1.1 executor rejects operation arguments. There is no shell, subprocess or executable-path operation.
+The executor rejects operation arguments. There is no shell, subprocess or executable-path operation.
 
-## systemd
+## Native packages
 
-A hardened reference unit is available at `systemd/devicemesh-agent.service`.
-
-One possible installation layout is:
+Release CI builds `.deb` and `.rpm` artifacts plus `SHA256SUMS`. Packages vendor the Python dependencies and install this layout:
 
 ```text
-/opt/devicemesh/venv/        Python virtual environment
-/etc/devicemesh/agent.env    non-secret configuration + temporary enrollment token
-/var/lib/devicemesh/         persistent agent credential
+/opt/devicemesh/lib/                         vendored Python package/dependencies
+/opt/devicemesh/bin/devicemesh-linux-agent stable launcher
+/etc/devicemesh/agent.env.example           configuration template
+/etc/devicemesh/agent.env                   operator-managed configuration
+/var/lib/devicemesh/                        persistent credential/state
+/etc/systemd/system/devicemesh-agent.service hardened systemd unit
 ```
 
-Example `/etc/devicemesh/agent.env`:
+Install on Debian/Ubuntu:
 
 ```bash
-DEVICEMESH_SERVER=https://devicemesh.example.internal
-DEVICEMESH_AGENT_ID=warehouse-linux-01
-DEVICEMESH_INTERVAL_SECONDS=30
-DEVICEMESH_ENROLLMENT_TOKEN=<one-time-token>
-```
-
-Install the package into the service virtual environment and then enable the unit:
-
-```bash
-python3.12 -m venv /opt/devicemesh/venv
-/opt/devicemesh/venv/bin/pip install /path/to/DeviceMesh/agents/linux/agent
-sudo cp systemd/devicemesh-agent.service /etc/systemd/system/
-sudo systemctl daemon-reload
+sudo apt install ./devicemesh-linux-agent_<version>_amd64.deb
+sudo cp /etc/devicemesh/agent.env.example /etc/devicemesh/agent.env
+sudo editor /etc/devicemesh/agent.env
 sudo systemctl enable --now devicemesh-agent
 ```
 
-After successful enrollment, remove the one-time token from `/etc/devicemesh/agent.env` and restart the service.
+Install on RPM-family systems:
+
+```bash
+sudo rpm -U ./devicemesh-linux-agent-<version>-1.x86_64.rpm
+sudo cp /etc/devicemesh/agent.env.example /etc/devicemesh/agent.env
+sudo editor /etc/devicemesh/agent.env
+sudo systemctl enable --now devicemesh-agent
+```
+
+The package deliberately does not auto-start an unconfigured agent. After successful enrollment, remove the one-time token from `/etc/devicemesh/agent.env` and restart the service.
+
+## Manual systemd installation
+
+The reference unit expects `/opt/devicemesh/bin/devicemesh-linux-agent`. For local/manual development installations you can provide that launcher yourself or use the native package. The service runs as the dedicated `devicemesh` user and uses systemd hardening (`ProtectSystem`, `NoNewPrivileges`, capability removal and a dedicated writable state directory).
