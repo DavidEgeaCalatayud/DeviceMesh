@@ -90,7 +90,7 @@ export function GlobalSearch() {
       kind: 'Service' as const,
       title: service.name,
       detail: `${service.environment} · ${service.criticality} · ${service.owner || 'Unassigned owner'}`,
-      href: `#/services?service=${encodeURIComponent(service.id)}`,
+      href: '#/services',
       searchable: [service.id, service.name, service.owner, service.environment, service.criticality]
         .join(' ').toLocaleLowerCase(),
     }))
