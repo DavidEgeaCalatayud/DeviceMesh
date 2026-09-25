@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
+using System.Text.Json;
 using DeviceMesh.Agent.Application.Telemetry;
 using DeviceMesh.Agent.Infrastructure.Identity;
 using DeviceMesh.Agent.Protocol;
@@ -157,14 +159,13 @@ public sealed class AgentWorker(
         string credential,
         CancellationToken cancellationToken)
     {
-        if (operation.Arguments.Count != 0)
-        {
-            return Failure("operation arguments are not supported by the Windows V1.1 executor");
-        }
-
         switch (operation.OperationType)
         {
             case RemoteOperationTypes.TelemetryCollect:
+                if (operation.Arguments.Count != 0)
+                {
+                    return Failure("telemetry.collect does not accept arguments");
+                }
                 await PublishTelemetryAsync(client, settings, credential, cancellationToken);
                 return Success(new Dictionary<string, object?>
                 {
@@ -172,6 +173,10 @@ public sealed class AgentWorker(
                 });
 
             case RemoteOperationTypes.InventoryRefresh:
+                if (operation.Arguments.Count != 0)
+                {
+                    return Failure("inventory.refresh does not accept arguments");
+                }
                 await PublishHeartbeatAsync(client, settings, credential, cancellationToken);
                 return Success(new Dictionary<string, object?>
                 {
@@ -179,6 +184,10 @@ public sealed class AgentWorker(
                 });
 
             case RemoteOperationTypes.AgentHealthCheck:
+                if (operation.Arguments.Count != 0)
+                {
+                    return Failure("agent.health_check does not accept arguments");
+                }
                 return Success(new Dictionary<string, object?>
                 {
                     ["agentId"] = settings.AgentId,
@@ -187,9 +196,90 @@ public sealed class AgentWorker(
                     ["platform"] = "windows"
                 });
 
+            case RemoteOperationTypes.NetworkDnsLookup:
+                return await ExecuteDnsLookupAsync(operation.Arguments, cancellationToken);
+
+            case RemoteOperationTypes.NetworkRouteSnapshot:
+                if (operation.Arguments.Count != 0)
+                {
+                    return Failure("network.route_snapshot does not accept arguments");
+                }
+                return Success(CaptureRouteSnapshot());
+
             default:
                 return Failure($"unsupported remote operation type: {operation.OperationType}");
         }
+    }
+
+    private static async Task<RemoteOperationCompletion> ExecuteDnsLookupAsync(
+        IReadOnlyDictionary<string, JsonElement> arguments,
+        CancellationToken cancellationToken)
+    {
+        if (arguments.Count != 1 ||
+            !arguments.TryGetValue("hostname", out var hostnameElement) ||
+            hostnameElement.ValueKind != JsonValueKind.String)
+        {
+            return Failure("network.dns_lookup requires only a hostname string argument");
+        }
+
+        var hostname = hostnameElement.GetString()?.Trim();
+        if (string.IsNullOrWhiteSpace(hostname) || hostname.Length > 253)
+        {
+            return Failure("hostname must contain between 1 and 253 characters");
+        }
+
+        var addresses = await Dns.GetHostAddressesAsync(hostname, cancellationToken);
+        return Success(new Dictionary<string, object?>
+        {
+            ["hostname"] = hostname,
+            ["addresses"] = addresses
+                .Select(address => address.ToString())
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .Take(32)
+                .ToArray(),
+            ["resolvedAt"] = DateTimeOffset.UtcNow
+        });
+    }
+
+    private static Dictionary<string, object?> CaptureRouteSnapshot()
+    {
+        var interfaces = new List<Dictionary<string, object?>>();
+        foreach (var network in NetworkInterface.GetAllNetworkInterfaces()
+                     .Where(item => item.OperationalStatus == OperationalStatus.Up &&
+                                    item.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                     .Take(64))
+        {
+            try
+            {
+                var properties = network.GetIPProperties();
+                interfaces.Add(new Dictionary<string, object?>
+                {
+                    ["id"] = network.Id,
+                    ["name"] = network.Name,
+                    ["type"] = network.NetworkInterfaceType.ToString(),
+                    ["addresses"] = properties.UnicastAddresses
+                        .Select(address => address.Address.ToString())
+                        .Take(32)
+                        .ToArray(),
+                    ["gateways"] = properties.GatewayAddresses
+                        .Select(gateway => gateway.Address.ToString())
+                        .Where(address => address != "0.0.0.0" && address != "::")
+                        .Take(16)
+                        .ToArray()
+                });
+            }
+            catch (NetworkInformationException)
+            {
+                // A virtual adapter may disappear between enumeration and inspection.
+            }
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["capturedAt"] = DateTimeOffset.UtcNow,
+            ["interfaces"] = interfaces
+        };
     }
 
     private static RemoteOperationCompletion Success(IReadOnlyDictionary<string, object?> result) =>
