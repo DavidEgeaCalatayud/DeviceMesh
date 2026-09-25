@@ -32,6 +32,14 @@ class TelemetryCompactionResponse(BaseModel):
     rawRetentionDays: int
 
 
+class RetentionPolicyResponse(BaseModel):
+    runIntervalSeconds: int
+    telemetryRawDays: int
+    telemetryHourlyDays: int
+    deviceEventsDays: int
+    syntheticChecksDays: int
+
+
 class DiagnosticSignalResponse(BaseModel):
     name: str
     latest: float
