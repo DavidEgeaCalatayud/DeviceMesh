@@ -19,7 +19,11 @@ from app.core.metrics import (
     worker_runs,
 )
 from app.infrastructure.database import engine
-from app.runtime import offline_device_sweeper, synthetic_probe_worker, telemetry_retention_repository
+from app.runtime import (
+    offline_device_sweeper,
+    synthetic_probe_worker,
+    telemetry_retention_repository,
+)
 
 logger = logging.getLogger(__name__)
 
