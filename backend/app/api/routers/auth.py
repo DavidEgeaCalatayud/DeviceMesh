@@ -1,10 +1,13 @@
+import csv
+import io
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import Select
 
 from app.api.dependencies.security import get_human_auth_service, require_admin, require_human
 from app.infrastructure.security.human_auth import (
@@ -107,12 +110,99 @@ def disable_user(user_id: str, body: UserState, admin: Admin, auth: Auth) -> dic
     return {"id": user_id, "enabled": body.enabled}
 
 
+def _audit_query(
+    *,
+    actor: str,
+    action: str,
+    resource: str,
+    search: str,
+    source_ip: str,
+    request_id: str,
+    since: datetime | None,
+    until: datetime | None,
+) -> Select[AuditRow]:
+    query = select(AuditRow)
+    if actor:
+        query = query.where(AuditRow.actor == actor)
+    if action:
+        query = query.where(AuditRow.action == action)
+    if resource:
+        query = query.where(AuditRow.resource.icontains(resource, autoescape=True))
+    if source_ip:
+        query = query.where(AuditRow.source_ip == source_ip)
+    if request_id:
+        query = query.where(AuditRow.request_id == request_id)
+    if search:
+        query = query.where(or_(
+            AuditRow.actor.icontains(search, autoescape=True),
+            AuditRow.action.icontains(search, autoescape=True),
+            AuditRow.resource.icontains(search, autoescape=True),
+        ))
+    if since is not None:
+        query = query.where(AuditRow.timestamp >= since)
+    if until is not None:
+        query = query.where(AuditRow.timestamp <= until)
+    return query.order_by(AuditRow.timestamp.desc(), AuditRow.id)
+
+
+def _audit_view(row: AuditRow) -> dict[str, object]:
+    return {"id": row.id, "actor": row.actor, "action": row.action, "resource": row.resource,
+            "timestamp": row.timestamp, "sourceIp": row.source_ip,
+            "requestId": row.request_id, "metadata": row.details}
+
+
 @router.get("/admin/audit-log")
-def audit_log(admin: Admin, auth: Auth, limit: Annotated[int, Query(ge=1, le=200)] = 100,
-              offset: Annotated[int, Query(ge=0, le=100000)] = 0) -> list[dict[str, object]]:
+def audit_log(
+    admin: Admin,
+    auth: Auth,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0, le=100000)] = 0,
+    actor: Annotated[str, Query(max_length=128)] = "",
+    action: Annotated[str, Query(max_length=128)] = "",
+    resource: Annotated[str, Query(max_length=256)] = "",
+    search: Annotated[str, Query(max_length=256)] = "",
+    sourceIp: Annotated[str, Query(max_length=64)] = "",
+    requestId: Annotated[str, Query(max_length=64)] = "",
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> list[dict[str, object]]:
+    del admin
+    if since is not None and until is not None and since > until:
+        raise HTTPException(422, "since must be before until")
+    query = _audit_query(actor=actor, action=action, resource=resource, search=search,
+                         source_ip=sourceIp, request_id=requestId, since=since, until=until)
     with auth.sessions() as session:
-        return [{"id": r.id, "actor": r.actor, "action": r.action, "resource": r.resource,
-                 "timestamp": r.timestamp, "sourceIp": r.source_ip,
-                 "requestId": r.request_id, "metadata": r.details}
-                for r in session.scalars(select(AuditRow).order_by(AuditRow.timestamp.desc(), AuditRow.id)
-                                         .limit(limit).offset(offset))]
+        return [_audit_view(row) for row in session.scalars(query.limit(limit).offset(offset))]
+
+
+@router.get("/admin/audit-log.csv")
+def export_audit_log(
+    admin: Admin,
+    auth: Auth,
+    actor: Annotated[str, Query(max_length=128)] = "",
+    action: Annotated[str, Query(max_length=128)] = "",
+    resource: Annotated[str, Query(max_length=256)] = "",
+    search: Annotated[str, Query(max_length=256)] = "",
+    sourceIp: Annotated[str, Query(max_length=64)] = "",
+    requestId: Annotated[str, Query(max_length=64)] = "",
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> Response:
+    del admin
+    if since is not None and until is not None and since > until:
+        raise HTTPException(422, "since must be before until")
+    query = _audit_query(actor=actor, action=action, resource=resource, search=search,
+                         source_ip=sourceIp, request_id=requestId, since=since, until=until)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "actor", "action", "resource", "source_ip", "request_id", "metadata"])
+    with auth.sessions() as session:
+        for row in session.scalars(query.limit(10000)):
+            writer.writerow([row.timestamp.isoformat(), row.actor, row.action, row.resource,
+                             row.source_ip or "", row.request_id or "", str(row.details)])
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="devicemesh-audit-log.csv"',
+                 "Cache-Control": "no-store"},
+    )
