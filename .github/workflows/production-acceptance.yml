@@ -1,0 +1,56 @@
+name: Production acceptance
+on:
+  pull_request:
+    paths: ["backend/**", "web/**", "infra/**", "tools/deployment/**", ".github/workflows/production-acceptance.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  restore-and-realtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Prepare isolated configuration
+        run: |
+          cp .env.production.example .env.production
+          sed -i 's/mesh.example.com/mesh.ci.invalid/g' .env.production
+          python tools/deployment/config.py --init-secrets
+          cat > infra/docker/acceptance.override.yml <<'YAML'
+          services:
+            api:
+              ports: ["127.0.0.1:18000:8000"]
+            web:
+              ports: ["127.0.0.1:15173:8080"]
+          YAML
+      - name: Build and start migrated production services
+        run: |
+          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/acceptance.override.yml up -d --build --wait --wait-timeout 180 api worker web
+      - name: Authenticated enrollment to realtime inventory
+        run: |
+          pip install httpx websockets
+          python tools/deployment/acceptance.py --token-file .secrets/operator_token
+          curl --fail http://localhost:15173/
+      - name: Restore a production-format backup into an isolated database
+        run: tools/deployment/verify-backup.sh
+      - name: Restart and verify persisted canary
+        run: |
+          tools/deployment/compose.sh restart api worker
+          for attempt in {1..30}; do
+            if curl --fail http://localhost:18000/ready; then break; fi
+            sleep 2
+          done
+          python - <<'PY'
+          from pathlib import Path
+          import httpx
+          token = Path('.secrets/operator_token').read_text().strip()
+          response = httpx.get('http://localhost:18000/api/v1/service-catalog', headers={'Authorization': 'Bearer ' + token})
+          response.raise_for_status()
+          assert any(service['name'] == 'acceptance-canary' for service in response.json())
+          PY
+      - if: failure()
+        run: tools/deployment/compose.sh logs --tail 100
+      - if: always()
+        run: tools/deployment/compose.sh down -v

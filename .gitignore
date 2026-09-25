@@ -2,6 +2,11 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
+.secrets/
+backups/
+*.egg-info/
+release-bundle/
 
 # Python
 __pycache__/
@@ -48,3 +53,5 @@ firmware/esp32/sdkconfig
 # Runtime
 data/
 logs/
+
+*.tsbuildinfo

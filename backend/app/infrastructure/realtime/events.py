@@ -1,7 +1,16 @@
 import asyncio
+from collections.abc import AsyncIterator
+from typing import Protocol
 
 from app.application.ports import EventRepository
 from app.domain.events.models import DeviceEvent
+
+
+class EventPublisher(Protocol):
+    def bind(self, loop: asyncio.AbstractEventLoop) -> None: ...
+    def unbind(self) -> None: ...
+    def publish(self, event: DeviceEvent) -> None: ...
+    def events(self) -> AsyncIterator[DeviceEvent]: ...
 
 
 class InProcessEventPublisher:
@@ -30,9 +39,13 @@ class InProcessEventPublisher:
             raise RuntimeError("event publisher is not bound to an application loop")
         return await queue.get()
 
+    async def events(self) -> AsyncIterator[DeviceEvent]:
+        while True:
+            yield await self.receive()
+
 
 class PublishingEventRepository:
-    def __init__(self, repository: EventRepository, publisher: InProcessEventPublisher) -> None:
+    def __init__(self, repository: EventRepository, publisher: EventPublisher) -> None:
         self._repository = repository
         self._publisher = publisher
 

@@ -22,6 +22,7 @@ def publish_observations(
     server_url: str,
     source: str,
     observations: Sequence[HostObservation],
+    token: str | None = None,
 ) -> None:
     payload = {
         "observations": [
@@ -53,7 +54,7 @@ def publish_observations(
     request = Request(
         f"{server_url.rstrip('/')}/api/v1/discovery/observations",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", **({"Authorization": f"Probe {token}"} if token else {})},
         method="POST",
     )
     with urlopen(request, timeout=15) as response:

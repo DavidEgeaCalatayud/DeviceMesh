@@ -43,7 +43,7 @@ def main() -> None:
         service_timeout_seconds=args.service_timeout,
         tcp_ports=config.tcp_ports,
     )
-    publish_observations(config.server_url, config.source, observations)
+    publish_observations(config.server_url, config.source, observations, token=config.synthetic_token)
     service_count = sum(len(observation.services) for observation in observations)
     print(
         f"discovered {len(observations)} reachable host(s) in {scope.network()} "

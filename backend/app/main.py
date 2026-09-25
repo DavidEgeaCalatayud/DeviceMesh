@@ -3,12 +3,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dependencies.security import human_access_gate, require_human
 from app.api.routers import (
     agents,
     alerts,
+    auth,
     devices,
     discovery,
     enrollment,
@@ -17,18 +19,22 @@ from app.api.routers import (
     network,
     operational_health,
     operations,
+    platform,
     synthetics,
     telemetry,
 )
 from app.api.websocket.manager import ConnectionManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.metrics import RequestMetricsMiddleware
+from app.core.version import SERVER_VERSION
 from app.domain.events.models import DeviceEvent
 from app.runtime import (
     offline_device_sweeper,
     realtime_event_publisher,
     synthetic_probe_worker,
 )
+from app.worker import run_jobs
 
 configure_logging()
 manager = ConnectionManager()
@@ -48,8 +54,7 @@ def _event_envelope(event: DeviceEvent) -> dict[str, object]:
 
 
 async def _forward_realtime_events() -> None:
-    while True:
-        event = await realtime_event_publisher.receive()
+    async for event in realtime_event_publisher.events():
         await manager.broadcast(_event_envelope(event))
 
 
@@ -72,9 +77,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     realtime_event_publisher.bind(asyncio.get_running_loop())
     tasks = [
         asyncio.create_task(_forward_realtime_events()),
-        asyncio.create_task(_sweep_offline_devices()),
-        asyncio.create_task(_run_synthetic_probes()),
     ]
+    if get_settings().embedded_workers:
+        tasks.append(asyncio.create_task(run_jobs(asyncio.Event())))
     try:
         yield
     finally:
@@ -84,15 +89,19 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         realtime_event_publisher.unbind()
 
 
-app = FastAPI(title="DeviceMesh API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="DeviceMesh API", version=SERVER_VERSION, lifespan=lifespan,
+              dependencies=[Depends(human_access_gate)])
+app.add_middleware(RequestMetricsMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=get_settings().cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(platform.router)
 app.include_router(enrollment.router)
 app.include_router(agents.router)
 app.include_router(devices.router)
@@ -109,9 +118,31 @@ app.include_router(synthetics.router)
 
 @app.websocket("/ws/events")
 async def event_stream(websocket: WebSocket) -> None:
-    await manager.connect(websocket)
+    settings = get_settings()
+    if not settings.public_reads:
+        origin = websocket.headers.get("origin")
+        if origin and origin not in settings.cors_origins:
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        try:
+            message = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+            principal = await asyncio.to_thread(require_human, f"Bearer {message.get('token', '')}")
+            # Tokens are sent in a first frame, never in URL/query or access logs.
+            websocket.state.principal = principal
+        except (HTTPException, TimeoutError, ValueError, AttributeError, WebSocketDisconnect):
+            await websocket.close(code=1008)
+            return
+    await manager.connect(websocket, accepted=not settings.public_reads)
     try:
         while True:
-            await websocket.receive_text()
+            await asyncio.wait_for(websocket.receive_text(), timeout=60)
+            if not settings.public_reads:
+                # Expiry/revocation is checked on every client heartbeat.
+                await asyncio.to_thread(require_human, f"Bearer {message.get('token', '')}")
     except WebSocketDisconnect:
+        pass
+    except (TimeoutError, HTTPException):
+        await websocket.close(code=1008)
+    finally:
         manager.disconnect(websocket)

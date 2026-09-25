@@ -16,6 +16,8 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "redis>=6,<7",
   "httpx>=0.28,<1",
+  "argon2-cffi>=25.1,<26",
+  "prometheus-client>=0.22,<1",
 ]
 
 [project.optional-dependencies]
