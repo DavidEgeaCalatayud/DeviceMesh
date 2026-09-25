@@ -22,8 +22,9 @@ chmod 0755 "$WORK/root/opt/devicemesh/bin/devicemesh-linux-agent"
 install -m 0644 "$ROOT/agents/linux/systemd/devicemesh-agent.service" \
   "$WORK/root/etc/systemd/system/devicemesh-agent.service"
 cat > "$WORK/root/etc/devicemesh/agent.env.example" <<'ENV'
-DEVICEMESH_SERVER_URL=https://mesh.example.com
+DEVICEMESH_SERVER=https://mesh.example.com
 DEVICEMESH_AGENT_ID=replace-me
+DEVICEMESH_INTERVAL_SECONDS=30
 DEVICEMESH_ENROLLMENT_TOKEN=replace-me-on-first-start
 ENV
 
