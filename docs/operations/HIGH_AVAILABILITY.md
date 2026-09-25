@@ -1,0 +1,34 @@
+# High availability
+
+DeviceMesh V1 supports horizontal availability at the application tier. PostgreSQL and Redis remain external infrastructure dependencies and must be deployed with their own HA strategy when the installation requires database/cache failover.
+
+## API tier
+
+API instances are stateless with respect to durable product state. They share PostgreSQL for durable state and Redis for cross-instance realtime fan-out. Multiple API replicas can therefore serve the same deployment behind a reverse proxy/load balancer.
+
+## Worker tier
+
+Multiple worker processes may be started, but exactly one owns scheduled work at a time. Scheduler leadership uses the PostgreSQL session-level advisory lock `684291017`.
+
+- the first worker that acquires the lock becomes scheduler leader;
+- standby workers do not execute the leader-owned scheduler;
+- the advisory lock belongs to the PostgreSQL session rather than process memory;
+- if the leader process or database connection dies, PostgreSQL releases the lock automatically;
+- a standby retries and may acquire leadership without a manual lease cleanup;
+- graceful shutdown also releases the lock explicitly.
+
+The integration suite opens independent PostgreSQL sessions, proves that only one can acquire scheduler leadership, invalidates the leader session to model an ungraceful process loss, and verifies that the standby can then acquire the lock.
+
+## Realtime events
+
+Production uses Redis as the event backend. API replicas consume the shared event stream and can fan out events to their connected WebSocket clients. This prevents realtime delivery from being tied to the process that produced the event.
+
+## Failure-domain boundary
+
+This V1 guarantee covers DeviceMesh application processes:
+
+- API replica loss can be absorbed by another API replica when deployed behind a load balancer.
+- Worker leader loss can be absorbed by a standby worker.
+- Realtime events are shared through Redis rather than an in-process-only bus.
+
+It does **not** claim that a single PostgreSQL server, a single Redis server, the reverse proxy, DNS, storage or the host itself are highly available. Operators requiring end-to-end HA must provide redundant infrastructure for those dependencies.
