@@ -120,7 +120,7 @@ export function GlobalSearch() {
   function closeAndNavigate(href: string) {
     setOpen(false)
     setQuery('')
-    window.location.hash = href.slice(1)
+    window.location.assign(href)
   }
 
   function retry() {
