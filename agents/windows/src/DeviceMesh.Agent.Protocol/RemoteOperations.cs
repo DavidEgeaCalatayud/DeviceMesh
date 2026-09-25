@@ -7,6 +7,8 @@ public static class RemoteOperationTypes
     public const string TelemetryCollect = "telemetry.collect";
     public const string InventoryRefresh = "inventory.refresh";
     public const string AgentHealthCheck = "agent.health_check";
+    public const string NetworkDnsLookup = "network.dns_lookup";
+    public const string NetworkRouteSnapshot = "network.route_snapshot";
 }
 
 public sealed record RemoteOperationClaim(
