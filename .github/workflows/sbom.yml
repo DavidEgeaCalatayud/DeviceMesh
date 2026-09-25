@@ -6,7 +6,10 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    permissions: {contents: read}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -14,6 +17,10 @@ jobs:
           path: .
           format: cyclonedx-json
           output-file: devicemesh-sbom.cdx.json
+      - name: Attest SBOM provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: devicemesh-sbom.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: devicemesh-sbom
