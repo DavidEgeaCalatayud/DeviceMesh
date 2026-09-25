@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,13 +9,14 @@ from app.core.config import get_settings
 from app.core.metrics import agents_online, incidents_open, probes_online
 from app.core.version import (
     API_VERSION,
-    COMPONENT_PROTOCOL_COMPATIBILITY,
+    COMPONENT_COMPATIBILITY,
     MAX_PROTOCOL_VERSION,
     MIN_PROTOCOL_VERSION,
     PROTOCOL_VERSION,
     SCHEMA_REVISION,
     SERVER_VERSION,
     SUPPORTED_PROTOCOL_VERSIONS,
+    evaluate_component_compatibility,
 )
 from app.infrastructure.database import engine
 
@@ -50,9 +51,37 @@ def system_version() -> dict[str, object]:
         "maxProtocolVersion": MAX_PROTOCOL_VERSION,
         "schemaRevision": SCHEMA_REVISION,
         "componentCompatibility": {
-            component: {"protocolVersions": list(versions)}
-            for component, versions in COMPONENT_PROTOCOL_COMPATIBILITY.items()
+            component: {
+                "minimumVersion": policy.minimum_version,
+                "protocolVersions": list(policy.protocol_versions),
+            }
+            for component, policy in COMPONENT_COMPATIBILITY.items()
         },
+    }
+
+
+@router.get("/api/v1/system/compatibility/{component}")
+def component_compatibility(
+    component: str,
+    packageVersion: str = Query(min_length=5, max_length=32),
+    protocolVersion: int = Query(ge=1, le=2_147_483_647),
+) -> dict[str, object]:
+    policy = COMPONENT_COMPATIBILITY.get(component)
+    if policy is None:
+        raise HTTPException(404, "unknown component")
+    compatible, reason = evaluate_component_compatibility(
+        component,
+        packageVersion,
+        protocolVersion,
+    )
+    return {
+        "component": component,
+        "packageVersion": packageVersion,
+        "protocolVersion": protocolVersion,
+        "compatible": compatible,
+        "reason": reason,
+        "minimumVersion": policy.minimum_version,
+        "supportedProtocolVersions": list(policy.protocol_versions),
     }
 
 
