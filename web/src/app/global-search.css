@@ -1,0 +1,95 @@
+.global-search-trigger {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.global-search-trigger kbd {
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: .35rem;
+  padding: .08rem .35rem;
+  font: inherit;
+  font-size: .75rem;
+  opacity: .8;
+}
+
+.global-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: start center;
+  padding: min(12vh, 7rem) 1rem 1rem;
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(3px);
+}
+
+.global-search-dialog {
+  width: min(760px, 100%);
+  max-height: min(72vh, 720px);
+  overflow: hidden;
+  border: 1px solid var(--border, #374151);
+  border-radius: .9rem;
+  background: var(--surface, #111827);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+  padding: 1rem;
+}
+
+.global-search-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .75rem;
+}
+
+.global-search-header input {
+  width: 100%;
+  min-width: 0;
+  font-size: 1rem;
+}
+
+.global-search-results {
+  list-style: none;
+  padding: .75rem 0 0;
+  margin: 0;
+  overflow: auto;
+  max-height: min(58vh, 570px);
+}
+
+.global-search-results li + li {
+  margin-top: .35rem;
+}
+
+.global-search-results button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: .15rem .75rem;
+  text-align: left;
+  padding: .7rem .8rem;
+  border-radius: .65rem;
+}
+
+.global-search-results button > span:last-child {
+  grid-column: 2;
+  opacity: .72;
+  overflow-wrap: anywhere;
+}
+
+.global-search-kind {
+  grid-row: 1 / span 2;
+  align-self: center;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: .7rem;
+  opacity: .65;
+}
+
+@media (max-width: 680px) {
+  .global-search-trigger kbd { display: none; }
+  .global-search-backdrop { padding-top: .75rem; }
+  .global-search-dialog { max-height: calc(100vh - 1.5rem); }
+  .global-search-results button { grid-template-columns: 1fr; }
+  .global-search-kind { grid-row: auto; }
+  .global-search-results button > span:last-child { grid-column: 1; }
+}
