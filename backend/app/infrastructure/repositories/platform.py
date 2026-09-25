@@ -140,7 +140,10 @@ class PlatformRepository:
     def create_service(self, data: dict[str, object], actor: str) -> dict[str, object]:
         data = dict(data)
         with self.sessions.begin() as session:
-            device_id = data.pop("deviceId", None)
+            raw_device_id = data.pop("deviceId", None)
+            if raw_device_id is not None and not isinstance(raw_device_id, str):
+                raise ValueError("deviceId must be a string or null")
+            device_id: str | None = raw_device_id
             if device_id and not session.get(DeviceRow, device_id):
                 raise LookupError("device not found")
             row = ServiceRow(id=str(uuid4()), created_at=datetime.now(UTC), device_id=device_id, **data)
@@ -155,7 +158,10 @@ class PlatformRepository:
             if not row:
                 raise LookupError("service not found")
             if "deviceId" in data:
-                device_id = data.pop("deviceId")
+                raw_device_id = data.pop("deviceId")
+                if raw_device_id is not None and not isinstance(raw_device_id, str):
+                    raise ValueError("deviceId must be a string or null")
+                device_id: str | None = raw_device_id
                 if device_id and not session.get(DeviceRow, device_id):
                     raise LookupError("device not found")
                 row.device_id = device_id
@@ -422,7 +428,8 @@ class PlatformRepository:
                 observed += seconds
                 if not check.success:
                     failed += seconds
-            if _aware(check.checked_at) and _aware(check.checked_at) >= start:
+            check_time = _aware(check.checked_at)
+            if check_time is not None and check_time >= start:
                 total_checks += 1
                 bad_checks += 0 if check.success else 1
         return observed, failed, total_checks, bad_checks
@@ -446,7 +453,7 @@ class PlatformRepository:
         with self.sessions() as session:
             if not session.get(ServiceRow, service_id):
                 raise LookupError("service not found")
-            reports = []
+            reports: list[dict[str, object]] = []
             for slo in session.scalars(select(SloRow).where(SloRow.service_id == service_id)):
                 monitor = session.get(SyntheticMonitorRow, slo.monitor_id)
                 if not monitor:
