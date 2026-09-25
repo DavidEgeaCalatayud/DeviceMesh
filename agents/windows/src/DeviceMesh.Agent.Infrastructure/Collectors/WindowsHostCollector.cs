@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
@@ -27,6 +28,8 @@ public sealed class WindowsHostCollector : IHostCollector
         CollectMemory(metrics);
         CollectDisks(metrics);
         CollectNetwork(metrics);
+        CollectProcessInventory(metrics);
+        metrics.Add(new Metric("host.cpu.logical.count", Environment.ProcessorCount, "count"));
         metrics.Add(new Metric("host.uptime.seconds", Environment.TickCount64 / 1000d, "seconds"));
         return metrics;
     }
@@ -77,18 +80,32 @@ public sealed class WindowsHostCollector : IHostCollector
 
         var used = status.TotalPhysical - status.AvailablePhysical;
         metrics.Add(new Metric("host.memory.total.bytes", status.TotalPhysical, "bytes"));
+        metrics.Add(new Metric("host.memory.available.bytes", status.AvailablePhysical, "bytes"));
         metrics.Add(new Metric("host.memory.used.bytes", used, "bytes"));
         metrics.Add(
             new Metric(
                 "host.memory.utilization.percent",
                 used * 100d / status.TotalPhysical,
                 "percent"));
+
+        if (status.TotalPageFile > 0)
+        {
+            var pageFileUsed = status.TotalPageFile - status.AvailablePageFile;
+            metrics.Add(new Metric("host.pagefile.total.bytes", status.TotalPageFile, "bytes"));
+            metrics.Add(new Metric("host.pagefile.used.bytes", pageFileUsed, "bytes"));
+            metrics.Add(
+                new Metric(
+                    "host.pagefile.utilization.percent",
+                    pageFileUsed * 100d / status.TotalPageFile,
+                    "percent"));
+        }
     }
 
     private static void CollectDisks(ICollection<Metric> metrics)
     {
         long total = 0;
         long free = 0;
+        var volumeCount = 0;
         foreach (var drive in DriveInfo.GetDrives())
         {
             try
@@ -100,6 +117,7 @@ public sealed class WindowsHostCollector : IHostCollector
 
                 total += drive.TotalSize;
                 free += drive.AvailableFreeSpace;
+                volumeCount += 1;
             }
             catch (IOException)
             {
@@ -116,6 +134,7 @@ public sealed class WindowsHostCollector : IHostCollector
             return;
         }
 
+        metrics.Add(new Metric("host.disk.volume.count", volumeCount, "count"));
         metrics.Add(new Metric("host.disk.total.bytes", total, "bytes"));
         metrics.Add(new Metric("host.disk.free.bytes", free, "bytes"));
         metrics.Add(new Metric("host.disk.used.bytes", total - free, "bytes"));
@@ -130,6 +149,7 @@ public sealed class WindowsHostCollector : IHostCollector
     {
         long received = 0;
         long sent = 0;
+        var activeInterfaces = 0;
         foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
         {
             if (network.OperationalStatus != OperationalStatus.Up ||
@@ -138,6 +158,7 @@ public sealed class WindowsHostCollector : IHostCollector
                 continue;
             }
 
+            activeInterfaces += 1;
             try
             {
                 var statistics = network.GetIPStatistics();
@@ -150,8 +171,34 @@ public sealed class WindowsHostCollector : IHostCollector
             }
         }
 
+        metrics.Add(new Metric("host.network.interfaces.up.count", activeInterfaces, "count"));
         metrics.Add(new Metric("host.network.received.bytes", received, "bytes"));
         metrics.Add(new Metric("host.network.sent.bytes", sent, "bytes"));
+    }
+
+    private static void CollectProcessInventory(ICollection<Metric> metrics)
+    {
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcesses();
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+
+        try
+        {
+            metrics.Add(new Metric("host.process.count", processes.Length, "count"));
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
     }
 
     private static ulong ToUInt64(FILETIME value) =>
