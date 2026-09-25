@@ -1,10 +1,37 @@
 import argparse
 import asyncio
+import os
+from contextlib import suppress
+from pathlib import Path
 
 from devicemesh_probe.client import publish_observations
 from devicemesh_probe.config import ProbeConfig
 from devicemesh_probe.discovery import DiscoveryScope, scan_scope
+from devicemesh_probe.health import ProbeHealthState, maintain_liveness
 from devicemesh_probe.synthetics import run_synthetic_loop
+
+
+def _health_state() -> ProbeHealthState:
+    return ProbeHealthState(
+        Path(os.environ.get("DEVICEMESH_PROBE_HEALTH_PATH", "/data/probe-health.json"))
+    )
+
+
+async def _run_synthetic_with_liveness(config: ProbeConfig, *, once: bool) -> None:
+    health = _health_state()
+    health.write()
+    if once:
+        await run_synthetic_loop(config, once=True)
+        health.write()
+        return
+
+    liveness = asyncio.create_task(maintain_liveness(health))
+    try:
+        await run_synthetic_loop(config, once=False)
+    finally:
+        liveness.cancel()
+        with suppress(asyncio.CancelledError):
+            await liveness
 
 
 def main() -> None:
@@ -25,11 +52,20 @@ def main() -> None:
         action="store_true",
         help="with --synthetic, heartbeat/claim/execute once and exit",
     )
+    parser.add_argument(
+        "--health-check",
+        action="store_true",
+        help="exit 0 when the local probe event loop has updated its liveness state recently",
+    )
     args = parser.parse_args()
+
+    if args.health_check:
+        stale_after = float(os.environ.get("DEVICEMESH_PROBE_HEALTH_STALE_SECONDS", "45"))
+        raise SystemExit(0 if _health_state().healthy(stale_after) else 1)
 
     config = ProbeConfig.from_environment()
     if args.synthetic:
-        asyncio.run(run_synthetic_loop(config, once=args.once))
+        asyncio.run(_run_synthetic_with_liveness(config, once=args.once))
         return
 
     if not args.scope:
