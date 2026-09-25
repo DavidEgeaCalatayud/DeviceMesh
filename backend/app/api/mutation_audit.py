@@ -48,7 +48,8 @@ class MutationAuditMiddleware:
         client = scope.get("client")
         source_ip = client[0] if client else None
         request_id = scope.get("state", {}).get("request_id")
-        route = getattr(scope.get("route"), "path", path)
+        route_value = getattr(scope.get("route"), "path", None)
+        route = route_value if isinstance(route_value, str) else path
         try:
             auth = security.get_human_auth_service()
             with auth.sessions.begin() as session:
