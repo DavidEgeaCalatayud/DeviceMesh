@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     telemetry_raw_retention_days: int = Field(default=7, ge=1, le=90)
     telemetry_hourly_retention_days: int = Field(default=365, ge=30, le=3650)
     event_retention_days: int = Field(default=90, ge=7, le=3650)
-    synthetic_check_retention_days: int = Field(default=90, ge=7, le=3650)
+    # SLOs support a 90-day window; check history must never be configured shorter.
+    synthetic_check_retention_days: int = Field(default=90, ge=90, le=3650)
 
     @model_validator(mode="after")
     def validate_runtime(self) -> Self:
