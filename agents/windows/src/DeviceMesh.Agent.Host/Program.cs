@@ -15,6 +15,10 @@ await RunWindowsAgentAsync(args);
 static async Task RunWindowsAgentAsync(string[] args)
 {
     var builder = Host.CreateApplicationBuilder(args);
+    builder.Services.AddWindowsService(options =>
+    {
+        options.ServiceName = "DeviceMesh Agent";
+    });
     builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("DeviceMesh"));
     builder.Services.AddSingleton<IHostCollector, RuntimeCollector>();
     builder.Services.AddSingleton<IHostCollector, WindowsHostCollector>();
