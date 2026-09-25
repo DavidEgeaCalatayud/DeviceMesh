@@ -25,6 +25,7 @@ from app.infrastructure.repositories.sqlalchemy import (
     SqlAlchemyDeviceRepository,
     SqlAlchemyTelemetryRepository,
 )
+from app.infrastructure.repositories.synthetic_consensus import RoundAwareSyntheticRepository
 from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
 from app.infrastructure.synthetic_worker import SyntheticProbeWorker
@@ -40,7 +41,13 @@ event_repository = PublishingEventRepository(raw_event_repository, realtime_even
 health_repository = SqlAlchemyHealthRepository(SessionFactory)
 maintenance_repository = SqlAlchemyMaintenanceRepository(SessionFactory)
 remote_operation_repository = SqlAlchemyRemoteOperationRepository(SessionFactory)
-synthetic_repository = SqlAlchemySyntheticRepository(SessionFactory)
+synthetic_repository: SqlAlchemySyntheticRepository = RoundAwareSyntheticRepository(
+    SessionFactory,
+    quorum_ratio=settings.synthetic_consensus_quorum_ratio,
+    minimum_quorum=settings.synthetic_consensus_minimum_quorum,
+    round_window_seconds=settings.synthetic_consensus_round_window_seconds,
+    probe_stale_seconds=settings.synthetic_probe_offline_after_seconds,
+)
 synthetic_probe_executor = SyntheticProbeExecutor()
 synthetic_probe_worker = SyntheticProbeWorker(
     synthetic_repository,
