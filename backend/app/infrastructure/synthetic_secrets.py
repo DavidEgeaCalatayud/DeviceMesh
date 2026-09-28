@@ -35,6 +35,39 @@ def header_requires_secret(name: str) -> bool:
     )
 
 
+def validate_http_settings(
+    headers: dict[str, str],
+    secret_headers: dict[str, str],
+    expected_body_contains: str | None,
+    *,
+    http_method: str | None,
+) -> None:
+    if len(headers) > 32 or len(secret_headers) > 32:
+        raise ValueError("synthetic HTTP monitors allow at most 32 headers of each type")
+    lowered_plain: set[str] = set()
+    for name, value in headers.items():
+        validate_header_name(name)
+        if header_requires_secret(name):
+            raise ValueError(f"sensitive HTTP header '{name}' must use a secret reference")
+        if not isinstance(value, str) or len(value) > 1024 or "\r" in value or "\n" in value:
+            raise ValueError(f"HTTP header '{name}' has an invalid value")
+        lowered_plain.add(name.lower())
+    lowered_secret: set[str] = set()
+    for name, secret_ref in secret_headers.items():
+        validate_header_name(name)
+        validate_secret_ref(secret_ref)
+        if name.lower() in lowered_plain:
+            raise ValueError(f"HTTP header '{name}' is configured as both plain and secret")
+        lowered_secret.add(name.lower())
+    if len(lowered_secret) != len(secret_headers):
+        raise ValueError("synthetic secret header names must be unique case-insensitively")
+    if expected_body_contains is not None:
+        if not expected_body_contains or len(expected_body_contains) > 512:
+            raise ValueError("expectedBodyContains must contain between 1 and 512 characters")
+        if (http_method or "GET").upper() == "HEAD":
+            raise ValueError("expectedBodyContains cannot be used with HEAD monitors")
+
+
 class SyntheticSecretResolver:
     def __init__(self, settings: Settings) -> None:
         self._directory = Path(settings.synthetic_secret_directory)
