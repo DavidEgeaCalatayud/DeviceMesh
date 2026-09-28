@@ -1,3 +1,4 @@
+# Runs against GitHub's current pull-request merge ref so HA is validated with the latest main.
 name: High availability acceptance
 
 on:
