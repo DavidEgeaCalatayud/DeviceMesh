@@ -46,6 +46,12 @@ export function App() {
   }, [preferences.locale])
 
   useEffect(() => {
+    if (hash && hash !== '#/preferences' && hash !== '#/login') {
+      sessionStorage.setItem('devicemesh.lastWorkspaceRoute', hash)
+    }
+  }, [hash])
+
+  useEffect(() => {
     const onHashChange = () => setHash(window.location.hash)
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
