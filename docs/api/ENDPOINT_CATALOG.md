@@ -22,8 +22,8 @@ Documented OpenAPI operations: **78**.
 | `POST` | `/api/v1/auth/login` | human-security | Login | 200, 422 |
 | `POST` | `/api/v1/auth/logout` | human-security | Logout | 204, 422 |
 | `GET` | `/api/v1/auth/me` | human-security | Me | 200, 422 |
-| `DELETE` | `/api/v1/auth/mfa` | human-security | Disable Own Mfa | 204, 422 |
 | `POST` | `/api/v1/auth/mfa` | human-security | Enable Or Rotate Mfa | 200, 422 |
+| `DELETE` | `/api/v1/auth/mfa` | human-security | Disable Own Mfa | 204, 422 |
 | `POST` | `/api/v1/auth/refresh` | human-security | Refresh | 200, 422 |
 | `GET` | `/api/v1/devices` | devices | List Devices | 200 |
 | `GET` | `/api/v1/devices/{device_id}/health` | operational-health | Device Health | 200, 422 |
