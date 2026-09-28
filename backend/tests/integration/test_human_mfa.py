@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -9,6 +9,7 @@ from app.infrastructure.security.human_auth import (
     AuthenticationError,
     HumanAuthService,
     HumanSessionRow,
+    LoginThrottleRow,
     UserRow,
 )
 
@@ -22,6 +23,11 @@ def auth_service() -> tuple[HumanAuthService, sessionmaker]:
     Base.metadata.create_all(engine)
     sessions = sessionmaker(engine, expire_on_commit=False)
     return HumanAuthService(sessions, Settings(operator_token="a" * 48)), sessions
+
+
+def clear_throttle(sessions: sessionmaker) -> None:
+    with sessions.begin() as session:
+        session.execute(delete(LoginThrottleRow))
 
 
 def test_mfa_factor_is_hashed_required_rotatable_and_recoverable() -> None:
@@ -48,6 +54,7 @@ def test_mfa_factor_is_hashed_required_rotatable_and_recoverable() -> None:
     with pytest.raises(AuthenticationError):
         auth.login("operator", "correct horse battery", "127.0.0.3", mfa_code="wrong-factor-code-xxxxxxxx")
 
+    clear_throttle(sessions)
     secured = auth.login("operator", "correct horse battery", "127.0.0.4", mfa_code=factor)
     assert secured["user"]["mfaEnabled"] is True
 
@@ -55,9 +62,11 @@ def test_mfa_factor_is_hashed_required_rotatable_and_recoverable() -> None:
     assert rotated != factor
     with pytest.raises(AuthenticationError):
         auth.login("operator", "correct horse battery", "127.0.0.5", mfa_code=factor)
+    clear_throttle(sessions)
     auth.login("operator", "correct horse battery", "127.0.0.6", mfa_code=rotated)
 
     auth.disable_mfa(user.id, "", "administrator", administrator_override=True)
+    clear_throttle(sessions)
     password_only = auth.login("operator", "correct horse battery", "127.0.0.7")
     assert password_only["user"]["mfaEnabled"] is False
 
