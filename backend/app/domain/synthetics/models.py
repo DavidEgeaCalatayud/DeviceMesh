@@ -53,9 +53,6 @@ class SyntheticMonitor:
     enabled: bool
     http_method: str | None
     expected_status: int | None
-    http_headers: dict[str, str]
-    http_secret_headers: dict[str, str]
-    expected_body_contains: str | None
     failure_threshold: int
     recovery_threshold: int
     created_by: str
