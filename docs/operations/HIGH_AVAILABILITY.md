@@ -6,6 +6,17 @@ DeviceMesh V1 supports horizontal availability at the application tier. PostgreS
 
 API instances are stateless with respect to durable product state. They share PostgreSQL for durable state and Redis for cross-instance realtime fan-out. Multiple API replicas can therefore serve the same deployment behind a reverse proxy/load balancer.
 
+The repository includes a dedicated HA acceptance workflow that starts **two production API replicas** from `docker-compose.prod.yml` and places a Caddy reverse proxy in front of both. Acceptance proves that:
+
+- both replicas answer readiness independently;
+- a service created through replica A is immediately readable through replica B, demonstrating shared durable state;
+- round-robin traffic reaches both replicas through the load balancer;
+- a WebSocket attached to replica B receives an event produced by an authenticated heartbeat sent to replica A, demonstrating cross-process Redis fan-out;
+- disconnecting replica A from the Compose network leaves the load-balanced endpoint healthy through replica B;
+- reconnecting the partitioned replica restores readiness and cross-instance realtime fan-out.
+
+This is an application-tier acceptance test. It intentionally does not claim automatic failover for PostgreSQL, Redis, DNS or the host itself.
+
 ## Worker tier
 
 Multiple worker processes may be started, but exactly one owns scheduled work at a time. Scheduler leadership uses the PostgreSQL session-level advisory lock `684291017`.
@@ -21,13 +32,14 @@ The integration suite opens independent PostgreSQL sessions, proves that only on
 
 ## Realtime events
 
-Production uses Redis as the event backend. API replicas consume the shared event stream and can fan out events to their connected WebSocket clients. This prevents realtime delivery from being tied to the process that produced the event.
+Production uses Redis as the event backend. API replicas consume the shared event stream and can fan out events to their connected WebSocket clients. This prevents realtime delivery from being tied to the process that produced the event. The HA acceptance workflow validates that property across two independent Uvicorn processes, including after a simulated replica network partition and recovery.
 
 ## Failure-domain boundary
 
 This V1 guarantee covers DeviceMesh application processes:
 
-- API replica loss can be absorbed by another API replica when deployed behind a load balancer.
+- API replica or API-network-path loss can be absorbed by another healthy API replica behind the load balancer.
+- A recovered API replica can rejoin shared PostgreSQL state and Redis realtime delivery.
 - Worker leader loss can be absorbed by a standby worker.
 - Realtime events are shared through Redis rather than an in-process-only bus.
 
