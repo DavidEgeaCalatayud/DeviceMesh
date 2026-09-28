@@ -17,10 +17,11 @@ from app.domain.alerts.notifications import (
 )
 from app.domain.devices.models import DeviceIdentity
 from app.domain.telemetry.models import Metric, TelemetryBatch
+from app.infrastructure.database import SessionFactory
 from app.infrastructure.notification_delivery import NotificationDispatcher
 from app.infrastructure.repositories.alerts import SqlAlchemyAlertRepository
 from app.infrastructure.repositories.notifications import SqlAlchemyNotificationRepository
-from app.runtime import SessionFactory, device_repository, telemetry_use_case
+from app.runtime import device_repository, telemetry_use_case
 
 
 def _register(agent_id: str, timestamp: datetime) -> None:
@@ -92,12 +93,11 @@ def test_alert_transition_routes_once_and_recovery_routes_once() -> None:
     telemetry_use_case.execute(violating)
     telemetry_use_case.execute(violating)
 
+    alert_ids = {alert.id for alert in alerts.list_alerts() if alert.rule_id == rule.id}
     opened = [
         delivery
         for delivery in repository.list_deliveries(limit=500)
-        if delivery.channel_id == channel_id and delivery.alert_id in {
-            alert.id for alert in alerts.list_alerts() if alert.rule_id == rule.id
-        }
+        if delivery.channel_id == channel_id and delivery.alert_id in alert_ids
     ]
     assert len(opened) == 1
     assert opened[0].transition == "opened"
