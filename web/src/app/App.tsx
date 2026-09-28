@@ -8,11 +8,23 @@ import { AuditPage } from '../features/platform/AuditPage'
 import { GlobalSearch } from '../features/platform/GlobalSearch'
 import { getToken, signOut } from '../shared/api/session'
 import { OperatorConsole } from '../features/settings/OperatorConsole'
+import type { OperatorSection } from '../features/settings/OperatorConsole'
 
-type Route = { kind: 'dashboard' } | { kind: 'device'; deviceId: string } | { kind: 'operator' }
+type Route =
+  | { kind: 'dashboard' }
+  | { kind: 'device'; deviceId: string }
+  | { kind: 'operator'; section: OperatorSection }
 
 function routeFromHash(hash: string): Route {
-  if (hash === '#/operator') return { kind: 'operator' }
+  const operatorRoutes: Record<string, OperatorSection> = {
+    '#/operator': 'all',
+    '#/maintenance': 'maintenance',
+    '#/operations': 'operations',
+    '#/synthetics': 'synthetics',
+    '#/probes': 'probes',
+  }
+  const section = operatorRoutes[hash]
+  if (section) return { kind: 'operator', section }
   const match = hash.match(/^#\/devices\/(.+)$/)
   if (!match) return { kind: 'dashboard' }
   try {
@@ -34,7 +46,7 @@ export function App() {
   const route = routeFromHash(hash)
   let page = <Dashboard />
   if (route.kind === 'device') page = <DeviceDetailPage deviceId={route.deviceId} />
-  if (route.kind === 'operator') page = <OperatorConsole />
+  if (route.kind === 'operator') page = <OperatorConsole section={route.section} />
   if (hash === '#/login') page = <LoginPage />
   if (hash === '#/services') page = <ServicesPage />
   if (hash === '#/incidents') page = <IncidentsPage />
@@ -43,9 +55,10 @@ export function App() {
   if (hash === '#/audit') page = <AuditPage />
   return <><nav className="platform-nav" aria-label="Main navigation">
     <a href="#/">Overview</a><a href="#/services">Services</a><a href="#/incidents">Incidents</a>
-    <a href="#/operator">Operations & probes</a><a href="#/administration">Administration</a><a href="#/audit">Audit</a>
+    <a href="#/maintenance">Maintenance</a><a href="#/operations">Operations</a>
+    <a href="#/synthetics">Synthetics</a><a href="#/probes">Probes</a>
+    <a href="#/administration">Administration</a><a href="#/audit">Audit</a>
     <GlobalSearch />
     {getToken() ? <button onClick={() => void signOut()}>Sign out</button> : <a href="#/login">Sign in</a>}
   </nav>{page}</>
-
 }
