@@ -24,10 +24,36 @@ jobs:
               ports: ["127.0.0.1:18000:8000"]
             web:
               ports: ["127.0.0.1:15173:8080"]
+            proxy:
+              volumes:
+                - ./infra/caddy/Caddyfile.acceptance:/etc/caddy/Caddyfile:ro
           YAML
       - name: Build and start migrated production services
         run: |
-          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/acceptance.override.yml up -d --build --wait --wait-timeout 180 api worker web prometheus grafana
+          docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/acceptance.override.yml up -d --build --wait --wait-timeout 180 api worker web prometheus grafana proxy
+      - name: Verify trusted HTTPS production edge
+        run: |
+          set -euo pipefail
+          proxy_id="$(docker compose --project-directory . --env-file .env.production -f infra/docker/docker-compose.prod.yml -f infra/docker/acceptance.override.yml ps -q proxy)"
+          for attempt in {1..30}; do
+            if docker exec "$proxy_id" test -f /data/caddy/pki/authorities/local/root.crt; then break; fi
+            if [[ "$attempt" == 30 ]]; then docker logs "$proxy_id"; exit 1; fi
+            sleep 1
+          done
+          docker cp "$proxy_id:/data/caddy/pki/authorities/local/root.crt" /tmp/devicemesh-caddy-root.crt
+          HTTPS=(curl --fail --silent --show-error --cacert /tmp/devicemesh-caddy-root.crt --resolve mesh.ci.invalid:443:127.0.0.1)
+          "${HTTPS[@]}" https://mesh.ci.invalid/ready | grep -q '"status":"ready"'
+          "${HTTPS[@]}" https://mesh.ci.invalid/ >/tmp/devicemesh-web.html
+          test -s /tmp/devicemesh-web.html
+          token="$(cat .secrets/operator_token)"
+          "${HTTPS[@]}" -H "Authorization: Bearer $token" https://mesh.ci.invalid/api/v1/system/version \
+            | python -c 'import json,sys; d=json.load(sys.stdin); assert d["apiVersion"] == 1 and d["schemaRevision"]'
+          headers="$(curl --silent --show-error --cacert /tmp/devicemesh-caddy-root.crt --resolve mesh.ci.invalid:443:127.0.0.1 -D - -o /dev/null https://mesh.ci.invalid/ready | tr -d '\r')"
+          grep -qi '^strict-transport-security: max-age=31536000$' <<<"$headers"
+          grep -qi '^x-frame-options: DENY$' <<<"$headers"
+          grep -qi '^x-content-type-options: nosniff$' <<<"$headers"
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cacert /tmp/devicemesh-caddy-root.crt --resolve mesh.ci.invalid:443:127.0.0.1 https://mesh.ci.invalid/metrics)"
+          test "$status" = "404"
       - name: Authenticated enrollment to realtime inventory
         run: |
           pip install httpx websockets
@@ -59,22 +85,20 @@ jobs:
           done
       - name: Restore a production-format backup into an isolated database
         run: tools/deployment/verify-backup.sh
-      - name: Restart and verify persisted canary
+      - name: Restart and verify persisted canary through HTTPS
         run: |
+          set -euo pipefail
           tools/deployment/compose.sh restart api worker
+          HTTPS=(curl --fail --silent --show-error --cacert /tmp/devicemesh-caddy-root.crt --resolve mesh.ci.invalid:443:127.0.0.1)
           for attempt in {1..30}; do
-            if curl --fail http://localhost:18000/ready; then break; fi
+            if "${HTTPS[@]}" https://mesh.ci.invalid/ready >/dev/null; then break; fi
+            if [[ "$attempt" == 30 ]]; then exit 1; fi
             sleep 2
           done
-          python - <<'PY'
-          from pathlib import Path
-          import httpx
-          token = Path('.secrets/operator_token').read_text().strip()
-          response = httpx.get('http://localhost:18000/api/v1/service-catalog', headers={'Authorization': 'Bearer ' + token})
-          response.raise_for_status()
-          assert any(service['name'] == 'acceptance-canary' for service in response.json())
-          PY
+          token="$(cat .secrets/operator_token)"
+          "${HTTPS[@]}" -H "Authorization: Bearer $token" https://mesh.ci.invalid/api/v1/service-catalog \
+            | python -c 'import json,sys; services=json.load(sys.stdin); assert any(service["name"] == "acceptance-canary" for service in services)'
       - if: failure()
-        run: tools/deployment/compose.sh logs --tail 100
+        run: tools/deployment/compose.sh logs --tail 120
       - if: always()
         run: tools/deployment/compose.sh down -v
