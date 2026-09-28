@@ -6,7 +6,9 @@ import './global-search.css'
 import { AdministrationPage, IncidentsPage, LoginPage, ServicesPage } from '../features/platform/PlatformPages'
 import { AuditPage } from '../features/platform/AuditPage'
 import { GlobalSearch } from '../features/platform/GlobalSearch'
+import { WorkspacePreferencesPage } from '../features/platform/WorkspacePreferencesPage'
 import { getToken, signOut } from '../shared/api/session'
+import { navigationCopy, useWorkspacePreferences } from '../shared/preferences'
 import { OperatorConsole } from '../features/settings/OperatorConsole'
 import type { OperatorSection } from '../features/settings/OperatorConsole'
 
@@ -36,6 +38,18 @@ function routeFromHash(hash: string): Route {
 
 export function App() {
   const [hash, setHash] = useState(() => window.location.hash)
+  const preferences = useWorkspacePreferences()
+  const nav = navigationCopy(preferences.locale)
+
+  useEffect(() => {
+    document.documentElement.lang = preferences.locale
+  }, [preferences.locale])
+
+  useEffect(() => {
+    if (hash && hash !== '#/preferences' && hash !== '#/login') {
+      sessionStorage.setItem('devicemesh.lastWorkspaceRoute', hash)
+    }
+  }, [hash])
 
   useEffect(() => {
     const onHashChange = () => setHash(window.location.hash)
@@ -53,12 +67,14 @@ export function App() {
   if (hash.startsWith('#/incidents/')) page = <IncidentsPage key={hash} incidentId={hash.slice(12)} />
   if (hash === '#/administration') page = <AdministrationPage />
   if (hash === '#/audit') page = <AuditPage />
-  return <><nav className="platform-nav" aria-label="Main navigation">
-    <a href="#/">Overview</a><a href="#/services">Services</a><a href="#/incidents">Incidents</a>
-    <a href="#/maintenance">Maintenance</a><a href="#/operations">Operations</a>
-    <a href="#/synthetics">Synthetics</a><a href="#/probes">Probes</a>
-    <a href="#/administration">Administration</a><a href="#/audit">Audit</a>
+  if (hash === '#/preferences') page = <WorkspacePreferencesPage />
+  return <><nav className="platform-nav" aria-label={preferences.locale === 'es' ? 'Navegación principal' : 'Main navigation'}>
+    <a href="#/">{nav.overview}</a><a href="#/services">{nav.services}</a><a href="#/incidents">{nav.incidents}</a>
+    <a href="#/maintenance">{nav.maintenance}</a><a href="#/operations">{nav.operations}</a>
+    <a href="#/synthetics">{nav.synthetics}</a><a href="#/probes">{nav.probes}</a>
+    <a href="#/administration">{nav.administration}</a><a href="#/audit">{nav.audit}</a>
+    <a href="#/preferences">{nav.preferences}</a>
     <GlobalSearch />
-    {getToken() ? <button onClick={() => void signOut()}>Sign out</button> : <a href="#/login">Sign in</a>}
+    {getToken() ? <button onClick={() => void signOut()}>{nav.signOut}</button> : <a href="#/login">{nav.signIn}</a>}
   </nav>{page}</>
 }
