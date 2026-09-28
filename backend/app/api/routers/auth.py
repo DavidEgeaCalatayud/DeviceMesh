@@ -30,10 +30,12 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     username: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_.@-]+$")
     password: str = Field(min_length=1, max_length=256)
+    mfaCode: str | None = Field(default=None, min_length=20, max_length=128)
 
 
 class UserCreate(LoginRequest):
     password: str = Field(min_length=12, max_length=256)
+    mfaCode: None = None
     role: Literal["viewer", "operator", "administrator"]
 
 
@@ -45,13 +47,18 @@ class UserState(BaseModel):
     enabled: bool
 
 
+class MfaCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mfaCode: str = Field(min_length=20, max_length=128)
+
+
 @router.post("/auth/login")
 def login(body: LoginRequest, request: Request, response: Response, auth: Auth) -> dict[str, object]:
     response.headers["Cache-Control"] = "no-store"
     try:
         return auth.login(body.username, body.password,
                           request.client.host if request.client else "unknown",
-                          getattr(request.state, "request_id", None))
+                          getattr(request.state, "request_id", None), body.mfaCode)
     except LoginThrottled as exc:
         raise HTTPException(429, str(exc), headers={"Retry-After": "300"}) from exc
     except AuthenticationError as exc:
@@ -68,8 +75,9 @@ def refresh(body: RefreshRequest, response: Response, auth: Auth) -> dict[str, o
 
 
 @router.get("/auth/me")
-def me(principal: Annotated[HumanPrincipal, Depends(require_human)]) -> dict[str, str]:
-    return {"id": principal.id, "username": principal.username, "role": principal.role}
+def me(principal: Annotated[HumanPrincipal, Depends(require_human)]) -> dict[str, object]:
+    return {"id": principal.id, "username": principal.username, "role": principal.role,
+            "mfaEnabled": principal.mfa_enabled}
 
 
 @router.post("/auth/logout", status_code=204)
@@ -78,11 +86,43 @@ def logout(principal: Annotated[HumanPrincipal, Depends(require_human)], auth: A
     return Response(status_code=204)
 
 
+@router.post("/auth/mfa")
+def enable_or_rotate_mfa(
+    principal: Annotated[HumanPrincipal, Depends(require_human)],
+    response: Response,
+    auth: Auth,
+) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        code = auth.enable_or_rotate_mfa(principal.id, principal.id)
+    except AuthenticationError as exc:
+        raise HTTPException(409, "MFA requires a persisted human account") from exc
+    return {
+        "mfaCode": code,
+        "mfaEnabled": True,
+        "message": "Store this possession factor securely. It will not be shown again.",
+    }
+
+
+@router.delete("/auth/mfa", status_code=204)
+def disable_own_mfa(
+    body: MfaCodeRequest,
+    principal: Annotated[HumanPrincipal, Depends(require_human)],
+    auth: Auth,
+) -> Response:
+    try:
+        auth.disable_mfa(principal.id, body.mfaCode, principal.id)
+    except AuthenticationError as exc:
+        raise HTTPException(401, "invalid credentials") from exc
+    return Response(status_code=204)
+
+
 @router.post("/admin/users", status_code=201)
-def create_user(body: UserCreate, admin: Admin, auth: Auth) -> dict[str, str]:
+def create_user(body: UserCreate, admin: Admin, auth: Auth) -> dict[str, object]:
     try:
         user = auth.create_user(body.username, body.password, body.role, admin.id)
-        return {"id": user.id, "username": user.username, "role": user.role}
+        return {"id": user.id, "username": user.username, "role": user.role,
+                "mfaEnabled": user.mfa_enabled}
     except IntegrityError as exc:
         raise HTTPException(409, "username already exists") from exc
 
@@ -90,7 +130,8 @@ def create_user(body: UserCreate, admin: Admin, auth: Auth) -> dict[str, str]:
 @router.get("/admin/users")
 def list_users(admin: Admin, auth: Auth, limit: Annotated[int, Query(ge=1, le=200)] = 100) -> list[dict[str, object]]:
     with auth.sessions() as session:
-        return [{"id": u.id, "username": u.username, "role": u.role, "enabled": u.enabled}
+        return [{"id": u.id, "username": u.username, "role": u.role, "enabled": u.enabled,
+                 "mfaEnabled": u.mfa_enabled}
                 for u in session.scalars(select(UserRow).order_by(UserRow.username).limit(limit))]
 
 
@@ -108,6 +149,15 @@ def disable_user(user_id: str, body: UserState, admin: Admin, auth: Auth) -> dic
                 HumanSessionRow.user_id == user_id).values(revoked_at=datetime.now(UTC)))
         audit(session, admin.id, "user.state_changed", user_id, {"enabled": body.enabled})
     return {"id": user_id, "enabled": body.enabled}
+
+
+@router.delete("/admin/users/{user_id}/mfa", status_code=204)
+def admin_disable_user_mfa(user_id: str, admin: Admin, auth: Auth) -> Response:
+    try:
+        auth.disable_mfa(user_id, "", admin.id, administrator_override=True)
+    except AuthenticationError as exc:
+        raise HTTPException(404, "user not found") from exc
+    return Response(status_code=204)
 
 
 def _audit_query(
