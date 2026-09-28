@@ -1,6 +1,6 @@
 # Seguimiento de los 57 puntos de DeviceMesh
 
-Primera entrega: `feat/production-platform-foundations`. Base revisada: `6d59d49` (post-PR #64).
+Primera entrega: `feat/production-platform-foundations`. Base revisada: `9a23733` (post-PR #66).
 
 Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Los scaffolds móviles y ESP32 siguen siendo scaffolds. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
 
@@ -10,14 +10,14 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 2 | Backend: evolucionarlo de backend funcional a plataforma | Implementado en main | Catálogo persistente con propietario, entorno, criticidad, tags y dispositivo; relación muchos-a-muchos con monitores; grupos de servicios; dependencias hard/soft con detección de ciclos y exposición de dependents/dependencies. |
 | 3 | Service Incidents tiene que convertirse en Incident Management | Implementado en main | ACK, asignación, severidad, notas, causa, resolución, reapertura y timeline automática/manual; correlación temporal multimonitor a través de servicios/dependencias relacionados; impacto y postmortem editables. |
 | 4 | SLO, SLI y Error Budgets | Implementado en main | SLI por éxito de checks y por disponibilidad temporal, ventanas 7/30/90, error budget en checks o segundos, estado unknown/stale, burn-rates 1h/6h/24h y política critical/warning. |
-| 5 | Notificaciones y routing de alertas | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 5 | Notificaciones y routing de alertas | Implementado en main | PR #66 añade canales webhook/Slack/email, routing por transición/métrica/dispositivo, supresión durante mantenimiento, secretos externos mediante `secretRef`, outbox PostgreSQL deduplicado, leases, backoff exponencial, dead-letter/retry manual y entrega desde el scheduler-worker. Backend, Integration, Security, HA, Failure, Performance, Production, Release y Documentation CI verdes. |
 | 6 | Autenticación humana y RBAC | Implementado en main | Argon2id, roles viewer/operator/administrator, sesiones y refresh rotatorios, revocación, usuarios, desactivación, throttling y auditoría. PR #64 añade segundo factor de posesión con sólo SHA-256 persistido, rotación, revocación de sesiones, recuperación administrativa auditada y flujo web. OIDC/LDAP quedan como federación opcional futura, fuera del criterio V1 local. |
 | 7 | Audit Log global | Implementado en main | Auditoría transaccional de operaciones de dominio y UI admin, más middleware transversal para toda mutación humana autenticada heredada/actual que aún no tenga evento semántico propio; captura actor, ruta, método, estado, IP y request ID. |
 | 8 | Alta disponibilidad y escalado horizontal del backend | Implementado en main | APIs stateless sobre PostgreSQL, Pub/Sub Redis para fan-out/reconexión y workers con advisory lock/failover. HA acceptance ejecuta dos réplicas API detrás de Caddy, verifica estado compartido, WebSocket cross-instance y continuidad/recuperación tras partición de red de una réplica. |
 | 9 | Separar workers del proceso API | Implementado en main | Worker independiente con elección mediante advisory lock; API productiva desactiva jobs embebidos; offline sweep, synthetics y retention se ejecutan en el scheduler; integración PostgreSQL prueba líder único y failover al perder la sesión. |
 | 10 | Distributed Probes: V1.3 está hecha, pero todavía falta bastante | Implementado en main | Dockerfile y systemd endurecidos, liveness local, cola SQLite acotada, concurrencia limitada, backpressure, backoff/jitter, rotación transaccional de bearer token con sólo hash persistido, expiración de credenciales a 90 días y runtime heartbeat con versión, uptime, cola/capacidad y concurrencia; operator API expone estado/lifecycle. |
-| 11 | Synthetic monitoring mucho más profundo | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 12 | Consenso distribuido V2: rondas/quorum | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 11 | Synthetic monitoring mucho más profundo | Pendiente | HTTP/TCP/DNS/TLS e ICMP distribuido ya existen, junto a SLA/latencia y validación de destino. Falta profundizar assertions/configuración HTTP y autenticación/headers mediante referencias secretas, además de cerrar la UX/contrato correspondiente. |
+| 12 | Consenso distribuido V2: rondas/quorum | Implementado en main | `RoundAwareSyntheticRepository` agrupa sólo observaciones de la misma ronda temporal, calcula mayoría estricta sobre probes activos/asignados y devuelve `insufficient_data` antes de quorum. Integración prueba rondas parciales, aislamiento de resultados de rondas anteriores y quorum 2/3 sin abrir incidentes prematuros. |
 | 13 | Network Monitoring / NMS: aquí hay un campo enorme todavía | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 14 | LLDP/CDP y topología automática | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 15 | Más información de red | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
@@ -48,7 +48,7 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 40 | Production Docker deployment | Implementado en main | Caddy HTTPS, roles separados app/migración, secrets files, non-root app/web, readonly/cap_drop, límites, healthchecks, volúmenes y rotación de logs. Production acceptance levanta API/worker/web/Prometheus/Grafana/Caddy, importa la CA interna y valida HTTPS, HSTS/frame/content-type, bloqueo de `/metrics`, restore, restart y persistencia. |
 | 41 | Kubernetes: no todavía | Diferido según propuesta | Kubernetes/Helm posteriores a demostrar necesidad de HA; no requisito actual. |
 | 42 | Seguridad adicional | Implementado en main | Lecturas privadas en producción, RBAC, throttling persistente, refresh/WS revocables, protección timestamp/replay, dependency locks y auditorías. PR #55 fija todas las GitHub Actions por SHA y añade SBOM/attestations; PR #60 añade fuzzing determinista Hypothesis sobre contratos, JSON arbitrario, IDs, request IDs y compatibilidad. |
-| 43 | Synthetic secrets | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 43 | Synthetic secrets | Pendiente | Implementar referencias secretas para credenciales/headers de checks sintéticos sin persistir secretos en claro, con resolución segura en backend/probes, redacción API/logs y pruebas de no filtración. |
 | 44 | Testing: backend bien, sistema completo todavía no | Implementado en main | Harness enrollment→heartbeat→Redis/WS→inventory, telemetry→threshold alert→recovery, producción/restore/reinicio, integración y contratos. PR #52 añade Playwright sobre la aplicación Vite real para login, navegación Services, filtro, Ctrl/Cmd+K, incidents/detail y sign-out; PR #61 extiende el browser flow a las rutas operativas dedicadas. |
 | 45 | Chaos/failure testing | Implementado en main | Revocación, refresh usado, readiness DB caída, replay de cola y failover de scheduler, más Failure acceptance productivo: caída/recuperación PostgreSQL, caída/recuperación Redis con WS, restart API con estado persistente y restart worker con recuperación del liderazgo. |
 | 46 | Performance/soak tests | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
@@ -68,9 +68,9 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 
 ## Orden de continuación
 
-1. Notificaciones/routing (#5), synthetic monitoring avanzado (#11), consenso/red avanzada (#12–#16) y synthetic secrets (#43).
+1. Synthetic secrets y assertions avanzadas (#43/#11), y después red/NMS (#13–#16).
 2. Base de datos/retención/performance (#38, #39, #46), cerrando benchmarks y soak prolongado antes de anomaly detection.
-3. Windows/Linux (#29–#32) y después Android/iOS (#19–#24), incluyendo seguridad, pruebas y distribución propias.
+3. Auditar y cerrar el estado real de Windows/Linux (#29–#32) y después Android/iOS (#19–#24), incluyendo seguridad, pruebas y distribución propias.
 4. ESP32/hardware (#25–#28, #48, #55) con identidad, provisioning, sensores y pruebas físicas antes de OTA.
 5. GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema completo (#59) una vez sus dependencias estén implementadas.
 
