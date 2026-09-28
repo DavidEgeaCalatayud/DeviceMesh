@@ -87,6 +87,7 @@ jobs:
         run: tools/deployment/verify-backup.sh
       - name: Restart and verify persisted canary through HTTPS
         run: |
+          set -euo pipefail
           tools/deployment/compose.sh restart api worker
           HTTPS=(curl --fail --silent --show-error --cacert /tmp/devicemesh-caddy-root.crt --resolve mesh.ci.invalid:443:127.0.0.1)
           for attempt in {1..30}; do
@@ -94,21 +95,9 @@ jobs:
             if [[ "$attempt" == 30 ]]; then exit 1; fi
             sleep 2
           done
-          python - <<'PY'
-          import ssl
-          from pathlib import Path
-          import httpx
-          token = Path('.secrets/operator_token').read_text().strip()
-          context = ssl.create_default_context(cafile='/tmp/devicemesh-caddy-root.crt')
-          with httpx.Client(verify=context) as client:
-              response = client.get(
-                  'https://127.0.0.1/api/v1/service-catalog',
-                  headers={'Authorization': 'Bearer ' + token, 'Host': 'mesh.ci.invalid'},
-                  extensions={'sni_hostname': 'mesh.ci.invalid'},
-              )
-              response.raise_for_status()
-              assert any(service['name'] == 'acceptance-canary' for service in response.json())
-          PY
+          token="$(cat .secrets/operator_token)"
+          "${HTTPS[@]}" -H "Authorization: Bearer $token" https://mesh.ci.invalid/api/v1/service-catalog \
+            | python -c 'import json,sys; services=json.load(sys.stdin); assert any(service["name"] == "acceptance-canary" for service in services)'
       - if: failure()
         run: tools/deployment/compose.sh logs --tail 120
       - if: always()
