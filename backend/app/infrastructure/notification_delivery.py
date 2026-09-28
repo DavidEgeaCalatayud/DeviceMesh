@@ -81,7 +81,7 @@ class NotificationTransport:
         except json.JSONDecodeError as exc:
             raise ValueError("email notification secret must be JSON") from exc
         if not isinstance(smtp, dict):
-            raise ValueError("email notification secret must be a JSON object")
+            raise TypeError("email notification secret must be a JSON object")
         host = smtp.get("host")
         from_address = smtp.get("fromAddress")
         recipients = channel.config.get("to")
@@ -160,7 +160,14 @@ class NotificationDispatcher:
                 self._transport.send(channel, delivery.payload, secret)
                 self._repository.mark_delivered(delivery.id, now)
                 delivered += 1
-            except Exception as exc:
+            except (
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+                httpx.HTTPError,
+                smtplib.SMTPException,
+            ) as exc:
                 self._repository.mark_failed(
                     delivery.id,
                     now,
