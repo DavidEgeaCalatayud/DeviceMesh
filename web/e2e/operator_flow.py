@@ -110,6 +110,9 @@ def api_handler(route: Route) -> None:
     if path == "/api/v1/synthetic-monitors":
         respond(route, [])
         return
+    if path == "/api/v1/maintenance-windows":
+        respond(route, [])
+        return
     if path == "/api/v1/service-groups":
         respond(route, [])
         return
@@ -147,6 +150,30 @@ def main() -> None:
         expect(page.get_by_role("button", name=re.compile(r"Payments API"))).to_have_count(0)
         search_services.fill("")
 
+        page.get_by_role("link", name="Maintenance", exact=True).click()
+        page.wait_for_url(re.compile(r"/#/maintenance$"))
+        expect(page.get_by_role("heading", name="Maintenance", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Maintenance window", exact=True)).to_be_visible()
+
+        page.get_by_role("link", name="Operations", exact=True).first.click()
+        page.wait_for_url(re.compile(r"/#/operations$"))
+        expect(page.get_by_role("heading", name="Remote Operations", exact=True)).to_be_visible()
+        operation_select = page.get_by_label("Operation")
+        operation_select.select_option("network.dns_lookup")
+        expect(page.get_by_label("Hostname")).to_be_visible()
+        operation_select.select_option("network.route_snapshot")
+        expect(page.get_by_label("Hostname")).to_have_count(0)
+
+        page.get_by_role("link", name="Synthetics", exact=True).first.click()
+        page.wait_for_url(re.compile(r"/#/synthetics$"))
+        expect(page.get_by_role("heading", name="Synthetic Monitoring", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Synthetic monitors", exact=True)).to_be_visible()
+
+        page.get_by_role("link", name="Probes", exact=True).first.click()
+        page.wait_for_url(re.compile(r"/#/probes$"))
+        expect(page.get_by_role("heading", name="Distributed Probes", exact=True)).to_be_visible()
+
+        page.get_by_role("link", name="Incidents", exact=True).click()
         page.keyboard.press("Control+K")
         global_search = page.get_by_label("Search devices, services and incidents")
         expect(global_search).to_be_focused()
