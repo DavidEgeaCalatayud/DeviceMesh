@@ -158,7 +158,7 @@ def main() -> None:
         page.get_by_role("link", name="Operations", exact=True).first.click()
         page.wait_for_url(re.compile(r"/#/operations$"))
         expect(page.get_by_role("heading", name="Remote Operations", exact=True)).to_be_visible()
-        operation_select = page.get_by_label("Operation")
+        operation_select = page.get_by_role("combobox", name="Operation")
         operation_select.select_option("network.dns_lookup")
         expect(page.get_by_label("Hostname")).to_be_visible()
         operation_select.select_option("network.route_snapshot")
