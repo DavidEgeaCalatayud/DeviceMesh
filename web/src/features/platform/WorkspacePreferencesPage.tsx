@@ -13,13 +13,13 @@ const pageCopy = {
   en: {
     title: 'Workspace preferences', language: 'Language', english: 'English', spanish: 'Spanish',
     views: 'Saved views', description: 'Save any DeviceMesh deep link so you can return to the same operational context.',
-    name: 'View name', current: 'Current route', save: 'Save current view', open: 'Open', remove: 'Remove',
+    name: 'View name', current: 'Last operational route', save: 'Save view', open: 'Open', remove: 'Remove',
     empty: 'No saved views yet.', limit: 'Up to 50 views are stored locally in this browser.',
   },
   es: {
     title: 'Preferencias del espacio de trabajo', language: 'Idioma', english: 'Inglés', spanish: 'Español',
     views: 'Vistas guardadas', description: 'Guarda cualquier enlace profundo de DeviceMesh para volver al mismo contexto operativo.',
-    name: 'Nombre de la vista', current: 'Ruta actual', save: 'Guardar vista actual', open: 'Abrir', remove: 'Eliminar',
+    name: 'Nombre de la vista', current: 'Última ruta operativa', save: 'Guardar vista', open: 'Abrir', remove: 'Eliminar',
     empty: 'Todavía no hay vistas guardadas.', limit: 'Se guardan hasta 50 vistas localmente en este navegador.',
   },
 } as const
@@ -30,6 +30,7 @@ export function WorkspacePreferencesPage() {
   const nav = navigationCopy(preferences.locale)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const lastRoute = sessionStorage.getItem('devicemesh.lastWorkspaceRoute') ?? '#/'
 
   function changeLocale(locale: WorkspaceLocale) {
     setWorkspaceLocale(locale)
@@ -40,8 +41,7 @@ export function WorkspacePreferencesPage() {
     event.preventDefault()
     setError('')
     try {
-      const route = window.location.hash === '#/preferences' ? '#/' : window.location.hash || '#/'
-      addSavedView(name, route)
+      addSavedView(name, lastRoute)
       setName('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save view')
@@ -65,7 +65,7 @@ export function WorkspacePreferencesPage() {
       <p>{text.description}</p>
       <form className="platform-form" onSubmit={saveView}>
         <label>{text.name}<input value={name} maxLength={80} onChange={event => setName(event.target.value)} required /></label>
-        <label>{text.current}<input value={window.location.hash === '#/preferences' ? '#/' : window.location.hash || '#/'} readOnly /></label>
+        <label>{text.current}<input value={lastRoute} readOnly /></label>
         <button>{text.save}</button>
       </form>
       {error && <p role="alert">{error}</p>}
