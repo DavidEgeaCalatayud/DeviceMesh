@@ -1,5 +1,10 @@
 export type RemoteOperationStatus = 'queued' | 'claimed' | 'succeeded' | 'failed' | 'expired'
-export type RemoteOperationType = 'telemetry.collect' | 'inventory.refresh' | 'agent.health_check'
+export type RemoteOperationType =
+  | 'telemetry.collect'
+  | 'inventory.refresh'
+  | 'agent.health_check'
+  | 'network.dns_lookup'
+  | 'network.route_snapshot'
 
 export interface RemoteOperation {
   id: string
