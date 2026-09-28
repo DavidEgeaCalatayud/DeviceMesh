@@ -3,11 +3,13 @@ const tokenKey = 'devicemesh.operatorToken'
 const refreshKey = 'devicemesh.refreshToken'
 export const getToken = () => sessionStorage.getItem(tokenKey) ?? ''
 
-export async function signIn(username: string, password: string) {
+export async function signIn(username: string, password: string, mfaCode = '') {
+  const body: { username: string; password: string; mfaCode?: string } = { username, password }
+  if (mfaCode.trim()) body.mfaCode = mfaCode.trim()
   const response = await fetch(`${apiBase}/api/v1/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
-  if (!response.ok) throw new Error(response.status === 429 ? 'Too many attempts. Retry in five minutes.' : 'Sign-in failed. Check your username and password.')
+  if (!response.ok) throw new Error(response.status === 429 ? 'Too many attempts. Retry in five minutes.' : 'Sign-in failed. Check your credentials and MFA factor.')
   const session = await response.json() as { accessToken: string; refreshToken: string }
   sessionStorage.setItem(tokenKey, session.accessToken)
   sessionStorage.setItem(refreshKey, session.refreshToken)
