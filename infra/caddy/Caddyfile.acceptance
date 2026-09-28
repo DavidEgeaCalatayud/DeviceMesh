@@ -1,0 +1,16 @@
+https://{$DEVICEMESH_DOMAIN} {
+    tls internal
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        Content-Security-Policy "default-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
+        -Server
+    }
+    @api path /api/* /ws/* /health /ready
+    reverse_proxy @api api:8000
+    respond /metrics 404
+    reverse_proxy web:8080
+}
