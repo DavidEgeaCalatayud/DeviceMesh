@@ -88,6 +88,4 @@ jobs:
           python -m pip install --disable-pip-version-check "pytest>=8.4,<9" "jsonschema[format]>=4.25,<5" "hypothesis>=6.138,<7"
       - name: Exercise protocol schema, mutation and fuzz boundaries
         working-directory: backend
-        env:
-          HYPOTHESIS_PROFILE: ci
         run: pytest -q tests/contract
