@@ -4,6 +4,7 @@ from app.application.ports import AlertRepository, EventRepository, TelemetryRep
 from app.domain.alerts.models import AlertTransition, AlertTransitionType
 from app.domain.events.models import DeviceEvent, EventSeverity
 from app.domain.telemetry.models import MetricSample, MetricSeries, TelemetryBatch
+from app.infrastructure.repositories.notifications import SqlAlchemyNotificationRepository
 
 
 class AlertingTelemetryRepository:
@@ -12,15 +13,19 @@ class AlertingTelemetryRepository:
         telemetry: TelemetryRepository,
         alerts: AlertRepository,
         events: EventRepository,
+        notifications: SqlAlchemyNotificationRepository | None = None,
     ) -> None:
         self._telemetry = telemetry
         self._alerts = alerts
         self._events = events
+        self._notifications = notifications
 
     def append(self, batch: TelemetryBatch) -> None:
         self._telemetry.append(batch)
         for transition in self._alerts.evaluate(batch):
             self._events.append(self._to_event(transition))
+            if self._notifications is not None:
+                self._notifications.enqueue_transition(transition)
 
     def list_latest(self) -> list[MetricSample]:
         return self._telemetry.list_latest()
