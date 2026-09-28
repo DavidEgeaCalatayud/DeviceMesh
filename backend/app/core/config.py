@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     event_backend: str = "memory"
     worker_metrics_host: str = "0.0.0.0"
     worker_metrics_port: int = Field(default=9100, ge=1, le=65535)
+    notification_secret_directory: str = "/run/secrets/devicemesh-notifications"
+    notification_delivery_interval_seconds: int = Field(default=5, ge=1, le=300)
+    notification_delivery_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    notification_delivery_batch_size: int = Field(default=25, ge=1, le=500)
+    notification_delivery_lease_seconds: int = Field(default=60, ge=10, le=3600)
+    notification_delivery_max_attempts: int = Field(default=8, ge=1, le=20)
     session_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     refresh_ttl_seconds: int = Field(default=604800, ge=3600, le=2592000)
     agent_enrollment_ttl_seconds: int = 900
@@ -69,6 +75,9 @@ class Settings(BaseSettings):
             "synthetic_consensus_round_window_seconds", "retention_run_interval_seconds",
             "telemetry_raw_retention_days", "telemetry_hourly_retention_days",
             "event_retention_days", "synthetic_check_retention_days",
+            "notification_delivery_interval_seconds", "notification_delivery_timeout_seconds",
+            "notification_delivery_batch_size", "notification_delivery_lease_seconds",
+            "notification_delivery_max_attempts",
         ):
             if getattr(self, field) <= 0:
                 raise ValueError(f"{field} must be positive")

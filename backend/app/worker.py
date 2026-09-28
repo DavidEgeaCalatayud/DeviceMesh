@@ -20,6 +20,7 @@ from app.core.metrics import (
 )
 from app.infrastructure.database import engine
 from app.runtime import (
+    notification_dispatcher,
     offline_device_sweeper,
     synthetic_probe_worker,
     telemetry_retention_repository,
@@ -32,12 +33,14 @@ async def run_jobs(stop: asyncio.Event) -> None:
     """Run scheduled work while this process owns the scheduler lease."""
     settings = get_settings()
     next_offline = 0.0
+    next_notifications = 0.0
     next_retention = 0.0
     while not stop.is_set():
         loop_time = asyncio.get_running_loop().time()
         jobs = (
             ("offline", loop_time >= next_offline),
             ("synthetics", True),
+            ("notifications", loop_time >= next_notifications),
             ("retention", loop_time >= next_retention),
         )
         for name, due in jobs:
@@ -51,6 +54,23 @@ async def run_jobs(stop: asyncio.Event) -> None:
                         asyncio.get_running_loop().time()
                         + settings.device_offline_sweep_interval_seconds
                     )
+                elif name == "notifications":
+                    delivered, failed = await asyncio.to_thread(
+                        notification_dispatcher.run_due,
+                        datetime.now(UTC),
+                    )
+                    next_notifications = (
+                        asyncio.get_running_loop().time()
+                        + settings.notification_delivery_interval_seconds
+                    )
+                    if delivered or failed:
+                        logger.info(
+                            "notification outbox processed",
+                            extra={
+                                "route": "notifications",
+                                "status": f"delivered={delivered},failed={failed}",
+                            },
+                        )
                 elif name == "retention":
                     result = await asyncio.to_thread(
                         telemetry_retention_repository.enforce_policy,

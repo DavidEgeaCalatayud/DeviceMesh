@@ -3,6 +3,11 @@ from app.application.use_cases.record_observation import RecordObservation
 from app.application.use_cases.record_telemetry import RecordTelemetry
 from app.core.config import get_settings
 from app.infrastructure.database import SessionFactory
+from app.infrastructure.notification_delivery import (
+    NotificationDispatcher,
+    NotificationSecretResolver,
+    NotificationTransport,
+)
 from app.infrastructure.offline import OfflineDeviceSweeper
 from app.infrastructure.realtime.events import (
     EventPublisher,
@@ -19,6 +24,7 @@ from app.infrastructure.repositories.health import (
     SqlAlchemyMaintenanceRepository,
 )
 from app.infrastructure.repositories.network import SqlAlchemyNetworkRepository
+from app.infrastructure.repositories.notifications import SqlAlchemyNotificationRepository
 from app.infrastructure.repositories.operations import SqlAlchemyRemoteOperationRepository
 from app.infrastructure.repositories.retention import SqlAlchemyTelemetryRetentionRepository
 from app.infrastructure.repositories.sqlalchemy import (
@@ -41,6 +47,13 @@ event_repository = PublishingEventRepository(raw_event_repository, realtime_even
 health_repository = SqlAlchemyHealthRepository(SessionFactory)
 maintenance_repository = SqlAlchemyMaintenanceRepository(SessionFactory)
 remote_operation_repository = SqlAlchemyRemoteOperationRepository(SessionFactory)
+notification_repository = SqlAlchemyNotificationRepository(SessionFactory)
+notification_dispatcher = NotificationDispatcher(
+    notification_repository,
+    NotificationSecretResolver(settings),
+    NotificationTransport(settings),
+    settings,
+)
 synthetic_repository: SqlAlchemySyntheticRepository = RoundAwareSyntheticRepository(
     SessionFactory,
     quorum_ratio=settings.synthetic_consensus_quorum_ratio,
@@ -69,6 +82,7 @@ telemetry_repository = AlertingTelemetryRepository(
     raw_telemetry_repository,
     alert_repository,
     event_repository,
+    notification_repository,
 )
 agent_auth_service = AgentAuthService(SessionFactory, settings)
 offline_device_sweeper = OfflineDeviceSweeper(
@@ -104,6 +118,10 @@ def get_agent_auth_service() -> AgentAuthService:
 
 def get_alert_repository() -> SqlAlchemyAlertRepository:
     return alert_repository
+
+
+def get_notification_repository() -> SqlAlchemyNotificationRepository:
+    return notification_repository
 
 
 def get_network_repository() -> SqlAlchemyNetworkRepository:
