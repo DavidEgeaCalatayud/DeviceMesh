@@ -1,29 +1,29 @@
 # Seguimiento de los 57 puntos de DeviceMesh
 
-Primera entrega: `feat/production-platform-foundations`. Base revisada: `6990542` (V1.3).
+Primera entrega: `feat/production-platform-foundations`. Base revisada: `6d59d49` (post-PR #64).
 
-Este documento conserva el alcance completo. **Parcial** significa que hay código ejecutable y faltan subpuntos o validación; no equivale a production-ready. **Pendiente** significa que no se ha implementado en esta entrega. Los scaffolds móviles y ESP32 siguen siendo scaffolds.
+Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Los scaffolds móviles y ESP32 siguen siendo scaffolds. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
 
 | Nº | Área | Estado | Evidencia / siguiente criterio |
 |---|---|---|---|
-| 1 | Lo primero: terminar de verdad la V1 como producto instalable | Parcial | Compose productivo, validación, install, backup/restore, timer, retención, ensayo de producción, restore/restart y upgrade/smoke automatizados. Production acceptance ya arranca el stack real en runner limpio. Faltan completar instaladores/distribución y validar HTTPS en host limpio. |
+| 1 | Lo primero: terminar de verdad la V1 como producto instalable | Implementado en main | Compose productivo, migraciones, install, backup/restore, timer, retención, restore/restart y upgrade/smoke automatizados. Release Validation construye MSI, DEB/RPM y paquete macOS para los componentes productivos; Production acceptance levanta el stack completo en runner limpio y valida el borde HTTPS/Caddy con CA confiable, reinicio y persistencia. |
 | 2 | Backend: evolucionarlo de backend funcional a plataforma | Implementado en main | Catálogo persistente con propietario, entorno, criticidad, tags y dispositivo; relación muchos-a-muchos con monitores; grupos de servicios; dependencias hard/soft con detección de ciclos y exposición de dependents/dependencies. |
 | 3 | Service Incidents tiene que convertirse en Incident Management | Implementado en main | ACK, asignación, severidad, notas, causa, resolución, reapertura y timeline automática/manual; correlación temporal multimonitor a través de servicios/dependencias relacionados; impacto y postmortem editables. |
 | 4 | SLO, SLI y Error Budgets | Implementado en main | SLI por éxito de checks y por disponibilidad temporal, ventanas 7/30/90, error budget en checks o segundos, estado unknown/stale, burn-rates 1h/6h/24h y política critical/warning. |
 | 5 | Notificaciones y routing de alertas | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 6 | Autenticación humana y RBAC | Parcial | Argon2id, roles, sesiones/refresh rotatorios, revocación, usuarios, desactivación y login web. MFA/OIDC/LDAP pendientes. |
+| 6 | Autenticación humana y RBAC | Implementado en main | Argon2id, roles viewer/operator/administrator, sesiones y refresh rotatorios, revocación, usuarios, desactivación, throttling y auditoría. PR #64 añade segundo factor de posesión con sólo SHA-256 persistido, rotación, revocación de sesiones, recuperación administrativa auditada y flujo web. OIDC/LDAP quedan como federación opcional futura, fuera del criterio V1 local. |
 | 7 | Audit Log global | Implementado en main | Auditoría transaccional de operaciones de dominio y UI admin, más middleware transversal para toda mutación humana autenticada heredada/actual que aún no tenga evento semántico propio; captura actor, ruta, método, estado, IP y request ID. |
-| 8 | Alta disponibilidad y escalado horizontal del backend | Parcial | Pub/Sub Redis para fan-out y reconexión; APIs stateless sobre PostgreSQL; workers con advisory lock y failover probado. Falta aceptación con dos APIs detrás de balanceador y recuperación de particiones/fallos de red. |
+| 8 | Alta disponibilidad y escalado horizontal del backend | Implementado en main | APIs stateless sobre PostgreSQL, Pub/Sub Redis para fan-out/reconexión y workers con advisory lock/failover. HA acceptance ejecuta dos réplicas API detrás de Caddy, verifica estado compartido, WebSocket cross-instance y continuidad/recuperación tras partición de red de una réplica. |
 | 9 | Separar workers del proceso API | Implementado en main | Worker independiente con elección mediante advisory lock; API productiva desactiva jobs embebidos; offline sweep, synthetics y retention se ejecutan en el scheduler; integración PostgreSQL prueba líder único y failover al perder la sesión. |
-| 10 | Distributed Probes: V1.3 está hecha, pero todavía falta bastante | Parcial | Dockerfile, systemd, cola SQLite acotada, concurrencia limitada, backpressure, backoff/jitter y rotación transaccional de bearer token con almacenamiento sólo del hash. Expiración y telemetría propia del probe pendientes. |
+| 10 | Distributed Probes: V1.3 está hecha, pero todavía falta bastante | Implementado en main | Dockerfile y systemd endurecidos, liveness local, cola SQLite acotada, concurrencia limitada, backpressure, backoff/jitter, rotación transaccional de bearer token con sólo hash persistido, expiración de credenciales a 90 días y runtime heartbeat con versión, uptime, cola/capacidad y concurrencia; operator API expone estado/lifecycle. |
 | 11 | Synthetic monitoring mucho más profundo | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 12 | Consenso distribuido V2: rondas/quorum | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 13 | Network Monitoring / NMS: aquí hay un campo enorme todavía | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 14 | LLDP/CDP y topología automática | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 15 | Más información de red | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 16 | Syslog | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 17 | Web: aún le falta convertirse en una aplicación completa de operaciones | Parcial | Navegación, Services, Incidents, detalle, Administration con login y búsqueda global por dispositivos/servicios/incidentes con Ctrl/Cmd+K. Probes/maintenance/operations conservan consola actual. |
-| 18 | UX web | Parcial | Estados de carga/error/vacío, búsqueda de servicios y búsqueda global, páginas de incidentes, URLs de detalle, formularios etiquetados, diseño adaptable. ES/EN, vistas guardadas y resto pendiente. |
+| 17 | Web: aún le falta convertirse en una aplicación completa de operaciones | Implementado en main | Navegación, Dashboard, Services, Incidents, detalle, Administration, Audit, login y búsqueda global Ctrl/Cmd+K. PR #61 convierte Maintenance, Operations, Synthetics y Probes en rutas de primera clase, conserva la vista agregada y alinea la allowlist web con diagnósticos DNS/route snapshot del backend; Playwright cubre las rutas reales. |
+| 18 | UX web | Implementado en main | Estados de carga/error/vacío, búsqueda, URLs de detalle, formularios etiquetados, diseño adaptable y navegación operativa. PR #63 añade preferencia ES/EN persistente y vistas guardadas de deep-links con deduplicación, límite, validación y recuperación ante almacenamiento corrupto. |
 | 19 | Android: prácticamente toda la aplicación real está pendiente | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 20 | Android: push notifications | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 21 | Android: seguridad | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
@@ -45,21 +45,21 @@ Este documento conserva el alcance completo. **Parcial** significa que hay códi
 | 37 | OpenTelemetry | Diferido según propuesta | Traces OTel posteriores a métricas y logging, tal como indica la propuesta. |
 | 38 | Base de datos y escalabilidad | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 39 | Retention policy completa | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 40 | Production Docker deployment | Parcial | Caddy HTTPS, roles separados app/migración, secrets files, non-root app/web, readonly/cap_drop, límites, healthchecks, volúmenes y rotación logs. Production acceptance ya levanta API/worker/web/Prometheus/Grafana, migra, restaura backup y prueba restart; falta validar el proxy HTTPS completo en host limpio. |
+| 40 | Production Docker deployment | Implementado en main | Caddy HTTPS, roles separados app/migración, secrets files, non-root app/web, readonly/cap_drop, límites, healthchecks, volúmenes y rotación de logs. Production acceptance levanta API/worker/web/Prometheus/Grafana/Caddy, importa la CA interna y valida HTTPS, HSTS/frame/content-type, bloqueo de `/metrics`, restore, restart y persistencia. |
 | 41 | Kubernetes: no todavía | Diferido según propuesta | Kubernetes/Helm posteriores a demostrar necesidad de HA; no requisito actual. |
-| 42 | Seguridad adicional | Parcial | Lecturas privadas en producción, RBAC, throttling persistente, refresh/WS revocables y protección de timestamps/replay de resultados. Fuzzing y supply-chain completa pendientes. |
+| 42 | Seguridad adicional | Implementado en main | Lecturas privadas en producción, RBAC, throttling persistente, refresh/WS revocables, protección timestamp/replay, dependency locks y auditorías. PR #55 fija todas las GitHub Actions por SHA y añade SBOM/attestations; PR #60 añade fuzzing determinista Hypothesis sobre contratos, JSON arbitrario, IDs, request IDs y compatibilidad. |
 | 43 | Synthetic secrets | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 44 | Testing: backend bien, sistema completo todavía no | Parcial | Harness enrollment→heartbeat→Redis/WS→inventory, integración telemetry→threshold alert→recovery y CI de producción/restore/reinicio. Playwright de operador pendiente. |
-| 45 | Chaos/failure testing | Parcial | Tests de revocación, refresh usado, readiness DB caída, replay de cola y failover del scheduler por pérdida de sesión. Matriz completa de fallos no ejecutada. |
+| 44 | Testing: backend bien, sistema completo todavía no | Implementado en main | Harness enrollment→heartbeat→Redis/WS→inventory, telemetry→threshold alert→recovery, producción/restore/reinicio, integración y contratos. PR #52 añade Playwright sobre la aplicación Vite real para login, navegación Services, filtro, Ctrl/Cmd+K, incidents/detail y sign-out; PR #61 extiende el browser flow a las rutas operativas dedicadas. |
+| 45 | Chaos/failure testing | Implementado en main | Revocación, refresh usado, readiness DB caída, replay de cola y failover de scheduler, más Failure acceptance productivo: caída/recuperación PostgreSQL, caída/recuperación Redis con WS, restart API con estado persistente y restart worker con recuperación del liderazgo. |
 | 46 | Performance/soak tests | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 47 | Testing móvil | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 48 | Testing ESP32 | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 49 | Releases y distribución | Parcial | Empaquetador desde commit con manifiesto y checksums. MSI/deb/rpm, publicación de imágenes y releases móviles/firmware pendientes. |
-| 50 | Supply-chain | Parcial | Locks Python con hashes y npm ci; bundle SHA256SUMS. SBOM existente, attestations, firmas y pin de todas las acciones pendientes. |
-| 51 | Versionado y compatibilidad | Parcial | `GET /api/v1/system/version` publica versión de paquete, API/protocolo, revisión de esquema y matriz de protocolos para Windows/Linux/macOS/probe. Faltan mínimos explícitos de versión de paquete y validación multicliente contra esa política. |
+| 49 | Releases y distribución | Implementado en main | Release Validation construye y prueba MSI, DEB/RPM y archivo macOS, valida imágenes API/web/probe y publica artefactos productivos con checksums. Los tags publican imágenes GHCR y GitHub Release sólo después de los jobs requeridos; móvil/firmware se excluyen hasta que sus puntos propios sean productivos. |
+| 50 | Supply-chain | Implementado en main | Locks Python con hashes y `npm ci`, SHA256SUMS, CycloneDX SBOM y attestations/provenance para paquetes e imágenes. Todas las acciones remotas están fijadas a SHA inmutable y Security CI impide reintroducir referencias mutables. |
+| 51 | Versionado y compatibilidad | Implementado en main | `GET /api/v1/system/version` publica versión/API/protocolo/esquema y matriz de componentes. `GET /api/v1/system/compatibility/{component}` aplica mínimos explícitos y protocolos soportados para Windows/Linux/macOS/probe, con razones estables; integración cubre clientes válidos, antiguos, protocolo incorrecto y versiones inválidas. |
 | 52 | Auto-update de agentes | Diferido según propuesta | Actualización automática posterior a firma y canales de release. |
-| 53 | Documentación | Parcial | README actualizado, seguimiento de los 57 puntos y guías de despliegue, recuperación, seguridad/API, HA, logging y probes. Diagramas C4 completos pendientes. |
-| 54 | API documentation | Parcial | Guía de auth, contratos nuevos, unidades SLO y códigos de error junto a OpenAPI. Guía exhaustiva de endpoints heredados pendiente. |
+| 53 | Documentación | Implementado en main | README y guías de despliegue, recuperación, seguridad, HA, logging, probes y releases, junto con vistas C4 de contexto, contenedores, componentes y deployment que documentan trust boundaries, persistencia y failover. |
+| 54 | API documentation | Implementado en main | Guía de autenticación/convenciones y catálogo exhaustivo generado desde OpenAPI, incluyendo endpoints fuera de schema (`/metrics`, `/ws/events`). Documentation CI regenera el catálogo y falla si el Markdown comprometido deriva del contrato real. |
 | 55 | Documentation for hardware | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 56 | GitHub hygiene | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 57 | Inteligencia/anomaly detection | Diferido según propuesta | Baselines/anomalías posteriores a benchmark, retención y fiabilidad. |
@@ -68,15 +68,16 @@ Este documento conserva el alcance completo. **Parcial** significa que hay códi
 
 ## Orden de continuación
 
-1. Completar instaladores/distribución y validar HTTPS en host limpio; después cerrar HA con dos APIs detrás de balanceador y escenarios de partición.
-2. Completar notificaciones/routing, lifecycle de credenciales de probes, auth avanzada y los huecos reales de web/UX.
-3. Cerrar testing de operador con Playwright, compatibilidad multicliente, supply-chain/release y documentación C4/API exhaustiva.
-4. Android/iOS: sesiones seguras, caché offline, pantallas reales y pruebas; después push y distribución firmada.
-5. Agentes/NMS/ESP32: paquetes y operaciones declarativas, SNMPv3/LLDP/syslog y, para hardware, identidad/provisioning/pruebas reales antes de OTA firmada.
+1. Notificaciones/routing (#5), synthetic monitoring avanzado (#11), consenso/red avanzada (#12–#16) y synthetic secrets (#43).
+2. Base de datos/retención/performance (#38, #39, #46), cerrando benchmarks y soak prolongado antes de anomaly detection.
+3. Windows/Linux (#29–#32) y después Android/iOS (#19–#24), incluyendo seguridad, pruebas y distribución propias.
+4. ESP32/hardware (#25–#28, #48, #55) con identidad, provisioning, sensores y pruebas físicas antes de OTA.
+5. GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema completo (#59) una vez sus dependencias estén implementadas.
 
 ## Límites verificables
 
-- La integración PostgreSQL prueba locking/failover del scheduler; no certifica todavía particiones de red del despliegue HA completo.
-- `production-acceptance.yml` ejecuta el stack de producción en un runner limpio y valida migración, realtime, observabilidad, restore y restart; no valida todavía el proxy HTTPS/Caddy en un host externo limpio.
-- No se han ejecutado soak 24/48 h, hardware real, firma de releases ni distribución a tiendas.
-- La publicación y el merge han sido autorizados expresamente. La validación de CI y el commit integrado se comunicarán con la entrega; no se despliegan servicios de producción.
+- HA acceptance certifica dos réplicas API compartiendo PostgreSQL/Redis, balanceo Caddy, realtime cross-instance y recuperación de una partición de réplica; no equivale a certificar HA multi-host de PostgreSQL/Redis o del proveedor de infraestructura.
+- Production acceptance valida el proxy Caddy con TLS confiable mediante CA interna en runner limpio; la emisión ACME con DNS público/certificado externo pertenece al entorno de despliegue, no al contrato de CI.
+- Releases cubren los componentes actualmente productivos (API/web/probe y paquetes Windows/Linux/macOS). Android, iOS y firmware ESP32 no se publican mientras sus puntos propios sigan pendientes.
+- La autenticación V1 local ya incluye MFA; OIDC/LDAP permanecen como adaptadores de federación opcionales futuros y no se presentan como implementados.
+- No se han ejecutado soak de 24/48 h, validación de hardware real ni publicación móvil/firmware en tiendas/canales finales.
