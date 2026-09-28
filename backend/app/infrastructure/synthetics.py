@@ -15,6 +15,8 @@ from app.domain.synthetics.models import (
     SyntheticMonitor,
     SyntheticMonitorKind,
 )
+from app.infrastructure.repositories.synthetic_http import SyntheticHttpSettings
+from app.infrastructure.synthetic_secrets import SyntheticSecretResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,11 +134,18 @@ def validate_monitor_definition(
 
 
 class SyntheticProbeExecutor:
-    async def execute(self, monitor: SyntheticMonitor) -> ProbeOutcome:
+    def __init__(self, secret_resolver: SyntheticSecretResolver | None = None) -> None:
+        self._secret_resolver = secret_resolver
+
+    async def execute(
+        self,
+        monitor: SyntheticMonitor,
+        http_settings: SyntheticHttpSettings | None = None,
+    ) -> ProbeOutcome:
         started = time.perf_counter()
         try:
             if monitor.kind is SyntheticMonitorKind.HTTP:
-                return await self._http(monitor, started)
+                return await self._http(monitor, started, http_settings)
             if monitor.kind is SyntheticMonitorKind.TCP:
                 return await self._tcp(monitor, started)
             if monitor.kind is SyntheticMonitorKind.DNS:
@@ -155,6 +164,13 @@ class SyntheticProbeExecutor:
                 latency_ms=(time.perf_counter() - started) * 1000.0,
                 error_kind=SyntheticCheckErrorKind.POLICY,
                 error=str(exc),
+            )
+        except RuntimeError:
+            return ProbeOutcome(
+                success=False,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                error_kind=SyntheticCheckErrorKind.POLICY,
+                error="required synthetic secret is not configured",
             )
         except socket.gaierror:
             return ProbeOutcome(
@@ -192,11 +208,23 @@ class SyntheticProbeExecutor:
                 error=str(exc)[:1024],
             )
 
-    async def _http(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
+    async def _http(
+        self,
+        monitor: SyntheticMonitor,
+        started: float,
+        settings: SyntheticHttpSettings | None,
+    ) -> ProbeOutcome:
         parsed = urlsplit(monitor.target)
         assert parsed.hostname is not None
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         await validate_hostname(parsed.hostname, port)
+        headers = {"User-Agent": "DeviceMesh-Synthetic/1.0"}
+        if settings is not None:
+            headers.update(settings.headers)
+            for name, secret_ref in settings.secret_headers.items():
+                if self._secret_resolver is None:
+                    raise RuntimeError("synthetic secret resolver is unavailable")
+                headers[name] = self._secret_resolver.resolve(secret_ref)
         timeout = httpx.Timeout(monitor.timeout_seconds)
         async with httpx.AsyncClient(
             timeout=timeout,
@@ -206,7 +234,7 @@ class SyntheticProbeExecutor:
             response = await client.request(
                 monitor.http_method or "GET",
                 monitor.target,
-                headers={"User-Agent": "DeviceMesh-Synthetic/1.0"},
+                headers=headers,
             )
         latency = (time.perf_counter() - started) * 1000.0
         expected = monitor.expected_status or 200
@@ -218,6 +246,15 @@ class SyntheticProbeExecutor:
                 error_kind=SyntheticCheckErrorKind.HTTP_STATUS,
                 error=f"expected HTTP {expected}, received {response.status_code}",
             )
+        if settings is not None and settings.expected_body_contains is not None:
+            if settings.expected_body_contains not in response.text:
+                return ProbeOutcome(
+                    success=False,
+                    latency_ms=latency,
+                    http_status=response.status_code,
+                    error_kind=SyntheticCheckErrorKind.ASSERTION,
+                    error="expected response body substring was not present",
+                )
         return ProbeOutcome(success=True, latency_ms=latency, http_status=response.status_code)
 
     async def _tcp(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
