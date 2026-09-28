@@ -4,6 +4,7 @@ import { DeviceDetailPage } from '../features/devices/DeviceDetailPage'
 import './platform.css'
 import './global-search.css'
 import { AdministrationPage, IncidentsPage, ServicesPage } from '../features/platform/PlatformPages'
+import { AccountSecurityPage } from '../features/platform/AccountSecurityPage'
 import { AuditPage } from '../features/platform/AuditPage'
 import { GlobalSearch } from '../features/platform/GlobalSearch'
 import { SecureLoginPage } from '../features/platform/SecureLoginPage'
@@ -53,12 +54,14 @@ export function App() {
   if (hash === '#/incidents') page = <IncidentsPage />
   if (hash.startsWith('#/incidents/')) page = <IncidentsPage key={hash} incidentId={hash.slice(12)} />
   if (hash === '#/administration') page = <AdministrationPage />
+  if (hash === '#/security') page = <AccountSecurityPage />
   if (hash === '#/audit') page = <AuditPage />
   return <><nav className="platform-nav" aria-label="Main navigation">
     <a href="#/">Overview</a><a href="#/services">Services</a><a href="#/incidents">Incidents</a>
     <a href="#/maintenance">Maintenance</a><a href="#/operations">Operations</a>
     <a href="#/synthetics">Synthetics</a><a href="#/probes">Probes</a>
     <a href="#/administration">Administration</a><a href="#/audit">Audit</a>
+    {getToken() && <a href="#/security">Account security</a>}
     <GlobalSearch />
     {getToken() ? <button onClick={() => void signOut()}>Sign out</button> : <a href="#/login">Sign in</a>}
   </nav>{page}</>
