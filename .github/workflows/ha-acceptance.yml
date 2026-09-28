@@ -1,0 +1,148 @@
+# Runs against GitHub's current pull-request merge ref so HA is validated with the latest main.
+name: High availability acceptance
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "infra/docker/**"
+      - "infra/caddy/**"
+      - "tools/deployment/ha_acceptance.py"
+      - ".github/workflows/ha-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-api-failover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.12"}
+      - name: Prepare isolated production configuration
+        run: |
+          set -euo pipefail
+          cp .env.production.example .env.production
+          sed -i 's/mesh.example.com/mesh.ha.invalid/g' .env.production
+          python tools/deployment/config.py --init-secrets
+      - name: Start two production API replicas
+        run: |
+          set -euo pipefail
+          docker compose --project-name devicemesh-ha --project-directory . --env-file .env.production \
+            -f infra/docker/docker-compose.prod.yml \
+            up -d --build --wait --wait-timeout 180 --scale api=2 api
+          mapfile -t api_ids < <(docker compose --project-name devicemesh-ha --project-directory . \
+            --env-file .env.production -f infra/docker/docker-compose.prod.yml ps -q api)
+          if [[ "${#api_ids[@]}" -ne 2 ]]; then
+            echo "Expected exactly two API replicas, got ${#api_ids[@]}" >&2
+            exit 1
+          fi
+          printf '%s\n' "${api_ids[@]}" > /tmp/devicemesh-ha-api-ids
+      - name: Install acceptance client
+        run: python -m pip install 'httpx>=0.28,<1' 'websockets>=15,<16'
+      - name: Configure Caddy load balancer
+        run: |
+          set -euo pipefail
+          mapfile -t api_ids < /tmp/devicemesh-ha-api-ids
+          api_a="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${api_ids[0]}")"
+          api_b="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${api_ids[1]}")"
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "${api_ids[0]}")"
+          cat > /tmp/devicemesh-ha.Caddyfile <<EOF
+          :8080 {
+            reverse_proxy ${api_a}:8000 ${api_b}:8000 {
+              lb_policy round_robin
+              health_uri /ready
+              health_interval 1s
+              health_timeout 2s
+              fail_duration 2s
+              max_fails 1
+              header_down X-DeviceMesh-Upstream {http.reverse_proxy.upstream.hostport}
+            }
+          }
+          EOF
+          docker run -d --name devicemesh-ha-lb --network "$network" \
+            -p 127.0.0.1:18080:8080 \
+            -v /tmp/devicemesh-ha.Caddyfile:/etc/caddy/Caddyfile:ro \
+            caddy:2-alpine
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/ready >/dev/null; then break; fi
+            if [[ "$attempt" == 30 ]]; then docker logs devicemesh-ha-lb; exit 1; fi
+            sleep 1
+          done
+          printf '%s\n%s\n%s\n' "$api_a" "$api_b" "$network" > /tmp/devicemesh-ha-addresses
+      - name: Verify shared state, balancing and Redis fan-out
+        run: |
+          set -euo pipefail
+          mapfile -t addresses < /tmp/devicemesh-ha-addresses
+          python tools/deployment/ha_acceptance.py \
+            --api-a "http://${addresses[0]}:8000" \
+            --api-b "http://${addresses[1]}:8000" \
+            --balanced http://127.0.0.1:18080 \
+            --token-file .secrets/operator_token
+      - name: Partition one replica and prove service continuity
+        run: |
+          set -euo pipefail
+          mapfile -t api_ids < /tmp/devicemesh-ha-api-ids
+          mapfile -t addresses < /tmp/devicemesh-ha-addresses
+          network="${addresses[2]}"
+          docker network disconnect "$network" "${api_ids[0]}"
+          sleep 4
+          for attempt in {1..12}; do
+            curl --fail --silent http://127.0.0.1:18080/ready >/dev/null
+          done
+          docker network connect "$network" "${api_ids[0]}"
+          recovered_ip="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${api_ids[0]}")"
+          for attempt in {1..30}; do
+            if curl --fail --silent "http://${recovered_ip}:8000/ready" >/dev/null; then break; fi
+            if [[ "$attempt" == 30 ]]; then exit 1; fi
+            sleep 1
+          done
+          echo "$recovered_ip" > /tmp/devicemesh-ha-recovered-ip
+      - name: Rejoin recovered replica and verify fan-out again
+        run: |
+          set -euo pipefail
+          mapfile -t api_ids < /tmp/devicemesh-ha-api-ids
+          mapfile -t addresses < /tmp/devicemesh-ha-addresses
+          recovered_ip="$(cat /tmp/devicemesh-ha-recovered-ip)"
+          api_b="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${api_ids[1]}")"
+          network="${addresses[2]}"
+          cat > /tmp/devicemesh-ha.Caddyfile <<EOF
+          :8080 {
+            reverse_proxy ${recovered_ip}:8000 ${api_b}:8000 {
+              lb_policy round_robin
+              health_uri /ready
+              health_interval 1s
+              health_timeout 2s
+              fail_duration 2s
+              max_fails 1
+              header_down X-DeviceMesh-Upstream {http.reverse_proxy.upstream.hostport}
+            }
+          }
+          EOF
+          docker rm -f devicemesh-ha-lb
+          docker run -d --name devicemesh-ha-lb --network "$network" \
+            -p 127.0.0.1:18080:8080 \
+            -v /tmp/devicemesh-ha.Caddyfile:/etc/caddy/Caddyfile:ro \
+            caddy:2-alpine
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/ready >/dev/null; then break; fi
+            sleep 1
+          done
+          python tools/deployment/ha_acceptance.py \
+            --api-a "http://${recovered_ip}:8000" \
+            --api-b "http://${api_b}:8000" \
+            --balanced http://127.0.0.1:18080 \
+            --token-file .secrets/operator_token
+      - if: failure()
+        run: |
+          docker logs devicemesh-ha-lb 2>/dev/null || true
+          docker compose --project-name devicemesh-ha --project-directory . --env-file .env.production \
+            -f infra/docker/docker-compose.prod.yml logs --tail 120 || true
+      - if: always()
+        run: |
+          docker rm -f devicemesh-ha-lb 2>/dev/null || true
+          docker compose --project-name devicemesh-ha --project-directory . --env-file .env.production \
+            -f infra/docker/docker-compose.prod.yml down -v --remove-orphans
