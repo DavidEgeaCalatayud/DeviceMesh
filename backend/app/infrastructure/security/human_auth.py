@@ -22,6 +22,8 @@ class UserRow(Base):
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[str] = mapped_column(String(24))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_digest: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -77,6 +79,7 @@ class HumanPrincipal:
     username: str
     role: str
     session_id: str | None = None
+    mfa_enabled: bool = False
 
 
 class AuthenticationError(ValueError):
@@ -106,7 +109,7 @@ class HumanAuthService:
             user = session.get(UserRow, row.user_id) if row else None
             if not row or not user or not user.enabled:
                 raise AuthenticationError("invalid or expired session")
-            return HumanPrincipal(user.id, user.username, user.role, row.id)
+            return HumanPrincipal(user.id, user.username, user.role, row.id, user.mfa_enabled)
 
     def create_user(self, username: str, password: str, role: str, actor: str) -> UserRow:
         if role not in {"viewer", "operator", "administrator"}:
@@ -114,6 +117,7 @@ class HumanAuthService:
         with self.sessions.begin() as session:
             row = UserRow(id=str(uuid4()), username=username.strip().lower(),
                           password_hash=self.hasher.hash(password), role=role, enabled=True,
+                          mfa_enabled=False, mfa_digest=None,
                           created_at=datetime.now(UTC))
             session.add(row)
             audit(session, actor, "user.created", row.id, {"role": role})
@@ -136,8 +140,16 @@ class HumanAuthService:
                     raise LoginThrottled("too many login attempts; retry in five minutes")
                 row.attempts += 1
 
+    @staticmethod
+    def _valid_mfa(user: UserRow, mfa_code: str | None) -> bool:
+        if not user.mfa_enabled:
+            return True
+        if not user.mfa_digest or not mfa_code:
+            return False
+        return secrets.compare_digest(user.mfa_digest, digest(mfa_code))
+
     def login(self, username: str, password: str, source_ip: str,
-              request_id: str | None = None) -> dict[str, object]:
+              request_id: str | None = None, mfa_code: str | None = None) -> dict[str, object]:
         username = username.strip().lower()
         self._throttle(username, source_ip)
         with self.sessions.begin() as session:
@@ -147,8 +159,9 @@ class HumanAuthService:
                 valid = user is not None and user.enabled
             except (VerificationError, InvalidHashError):
                 valid = False
+            if valid and user is not None:
+                valid = self._valid_mfa(user, mfa_code)
             if not valid or user is None:
-                # Commit the denial audit independently of the error response.
                 audit(session, "anonymous", "user.login_denied", "session",
                       source_ip=source_ip, request_id=request_id)
                 result = None
@@ -157,9 +170,9 @@ class HumanAuthService:
                     user.password_hash = self.hasher.hash(password)
                 result = self._issue(session, user)
                 audit(session, user.id, "user.login", "session",
-                      source_ip=source_ip, request_id=request_id)
+                      {"mfa": user.mfa_enabled}, source_ip=source_ip, request_id=request_id)
         if result is None:
-            raise AuthenticationError("invalid username or password")
+            raise AuthenticationError("invalid credentials")
         return result
 
     def _issue(self, session: Session, user: UserRow) -> dict[str, object]:
@@ -171,7 +184,8 @@ class HumanAuthService:
                               refresh_expires_at=now + timedelta(seconds=self.settings.refresh_ttl_seconds))
         session.add(row)
         return {"accessToken": token, "refreshToken": refresh, "expiresAt": row.expires_at,
-                "user": {"id": user.id, "username": user.username, "role": user.role}}
+                "user": {"id": user.id, "username": user.username, "role": user.role,
+                         "mfaEnabled": user.mfa_enabled}}
 
     def refresh(self, token: str) -> dict[str, object]:
         with self.sessions.begin() as session:
@@ -185,6 +199,39 @@ class HumanAuthService:
                 raise AuthenticationError("invalid refresh token")
             row.revoked_at = datetime.now(UTC)
             return self._issue(session, user)
+
+    @staticmethod
+    def _revoke_user_sessions(session: Session, user_id: str) -> None:
+        session.execute(update(HumanSessionRow).where(
+            HumanSessionRow.user_id == user_id,
+            HumanSessionRow.revoked_at.is_(None),
+        ).values(revoked_at=datetime.now(UTC)))
+
+    def enable_or_rotate_mfa(self, user_id: str, actor: str) -> str:
+        code = secrets.token_urlsafe(32)
+        with self.sessions.begin() as session:
+            user = session.get(UserRow, user_id)
+            if not user or not user.enabled:
+                raise AuthenticationError("user unavailable")
+            user.mfa_digest = digest(code)
+            user.mfa_enabled = True
+            self._revoke_user_sessions(session, user.id)
+            audit(session, actor, "user.mfa_rotated", user.id)
+        return code
+
+    def disable_mfa(self, user_id: str, mfa_code: str, actor: str,
+                    *, administrator_override: bool = False) -> None:
+        with self.sessions.begin() as session:
+            user = session.get(UserRow, user_id)
+            if not user:
+                raise AuthenticationError("user unavailable")
+            if not administrator_override and not self._valid_mfa(user, mfa_code):
+                raise AuthenticationError("invalid credentials")
+            user.mfa_enabled = False
+            user.mfa_digest = None
+            self._revoke_user_sessions(session, user.id)
+            audit(session, actor, "user.mfa_disabled", user.id,
+                  {"administratorOverride": administrator_override})
 
     def logout(self, principal: HumanPrincipal) -> None:
         with self.sessions.begin() as session:
