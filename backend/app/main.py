@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.dependencies.security import human_access_gate, require_human
 from app.api.mutation_audit import MutationAuditMiddleware
+from app.api.probe_lifecycle import ProbeCredentialExpiryMiddleware
 from app.api.routers import (
     agents,
     alerts,
@@ -22,6 +23,7 @@ from app.api.routers import (
     operations,
     platform,
     probe_credentials,
+    probe_runtime,
     synthetics,
     telemetry,
 )
@@ -95,6 +97,7 @@ app = FastAPI(title="DeviceMesh API", version=SERVER_VERSION, lifespan=lifespan,
               dependencies=[Depends(human_access_gate)])
 app.add_middleware(RequestMetricsMiddleware)
 app.add_middleware(MutationAuditMiddleware)
+app.add_middleware(ProbeCredentialExpiryMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
@@ -118,6 +121,7 @@ app.include_router(operational_health.router)
 app.include_router(operations.router)
 app.include_router(synthetics.router)
 app.include_router(probe_credentials.router)
+app.include_router(probe_runtime.router)
 
 
 @app.websocket("/ws/events")
