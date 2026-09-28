@@ -1,6 +1,17 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, or_, select
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    or_,
+    select,
+)
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from app.domain.alerts.models import AlertTransition
