@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import os
+import time
 from contextlib import suppress
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from devicemesh_probe.client import publish_observations
 from devicemesh_probe.config import ProbeConfig
 from devicemesh_probe.discovery import DiscoveryScope, scan_scope
 from devicemesh_probe.health import ProbeHealthState, maintain_liveness
+from devicemesh_probe.runtime import maintain_runtime_telemetry, publish_runtime_telemetry
 from devicemesh_probe.synthetics import run_synthetic_loop
 
 
@@ -20,18 +22,23 @@ def _health_state() -> ProbeHealthState:
 async def _run_synthetic_with_liveness(config: ProbeConfig, *, once: bool) -> None:
     health = _health_state()
     health.write()
+    started_at = time.monotonic()
     if once:
         await run_synthetic_loop(config, once=True)
+        await publish_runtime_telemetry(config, started_at=started_at)
         health.write()
         return
 
     liveness = asyncio.create_task(maintain_liveness(health))
+    runtime = asyncio.create_task(maintain_runtime_telemetry(config, started_at=started_at))
     try:
         await run_synthetic_loop(config, once=False)
     finally:
-        liveness.cancel()
-        with suppress(asyncio.CancelledError):
-            await liveness
+        for task in (runtime, liveness):
+            task.cancel()
+        for task in (runtime, liveness):
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 def main() -> None:
