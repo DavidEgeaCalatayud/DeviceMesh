@@ -32,12 +32,14 @@ class ProbeCredentialExpiryMiddleware:
             if authorization.startswith("Bearer "):
                 token = authorization.removeprefix("Bearer ").strip()
 
-        if token and await asyncio.to_thread(credential_expired, token):
-            response = JSONResponse(
-                {"detail": "probe credential expired; rotate the probe token"},
-                status_code=401,
-            )
-            await response(scope, receive, send)
-            return
+        if token is not None:
+            expired = await asyncio.to_thread(lambda: credential_expired(token))
+            if expired:
+                response = JSONResponse(
+                    {"detail": "probe credential expired; rotate the probe token"},
+                    status_code=401,
+                )
+                await response(scope, receive, send)
+                return
 
         await self.app(scope, receive, send)
