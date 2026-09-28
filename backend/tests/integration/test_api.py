@@ -47,7 +47,7 @@ def test_system_version_publishes_compatibility_contract() -> None:
     assert payload["supportedProtocolVersions"] == [1]
     assert payload["minProtocolVersion"] == 1
     assert payload["maxProtocolVersion"] == 1
-    assert payload["schemaRevision"] == "0014"
+    assert payload["schemaRevision"] == "0015"
     assert payload["componentCompatibility"] == {
         "windows-agent": {"minimumVersion": "0.2.0", "protocolVersions": [1]},
         "linux-agent": {"minimumVersion": "0.2.0", "protocolVersions": [1]},
