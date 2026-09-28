@@ -4,7 +4,8 @@ import math
 import re
 from datetime import UTC, datetime
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from app.api.schemas.agent import HeartbeatRequest, TelemetryRequest
@@ -141,3 +142,13 @@ def test_fuzz_component_compatibility_never_fails_open(
     assert len(parsed) == 3
     assert parsed >= minimum
     assert protocol_version in policy.protocol_versions
+
+
+def test_unicode_numeric_semver_is_rejected_without_exception() -> None:
+    compatible, reason = evaluate_component_compatibility(
+        "windows-agent",
+        "².².²",
+        1,
+    )
+    assert compatible is False
+    assert reason == "invalid_version"
