@@ -6,7 +6,7 @@ DeviceMesh V1 supports horizontal availability at the application tier. PostgreS
 
 API instances are stateless with respect to durable product state. They share PostgreSQL for durable state and Redis for cross-instance realtime fan-out. Multiple API replicas can therefore serve the same deployment behind a reverse proxy/load balancer.
 
-The repository includes a dedicated HA acceptance workflow that starts **two production API replicas** from `docker-compose.prod.yml` and places a Caddy reverse proxy in front of both. Acceptance proves that:
+The repository includes a dedicated HA acceptance workflow that starts **two production API replicas** from `docker-compose.prod.yml` and places a Caddy reverse proxy in front of both. The workflow is part of pull-request validation whenever backend, production networking/proxy configuration, or the HA acceptance harness changes. Acceptance proves that:
 
 - both replicas answer readiness independently;
 - a service created through replica A is immediately readable through replica B, demonstrating shared durable state;
