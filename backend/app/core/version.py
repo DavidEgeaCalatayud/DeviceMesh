@@ -29,7 +29,9 @@ COMPONENT_COMPATIBILITY: dict[str, ComponentCompatibility] = {
 
 def _numeric_semver(value: str) -> tuple[int, int, int] | None:
     parts = value.split(".")
-    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+    if len(parts) != 3 or any(
+        not part or not part.isascii() or not part.isdigit() for part in parts
+    ):
         return None
     return int(parts[0]), int(parts[1]), int(parts[2])
 
