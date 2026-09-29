@@ -246,15 +246,18 @@ class SyntheticProbeExecutor:
                 error_kind=SyntheticCheckErrorKind.HTTP_STATUS,
                 error=f"expected HTTP {expected}, received {response.status_code}",
             )
-        if settings is not None and settings.expected_body_contains is not None:
-            if settings.expected_body_contains not in response.text:
-                return ProbeOutcome(
-                    success=False,
-                    latency_ms=latency,
-                    http_status=response.status_code,
-                    error_kind=SyntheticCheckErrorKind.ASSERTION,
-                    error="expected response body substring was not present",
-                )
+        if (
+            settings is not None
+            and settings.expected_body_contains is not None
+            and settings.expected_body_contains not in response.text
+        ):
+            return ProbeOutcome(
+                success=False,
+                latency_ms=latency,
+                http_status=response.status_code,
+                error_kind=SyntheticCheckErrorKind.ASSERTION,
+                error="expected response body substring was not present",
+            )
         return ProbeOutcome(success=True, latency_ms=latency, http_status=response.status_code)
 
     async def _tcp(self, monitor: SyntheticMonitor, started: float) -> ProbeOutcome:
