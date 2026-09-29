@@ -1,6 +1,6 @@
 # Seguimiento de los 57 puntos de DeviceMesh
 
-Primera entrega: `feat/production-platform-foundations`. Base revisada: `9a23733` (post-PR #66).
+Primera entrega: `feat/production-platform-foundations`. Base revisada: `5e8fca2` (post-PR #68).
 
 Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Los scaffolds móviles y ESP32 siguen siendo scaffolds. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
 
@@ -16,12 +16,12 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 8 | Alta disponibilidad y escalado horizontal del backend | Implementado en main | APIs stateless sobre PostgreSQL, Pub/Sub Redis para fan-out/reconexión y workers con advisory lock/failover. HA acceptance ejecuta dos réplicas API detrás de Caddy, verifica estado compartido, WebSocket cross-instance y continuidad/recuperación tras partición de red de una réplica. |
 | 9 | Separar workers del proceso API | Implementado en main | Worker independiente con elección mediante advisory lock; API productiva desactiva jobs embebidos; offline sweep, synthetics y retention se ejecutan en el scheduler; integración PostgreSQL prueba líder único y failover al perder la sesión. |
 | 10 | Distributed Probes: V1.3 está hecha, pero todavía falta bastante | Implementado en main | Dockerfile y systemd endurecidos, liveness local, cola SQLite acotada, concurrencia limitada, backpressure, backoff/jitter, rotación transaccional de bearer token con sólo hash persistido, expiración de credenciales a 90 días y runtime heartbeat con versión, uptime, cola/capacidad y concurrencia; operator API expone estado/lifecycle. |
-| 11 | Synthetic monitoring mucho más profundo | Pendiente | HTTP/TCP/DNS/TLS e ICMP distribuido ya existen, junto a SLA/latencia y validación de destino. Falta profundizar assertions/configuración HTTP y autenticación/headers mediante referencias secretas, además de cerrar la UX/contrato correspondiente. |
+| 11 | Synthetic monitoring mucho más profundo | Implementado en main | HTTP/TCP/DNS/TLS e ICMP distribuido, SLA/latencia y validación de destino. PR #68 añade headers HTTP no sensibles, referencias secretas para headers autenticados, assertion `expectedBodyContains`, error `assertion`, persistencia separada, paridad backend/probe y configuración web. Backend, Probe, Web/Playwright, Integration, Security, HA, Failure, Performance, Production, Release y Documentation CI verdes. |
 | 12 | Consenso distribuido V2: rondas/quorum | Implementado en main | `RoundAwareSyntheticRepository` agrupa sólo observaciones de la misma ronda temporal, calcula mayoría estricta sobre probes activos/asignados y devuelve `insufficient_data` antes de quorum. Integración prueba rondas parciales, aislamiento de resultados de rondas anteriores y quorum 2/3 sin abrir incidentes prematuros. |
-| 13 | Network Monitoring / NMS: aquí hay un campo enorme todavía | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 14 | LLDP/CDP y topología automática | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 15 | Más información de red | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 16 | Syslog | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 13 | Network Monitoring / NMS: aquí hay un campo enorme todavía | Pendiente | Implementar inventario/polling de dispositivos de red, métricas de interfaces y health operativo sobre una base persistente; SNMPv3 debe usar credenciales referenciadas, no secretos en claro. |
+| 14 | LLDP/CDP y topología automática | Pendiente | Incorporar vecinos LLDP/CDP como evidencia de enlace persistente y priorizarlos sobre la topología inferida por segmento; validar actualización, caducidad y cambios de enlace. |
+| 15 | Más información de red | Pendiente | Enriquecer interfaces/rutas/ARP-VLAN/velocidad-MTU y exposición operativa para diagnóstico, manteniendo contratos acotados y portables. |
+| 16 | Syslog | Pendiente | Añadir receptor/parser persistente con límites, normalización de severidad/facility, búsqueda/retención y correlación segura con dispositivos/servicios. |
 | 17 | Web: aún le falta convertirse en una aplicación completa de operaciones | Implementado en main | Navegación, Dashboard, Services, Incidents, detalle, Administration, Audit, login y búsqueda global Ctrl/Cmd+K. PR #61 convierte Maintenance, Operations, Synthetics y Probes en rutas de primera clase, conserva la vista agregada y alinea la allowlist web con diagnósticos DNS/route snapshot del backend; Playwright cubre las rutas reales. |
 | 18 | UX web | Implementado en main | Estados de carga/error/vacío, búsqueda, URLs de detalle, formularios etiquetados, diseño adaptable y navegación operativa. PR #63 añade preferencia ES/EN persistente y vistas guardadas de deep-links con deduplicación, límite, validación y recuperación ante almacenamiento corrupto. |
 | 19 | Android: prácticamente toda la aplicación real está pendiente | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
@@ -34,11 +34,11 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 26 | ESP32: sensores | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 27 | ESP32 como probe de red | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
 | 28 | ESP32 production-ready | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 29 | Windows Agent | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 30 | Windows telemetry | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 31 | Windows remote operations | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 32 | Linux Agent | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 33 | Agente macOS | Implementado en main | Main incorporó el agente nativo y la paridad Windows/Linux en f199492; se conserva al integrar esta rama. |
+| 29 | Windows Agent | Implementado en main | Agente .NET 8 con identidad estable, enrollment, credencial persistente, heartbeat/telemetría autenticados y servicio Windows. CI dedicado restaura, compila Release y ejecuta tests en `windows-latest`; Release Validation publica binario self-contained y MSI x64 con checksum/provenance. |
+| 30 | Windows telemetry | Implementado en main | Collector nativo publica CPU, memoria/pagefile, discos, interfaces/bytes de red, procesos y uptime con nombres portables. Tests cubren collector y serialización; los datos se envían por el contrato de telemetría autenticado. |
+| 31 | Windows remote operations | Implementado en main | El agente reclama y completa operaciones pull-based usando la allowlist declarativa del backend; no existe shell/PowerShell/comando arbitrario. El contrato prueba campos estructurados y ausencia de primitivas `command`/`shell`, y la UI sólo expone operaciones allowlisted. |
+| 32 | Linux Agent | Implementado en main | Agente Python 3.12 con enrollment, credencial persistente `0600`, heartbeat/identidad y telemetría compatibles con Windows, operaciones pull-based allowlisted y systemd endurecido. Linux Agent CI ejecuta Ruff, mypy y pytest; Release Validation construye DEB/RPM con checksums y provenance. |
+| 33 | Agente macOS | Implementado en main | Agente Swift nativo con paridad operativa Windows/Linux, Keychain, heartbeat/telemetría, operaciones declarativas y LaunchAgent; CI y release package propios. |
 | 34 | Observabilidad del propio DeviceMesh | Implementado en main | `/metrics` protegido cubre HTTP, ingesta, WS, devices/probes, incidentes, DB y jobs; Prometheus scrapea API y worker. Reglas evaluadas cubren disponibilidad, líder, jobs estancados, error ratio y p95 HTTP/DB; production acceptance verifica targets y rules. |
 | 35 | Grafana | Implementado en main | Provisioning automático de datasource y dashboards `DeviceMesh / Overview` y `DeviceMesh / Workers & Synthetics`; production acceptance exige al menos dos dashboards provisionados. |
 | 36 | Logging estructurado | Implementado en main | JSON común para API y scheduler-worker, `service/component/process_id`, propagación segura de `X-Request-ID`, contexto allow-listed de dominio/jobs, acceso Uvicorn crudo desactivado, tests y guía operativa. |
@@ -48,7 +48,7 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 40 | Production Docker deployment | Implementado en main | Caddy HTTPS, roles separados app/migración, secrets files, non-root app/web, readonly/cap_drop, límites, healthchecks, volúmenes y rotación de logs. Production acceptance levanta API/worker/web/Prometheus/Grafana/Caddy, importa la CA interna y valida HTTPS, HSTS/frame/content-type, bloqueo de `/metrics`, restore, restart y persistencia. |
 | 41 | Kubernetes: no todavía | Diferido según propuesta | Kubernetes/Helm posteriores a demostrar necesidad de HA; no requisito actual. |
 | 42 | Seguridad adicional | Implementado en main | Lecturas privadas en producción, RBAC, throttling persistente, refresh/WS revocables, protección timestamp/replay, dependency locks y auditorías. PR #55 fija todas las GitHub Actions por SHA y añade SBOM/attestations; PR #60 añade fuzzing determinista Hypothesis sobre contratos, JSON arbitrario, IDs, request IDs y compatibilidad. |
-| 43 | Synthetic secrets | Pendiente | Implementar referencias secretas para credenciales/headers de checks sintéticos sin persistir secretos en claro, con resolución segura en backend/probes, redacción API/logs y pruebas de no filtración. |
+| 43 | Synthetic secrets | Implementado en main | PR #68 persiste sólo referencias opacas para headers sensibles; backend y cada probe resuelven valores localmente desde fichero/env, `/probes/work` nunca transporta el valor secreto y la UI sólo acepta referencias. Fallos por secreto ausente y assertions son acotados/redactados, con tests de no filtración y guía de rotación/provisioning. |
 | 44 | Testing: backend bien, sistema completo todavía no | Implementado en main | Harness enrollment→heartbeat→Redis/WS→inventory, telemetry→threshold alert→recovery, producción/restore/reinicio, integración y contratos. PR #52 añade Playwright sobre la aplicación Vite real para login, navegación Services, filtro, Ctrl/Cmd+K, incidents/detail y sign-out; PR #61 extiende el browser flow a las rutas operativas dedicadas. |
 | 45 | Chaos/failure testing | Implementado en main | Revocación, refresh usado, readiness DB caída, replay de cola y failover de scheduler, más Failure acceptance productivo: caída/recuperación PostgreSQL, caída/recuperación Redis con WS, restart API con estado persistente y restart worker con recuperación del liderazgo. |
 | 46 | Performance/soak tests | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
@@ -68,9 +68,9 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 
 ## Orden de continuación
 
-1. Synthetic secrets y assertions avanzadas (#43/#11), y después red/NMS (#13–#16).
+1. Red/NMS (#13–#16): inventario persistente de red, LLDP/CDP, SNMPv3 con secret refs y Syslog.
 2. Base de datos/retención/performance (#38, #39, #46), cerrando benchmarks y soak prolongado antes de anomaly detection.
-3. Auditar y cerrar el estado real de Windows/Linux (#29–#32) y después Android/iOS (#19–#24), incluyendo seguridad, pruebas y distribución propias.
+3. Android/iOS (#19–#24), incluyendo sesiones seguras, pantallas reales, pruebas, push y distribución propias.
 4. ESP32/hardware (#25–#28, #48, #55) con identidad, provisioning, sensores y pruebas físicas antes de OTA.
 5. GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema completo (#59) una vez sus dependencias estén implementadas.
 
