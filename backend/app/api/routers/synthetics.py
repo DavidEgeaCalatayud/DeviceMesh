@@ -33,6 +33,10 @@ from app.domain.synthetics.models import (
     SyntheticMonitorKind,
     SyntheticProbe,
 )
+from app.infrastructure.repositories.synthetic_http import (
+    SqlAlchemySyntheticHttpSettingsRepository,
+    SyntheticHttpSettings,
+)
 from app.infrastructure.repositories.synthetics import (
     SqlAlchemySyntheticRepository,
     SyntheticMonitorNotFoundError,
@@ -40,19 +44,27 @@ from app.infrastructure.repositories.synthetics import (
     SyntheticProbeNotFoundError,
     SyntheticWorkNotFoundError,
 )
+from app.infrastructure.synthetic_secrets import validate_http_settings
 from app.infrastructure.synthetics import SyntheticTargetPolicyError, validate_monitor_definition
-from app.runtime import get_synthetic_repository
+from app.runtime import get_synthetic_http_settings_repository, get_synthetic_repository
 
 router = APIRouter(prefix="/api/v1", tags=["synthetics"])
 SyntheticRepository = Annotated[
     SqlAlchemySyntheticRepository,
     Depends(get_synthetic_repository),
 ]
+SyntheticHttpRepository = Annotated[
+    SqlAlchemySyntheticHttpSettingsRepository,
+    Depends(get_synthetic_http_settings_repository),
+]
 Operator = Annotated[None, Depends(require_operator)]
 Authorization = Annotated[str | None, Header(alias="Authorization")]
 
 
-def _monitor_response(monitor: SyntheticMonitor) -> SyntheticMonitorResponse:
+def _monitor_response(
+    monitor: SyntheticMonitor,
+    http_settings: SyntheticHttpSettings,
+) -> SyntheticMonitorResponse:
     return SyntheticMonitorResponse(
         id=monitor.id,
         name=monitor.name,
@@ -65,6 +77,9 @@ def _monitor_response(monitor: SyntheticMonitor) -> SyntheticMonitorResponse:
         enabled=monitor.enabled,
         httpMethod=monitor.http_method,
         expectedStatus=monitor.expected_status,
+        httpHeaders=http_settings.headers,
+        httpSecretHeaders=http_settings.secret_headers,
+        expectedBodyContains=http_settings.expected_body_contains,
         failureThreshold=monitor.failure_threshold,
         recoveryThreshold=monitor.recovery_threshold,
         createdBy=monitor.created_by,
@@ -123,9 +138,11 @@ def _require_probe(repository: SqlAlchemySyntheticRepository, authorization: str
 @router.get("/synthetic-monitors", response_model=list[SyntheticMonitorResponse])
 def list_synthetic_monitors(
     repository: SyntheticRepository,
+    http_repository: SyntheticHttpRepository,
     device_id: Annotated[str | None, Query(alias="deviceId")] = None,
 ) -> list[SyntheticMonitorResponse]:
-    return [_monitor_response(monitor) for monitor in repository.list_monitors(device_id=device_id)]
+    monitors = repository.list_monitors(device_id=device_id)
+    return [_monitor_response(monitor, http_repository.get(monitor.id)) for monitor in monitors]
 
 
 @router.post(
@@ -137,8 +154,16 @@ def create_synthetic_monitor(
     request: SyntheticMonitorCreateRequest,
     _: Operator,
     repository: SyntheticRepository,
+    http_repository: SyntheticHttpRepository,
 ) -> SyntheticMonitorResponse:
     kind = SyntheticMonitorKind(request.kind)
+    if kind is not SyntheticMonitorKind.HTTP and (
+        request.httpHeaders or request.httpSecretHeaders or request.expectedBodyContains is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="HTTP headers and body assertions are only valid for HTTP monitors",
+        )
     try:
         validate_monitor_definition(
             kind=kind,
@@ -149,7 +174,13 @@ def create_synthetic_monitor(
             http_method=request.httpMethod,
             expected_status=request.expectedStatus,
         )
-    except SyntheticTargetPolicyError as exc:
+        validate_http_settings(
+            request.httpHeaders,
+            request.httpSecretHeaders,
+            request.expectedBodyContains,
+            http_method=request.httpMethod,
+        )
+    except (SyntheticTargetPolicyError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
@@ -167,7 +198,15 @@ def create_synthetic_monitor(
         failure_threshold=request.failureThreshold,
         recovery_threshold=request.recoveryThreshold,
     )
-    return _monitor_response(monitor)
+    http_settings = http_repository.set(
+        monitor.id,
+        headers=request.httpHeaders if kind is SyntheticMonitorKind.HTTP else {},
+        secret_headers=request.httpSecretHeaders if kind is SyntheticMonitorKind.HTTP else {},
+        expected_body_contains=(
+            request.expectedBodyContains if kind is SyntheticMonitorKind.HTTP else None
+        ),
+    )
+    return _monitor_response(monitor, http_settings)
 
 
 @router.patch(
@@ -179,12 +218,13 @@ def set_synthetic_monitor_state(
     request: SyntheticMonitorStateRequest,
     _: Operator,
     repository: SyntheticRepository,
+    http_repository: SyntheticHttpRepository,
 ) -> SyntheticMonitorResponse:
     try:
         monitor = repository.set_enabled(monitor_id, request.enabled, now=datetime.now(UTC))
     except SyntheticMonitorNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="monitor not found") from exc
-    return _monitor_response(monitor)
+    return _monitor_response(monitor, http_repository.get(monitor.id))
 
 
 @router.get(
@@ -451,6 +491,7 @@ def synthetic_probe_heartbeat(
 @router.get("/probes/work", response_model=list[SyntheticWorkResponse])
 def claim_synthetic_probe_work(
     repository: SyntheticRepository,
+    http_repository: SyntheticHttpRepository,
     authorization: Authorization = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> list[SyntheticWorkResponse]:
@@ -462,24 +503,30 @@ def claim_synthetic_probe_work(
         limit=limit,
         lease_seconds=settings.synthetic_probe_work_lease_seconds,
     )
-    return [
-        SyntheticWorkResponse(
-            workId=item.id,
-            assignedAt=item.assigned_at,
-            leaseExpiresAt=item.lease_expires_at,
-            monitor=SyntheticWorkMonitorResponse(
-                id=item.monitor.id,
-                name=item.monitor.name,
-                kind=item.monitor.kind.value,
-                target=item.monitor.target,
-                port=item.monitor.port,
-                timeoutSeconds=item.monitor.timeout_seconds,
-                httpMethod=item.monitor.http_method,
-                expectedStatus=item.monitor.expected_status,
-            ),
+    responses: list[SyntheticWorkResponse] = []
+    for item in items:
+        http_settings = http_repository.get(item.monitor.id)
+        responses.append(
+            SyntheticWorkResponse(
+                workId=item.id,
+                assignedAt=item.assigned_at,
+                leaseExpiresAt=item.lease_expires_at,
+                monitor=SyntheticWorkMonitorResponse(
+                    id=item.monitor.id,
+                    name=item.monitor.name,
+                    kind=item.monitor.kind.value,
+                    target=item.monitor.target,
+                    port=item.monitor.port,
+                    timeoutSeconds=item.monitor.timeout_seconds,
+                    httpMethod=item.monitor.http_method,
+                    expectedStatus=item.monitor.expected_status,
+                    httpHeaders=http_settings.headers,
+                    httpSecretHeaders=http_settings.secret_headers,
+                    expectedBodyContains=http_settings.expected_body_contains,
+                ),
+            )
         )
-        for item in items
-    ]
+    return responses
 
 
 @router.post("/probes/results", response_model=SyntheticCheckResponse)

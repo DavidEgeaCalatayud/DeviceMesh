@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
+from app.infrastructure.repositories.synthetic_http import (
+    SqlAlchemySyntheticHttpSettingsRepository,
+)
 from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.synthetics import SyntheticProbeExecutor
 
@@ -11,12 +14,14 @@ class SyntheticProbeWorker:
     def __init__(
         self,
         repository: SqlAlchemySyntheticRepository,
+        http_settings_repository: SqlAlchemySyntheticHttpSettingsRepository,
         executor: SyntheticProbeExecutor,
         *,
         probe_id: str,
         batch_size: int,
     ) -> None:
         self._repository = repository
+        self._http_settings_repository = http_settings_repository
         self._executor = executor
         self._probe_id = probe_id
         self._batch_size = batch_size
@@ -29,7 +34,11 @@ class SyntheticProbeWorker:
             limit=self._batch_size,
         )
         for monitor in monitors:
-            outcome = await self._executor.execute(monitor)
+            http_settings = await asyncio.to_thread(
+                self._http_settings_repository.get,
+                monitor.id,
+            )
+            outcome = await self._executor.execute(monitor, http_settings)
             await asyncio.to_thread(
                 self._repository.record_result,
                 monitor_id=monitor.id,

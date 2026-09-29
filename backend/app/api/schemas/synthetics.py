@@ -16,6 +16,9 @@ class SyntheticMonitorCreateRequest(BaseModel):
     timeoutSeconds: float = Field(default=5.0, ge=0.5, le=30.0)
     httpMethod: Literal["GET", "HEAD"] | None = None
     expectedStatus: int | None = Field(default=None, ge=100, le=599)
+    httpHeaders: dict[str, str] = Field(default_factory=dict, max_length=32)
+    httpSecretHeaders: dict[str, str] = Field(default_factory=dict, max_length=32)
+    expectedBodyContains: str | None = Field(default=None, min_length=1, max_length=512)
     failureThreshold: int = Field(default=3, ge=1, le=20)
     recoveryThreshold: int = Field(default=2, ge=1, le=20)
 
@@ -32,6 +35,9 @@ class SyntheticMonitorResponse(BaseModel):
     enabled: bool
     httpMethod: str | None
     expectedStatus: int | None
+    httpHeaders: dict[str, str]
+    httpSecretHeaders: dict[str, str]
+    expectedBodyContains: str | None
     failureThreshold: int
     recoveryThreshold: int
     createdBy: str
@@ -132,6 +138,9 @@ class SyntheticWorkMonitorResponse(BaseModel):
     timeoutSeconds: float
     httpMethod: str | None
     expectedStatus: int | None
+    httpHeaders: dict[str, str]
+    httpSecretHeaders: dict[str, str]
+    expectedBodyContains: str | None
 
 
 class SyntheticWorkResponse(BaseModel):
@@ -153,6 +162,7 @@ class SyntheticWorkResultRequest(BaseModel):
         "timeout",
         "connection",
         "http_status",
+        "assertion",
         "policy",
         "unsupported",
         "internal",

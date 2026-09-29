@@ -1,8 +1,10 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 
 from devicemesh_probe.config import ProbeConfig
+from devicemesh_probe.synthetic_secrets import SyntheticSecretResolver
 from devicemesh_probe.synthetics import _address_allowed, _execute_icmp, _parse_work
 
 
@@ -42,6 +44,9 @@ def test_parse_distributed_work_contract() -> None:
                     "timeoutSeconds": 5,
                     "httpMethod": "GET",
                     "expectedStatus": 200,
+                    "httpHeaders": {"X-Client": "DeviceMesh"},
+                    "httpSecretHeaders": {"Authorization": "payments-api-token"},
+                    "expectedBodyContains": "healthy",
                 },
             },
             {
@@ -65,8 +70,19 @@ def test_parse_distributed_work_contract() -> None:
     assert len(work) == 2
     assert work[0].monitor.kind == "http"
     assert work[0].monitor.expected_status == 200
+    assert work[0].monitor.http_headers == {"X-Client": "DeviceMesh"}
+    assert work[0].monitor.http_secret_headers == {"Authorization": "payments-api-token"}
+    assert work[0].monitor.expected_body_contains == "healthy"
     assert work[1].monitor.kind == "tls"
     assert work[1].monitor.port == 443
+    assert work[1].monitor.http_secret_headers == {}
+
+
+def test_probe_secret_resolver_does_not_leak_missing_reference(tmp_path: Path) -> None:
+    resolver = SyntheticSecretResolver(str(tmp_path))
+    with pytest.raises(RuntimeError) as exc_info:
+        resolver.resolve("payments-api-token")
+    assert str(exc_info.value) == "required synthetic secret is not configured"
 
 
 def test_synthetic_network_boundary_blocks_local_addresses() -> None:

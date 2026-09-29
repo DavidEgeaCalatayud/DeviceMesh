@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     synthetic_probe_id: str = "backend-probe"
     synthetic_probe_offline_after_seconds: int = 120
     synthetic_probe_work_lease_seconds: int = 60
+    synthetic_secret_directory: str = "/run/secrets/devicemesh-synthetics"
     synthetic_consensus_quorum_ratio: float = Field(default=0.5, ge=0.5, lt=1.0)
     synthetic_consensus_minimum_quorum: int = Field(default=1, ge=1, le=32)
     synthetic_consensus_round_window_seconds: int = Field(default=30, ge=1, le=300)

@@ -18,6 +18,7 @@ import httpx
 
 from devicemesh_probe.config import ProbeConfig
 from devicemesh_probe.outbox import ResultOutbox
+from devicemesh_probe.synthetic_secrets import SyntheticSecretResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,9 @@ class SyntheticWorkMonitor:
     timeout_seconds: float
     http_method: str | None
     expected_status: int | None
+    http_headers: dict[str, str]
+    http_secret_headers: dict[str, str]
+    expected_body_contains: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +80,21 @@ async def _validate_hostname(hostname: str, port: int) -> None:
         raise ValueError(f"target resolves to a prohibited address: {rejected[0]}")
 
 
+def _string_map(raw: object, *, field: str) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise TypeError(f"synthetic work item {field} is invalid")
+    if len(raw) > 32:
+        raise ValueError(f"synthetic work item {field} exceeds 32 entries")
+    result: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise TypeError(f"synthetic work item {field} must contain string pairs")
+        result[key] = value
+    return result
+
+
 def _parse_work(payload: list[dict[str, object]]) -> list[SyntheticWork]:
     items: list[SyntheticWork] = []
     for raw in payload:
@@ -95,6 +114,9 @@ def _parse_work(payload: list[dict[str, object]]) -> list[SyntheticWork]:
         port = monitor_raw.get("port")
         http_method = monitor_raw.get("httpMethod")
         expected_status = monitor_raw.get("expectedStatus")
+        expected_body_contains = monitor_raw.get("expectedBodyContains")
+        if expected_body_contains is not None and not isinstance(expected_body_contains, str):
+            raise TypeError("synthetic work item expectedBodyContains is invalid")
         items.append(
             SyntheticWork(
                 work_id=work_id,
@@ -107,6 +129,12 @@ def _parse_work(payload: list[dict[str, object]]) -> list[SyntheticWork]:
                     timeout_seconds=float(timeout),
                     http_method=http_method if isinstance(http_method, str) else None,
                     expected_status=expected_status if isinstance(expected_status, int) else None,
+                    http_headers=_string_map(monitor_raw.get("httpHeaders"), field="httpHeaders"),
+                    http_secret_headers=_string_map(
+                        monitor_raw.get("httpSecretHeaders"),
+                        field="httpSecretHeaders",
+                    ),
+                    expected_body_contains=expected_body_contains,
                 ),
             )
         )
@@ -141,7 +169,10 @@ async def _execute_icmp(target: str, timeout_seconds: float) -> tuple[bool, str 
     return False, message or f"ping exited with status {process.returncode}"
 
 
-async def execute_work(work: SyntheticWork) -> ProbeOutcome:
+async def execute_work(
+    work: SyntheticWork,
+    secret_resolver: SyntheticSecretResolver | None = None,
+) -> ProbeOutcome:
     monitor = work.monitor
     started = time.perf_counter()
     try:
@@ -151,6 +182,11 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
                 raise ValueError("invalid HTTP target")
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
             await _validate_hostname(parsed.hostname, port)
+            headers = {"User-Agent": "DeviceMesh-Distributed-Probe/1.0", **monitor.http_headers}
+            for name, secret_ref in monitor.http_secret_headers.items():
+                if secret_resolver is None:
+                    raise RuntimeError("required synthetic secret is not configured")
+                headers[name] = secret_resolver.resolve(secret_ref)
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(monitor.timeout_seconds),
                 follow_redirects=False,
@@ -158,7 +194,7 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
                 response = await client.request(
                     monitor.http_method or "GET",
                     monitor.target,
-                    headers={"User-Agent": "DeviceMesh-Distributed-Probe/1.0"},
+                    headers=headers,
                 )
             latency = (time.perf_counter() - started) * 1000.0
             expected = monitor.expected_status or 200
@@ -169,6 +205,17 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
                     http_status=response.status_code,
                     error_kind="http_status",
                     error=f"expected HTTP {expected}, received {response.status_code}",
+                )
+            if (
+                monitor.expected_body_contains is not None
+                and monitor.expected_body_contains not in response.text
+            ):
+                return ProbeOutcome(
+                    success=False,
+                    latency_ms=latency,
+                    http_status=response.status_code,
+                    error_kind="assertion",
+                    error="expected response body substring was not present",
                 )
             return ProbeOutcome(success=True, latency_ms=latency, http_status=response.status_code)
 
@@ -252,6 +299,13 @@ async def execute_work(work: SyntheticWork) -> ProbeOutcome:
             error_kind="tls",
             error=f"TLS validation failed: {exc}"[:1024],
         )
+    except RuntimeError:
+        return ProbeOutcome(
+            success=False,
+            latency_ms=(time.perf_counter() - started) * 1000.0,
+            error_kind="policy",
+            error="required synthetic secret is not configured",
+        )
     except ValueError as exc:
         return ProbeOutcome(
             success=False,
@@ -279,6 +333,7 @@ class DistributedSyntheticClient:
     def __init__(self, config: ProbeConfig, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self.config = config
         self.outbox = ResultOutbox(Path(config.result_queue_path))
+        self._secret_resolver = SyntheticSecretResolver(config.synthetic_secret_directory)
         token = config.require_synthetic_token()
         self._client = httpx.AsyncClient(
             transport=transport,
@@ -335,7 +390,7 @@ class DistributedSyntheticClient:
             async with lock:
                 try:
                     async with asyncio.timeout(work.monitor.timeout_seconds):
-                        outcome = await execute_work(work)
+                        outcome = await execute_work(work, self._secret_resolver)
                 except TimeoutError:
                     outcome = ProbeOutcome(
                         False,

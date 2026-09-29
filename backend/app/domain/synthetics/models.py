@@ -17,6 +17,7 @@ class SyntheticCheckErrorKind(StrEnum):
     TIMEOUT = "timeout"
     CONNECTION = "connection"
     HTTP_STATUS = "http_status"
+    ASSERTION = "assertion"
     POLICY = "policy"
     UNSUPPORTED = "unsupported"
     INTERNAL = "internal"

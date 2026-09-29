@@ -79,6 +79,12 @@ export function OperatorConsole({ section = 'all' }: { section?: OperatorSection
   const [monitorKind, setMonitorKind] = useState<SyntheticMonitorKind>('http')
   const [monitorTarget, setMonitorTarget] = useState('https://example.com/health')
   const [monitorPort, setMonitorPort] = useState('443')
+  const [httpExpectedStatus, setHttpExpectedStatus] = useState('200')
+  const [httpBodyContains, setHttpBodyContains] = useState('')
+  const [httpHeaderName, setHttpHeaderName] = useState('')
+  const [httpHeaderValue, setHttpHeaderValue] = useState('')
+  const [httpSecretHeaderName, setHttpSecretHeaderName] = useState('')
+  const [httpSecretRef, setHttpSecretRef] = useState('')
 
   const selectedDevice = useMemo(() => devices.find((device) => device.id === deviceId), [devices, deviceId])
   const copy = sectionCopy[section]
@@ -185,6 +191,13 @@ export function OperatorConsole({ section = 'all' }: { section?: OperatorSection
     event.preventDefault()
     try {
       const usesPort = monitorKind === 'tcp' || monitorKind === 'tls'
+      const isHttp = monitorKind === 'http'
+      const headers = isHttp && httpHeaderName.trim()
+        ? { [httpHeaderName.trim()]: httpHeaderValue }
+        : {}
+      const secretHeaders = isHttp && httpSecretHeaderName.trim() && httpSecretRef.trim()
+        ? { [httpSecretHeaderName.trim()]: httpSecretRef.trim() }
+        : {}
       await createSyntheticMonitor(token, {
         name: monitorName || `${monitorKind.toUpperCase()} ${monitorTarget}`,
         kind: monitorKind,
@@ -193,8 +206,11 @@ export function OperatorConsole({ section = 'all' }: { section?: OperatorSection
         deviceId: deviceId || null,
         intervalSeconds: 60,
         timeoutSeconds: 5,
-        httpMethod: monitorKind === 'http' ? 'GET' : null,
-        expectedStatus: monitorKind === 'http' ? 200 : null,
+        httpMethod: isHttp ? 'GET' : null,
+        expectedStatus: isHttp ? Number(httpExpectedStatus) : null,
+        httpHeaders: headers,
+        httpSecretHeaders: secretHeaders,
+        expectedBodyContains: isHttp && httpBodyContains.trim() ? httpBodyContains : null,
       })
       await refreshPublic()
       setError(null)
@@ -253,12 +269,21 @@ export function OperatorConsole({ section = 'all' }: { section?: OperatorSection
         <label>Kind<select value={monitorKind} onChange={(event) => setMonitorKind(event.target.value as SyntheticMonitorKind)}><option value="http">HTTP</option><option value="tcp">TCP</option><option value="icmp">ICMP</option><option value="dns">DNS</option><option value="tls">TLS</option></select></label>
         <label>Target<input value={monitorTarget} onChange={(event) => setMonitorTarget(event.target.value)} /></label>
         {(monitorKind === 'tcp' || monitorKind === 'tls') && <label>Port<input type="number" min="1" max="65535" value={monitorPort} onChange={(event) => setMonitorPort(event.target.value)} /></label>}
+        {monitorKind === 'http' && <>
+          <label>Expected HTTP status<input type="number" min="100" max="599" value={httpExpectedStatus} onChange={(event) => setHttpExpectedStatus(event.target.value)} /></label>
+          <label>Body contains<input maxLength={512} value={httpBodyContains} onChange={(event) => setHttpBodyContains(event.target.value)} placeholder="optional response assertion" /></label>
+          <label>Plain header name<input value={httpHeaderName} onChange={(event) => setHttpHeaderName(event.target.value)} placeholder="X-Client" /></label>
+          <label>Plain header value<input value={httpHeaderValue} onChange={(event) => setHttpHeaderValue(event.target.value)} placeholder="DeviceMesh" /></label>
+          <label>Secret header name<input value={httpSecretHeaderName} onChange={(event) => setHttpSecretHeaderName(event.target.value)} placeholder="Authorization" /></label>
+          <label>Secret reference<input value={httpSecretRef} onChange={(event) => setHttpSecretRef(event.target.value)} placeholder="payments-api-token" /></label>
+        </>}
       </div>
+      {monitorKind === 'http' && <p className="muted">Secret fields contain references only. The actual value must be provisioned on each executing backend/probe and is never sent by this UI.</p>}
       <button type="submit" disabled={!token}>Create monitor</button>
       <div className="compactList syntheticList">{monitors.map((monitor) => {
         const health = syntheticHealth[monitor.id]
         const day = health?.windows.find((window) => window.label === '24h')
-        return <div key={monitor.id} className="compactItem"><div><strong>{monitor.name}</strong><span>{monitor.kind.toUpperCase()} · {monitor.target}{monitor.port ? `:${monitor.port}` : ''}</span></div><div><strong>{day?.availabilityPercent == null ? 'No SLA yet' : `${day.availabilityPercent.toFixed(2)}% / 24h`}</strong><span>{day?.meanLatencyMs == null ? 'No latency yet' : `${day.meanLatencyMs.toFixed(0)} ms avg · ${day.p95LatencyMs?.toFixed(0) ?? '—'} ms p95`}</span></div><button type="button" disabled={!token} onClick={() => void setSyntheticMonitorEnabled(token, monitor.id, !monitor.enabled).then(refreshPublic).catch((reason: unknown) => setError(String(reason)))}>{monitor.enabled ? 'Disable' : 'Enable'}</button></div>
+        return <div key={monitor.id} className="compactItem"><div><strong>{monitor.name}</strong><span>{monitor.kind.toUpperCase()} · {monitor.target}{monitor.port ? `:${monitor.port}` : ''}{monitor.expectedBodyContains ? ' · body assertion' : ''}{Object.keys(monitor.httpSecretHeaders).length ? ` · ${Object.keys(monitor.httpSecretHeaders).length} secret ref(s)` : ''}</span></div><div><strong>{day?.availabilityPercent == null ? 'No SLA yet' : `${day.availabilityPercent.toFixed(2)}% / 24h`}</strong><span>{day?.meanLatencyMs == null ? 'No latency yet' : `${day.meanLatencyMs.toFixed(0)} ms avg · ${day.p95LatencyMs?.toFixed(0) ?? '—'} ms p95`}</span></div><button type="button" disabled={!token} onClick={() => void setSyntheticMonitorEnabled(token, monitor.id, !monitor.enabled).then(refreshPublic).catch((reason: unknown) => setError(String(reason)))}>{monitor.enabled ? 'Disable' : 'Enable'}</button></div>
       })}</div>
     </form>}
     {show('probes') && <DistributedSyntheticsPanel token={token} monitors={monitors} />}
