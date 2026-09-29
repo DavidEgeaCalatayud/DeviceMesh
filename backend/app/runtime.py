@@ -32,8 +32,12 @@ from app.infrastructure.repositories.sqlalchemy import (
     SqlAlchemyTelemetryRepository,
 )
 from app.infrastructure.repositories.synthetic_consensus import RoundAwareSyntheticRepository
+from app.infrastructure.repositories.synthetic_http import (
+    SqlAlchemySyntheticHttpSettingsRepository,
+)
 from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
+from app.infrastructure.synthetic_secrets import SyntheticSecretResolver
 from app.infrastructure.synthetic_worker import SyntheticProbeWorker
 from app.infrastructure.synthetics import SyntheticProbeExecutor
 
@@ -61,9 +65,11 @@ synthetic_repository: SqlAlchemySyntheticRepository = RoundAwareSyntheticReposit
     round_window_seconds=settings.synthetic_consensus_round_window_seconds,
     probe_stale_seconds=settings.synthetic_probe_offline_after_seconds,
 )
-synthetic_probe_executor = SyntheticProbeExecutor()
+synthetic_http_settings_repository = SqlAlchemySyntheticHttpSettingsRepository(SessionFactory)
+synthetic_probe_executor = SyntheticProbeExecutor(SyntheticSecretResolver(settings))
 synthetic_probe_worker = SyntheticProbeWorker(
     synthetic_repository,
+    synthetic_http_settings_repository,
     synthetic_probe_executor,
     probe_id=settings.synthetic_probe_id,
     batch_size=settings.synthetic_probe_batch_size,
@@ -146,3 +152,7 @@ def get_remote_operation_repository() -> SqlAlchemyRemoteOperationRepository:
 
 def get_synthetic_repository() -> SqlAlchemySyntheticRepository:
     return synthetic_repository
+
+
+def get_synthetic_http_settings_repository() -> SqlAlchemySyntheticHttpSettingsRepository:
+    return synthetic_http_settings_repository
