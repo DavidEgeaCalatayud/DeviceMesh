@@ -1,7 +1,6 @@
+from datetime import datetime
 from ipaddress import ip_address
 import re
-
-from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
