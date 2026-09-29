@@ -15,6 +15,7 @@ class ProbeConfig:
     synthetic_poll_seconds: float = 5.0
     max_concurrent_checks: int = 4
     result_queue_path: str = "data/probe-results.sqlite3"
+    synthetic_secret_directory: str = "/run/secrets/devicemesh-synthetics"
 
     @classmethod
     def from_environment(cls) -> "ProbeConfig":
@@ -68,6 +69,10 @@ class ProbeConfig:
             synthetic_poll_seconds=poll_seconds,
             max_concurrent_checks=concurrency,
             result_queue_path=os.environ.get("DEVICEMESH_PROBE_QUEUE_PATH", "data/probe-results.sqlite3"),
+            synthetic_secret_directory=os.environ.get(
+                "DEVICEMESH_SYNTHETIC_SECRET_DIRECTORY",
+                "/run/secrets/devicemesh-synthetics",
+            ),
         )
 
     def require_allowed(self, requested: DiscoveryScope) -> None:
