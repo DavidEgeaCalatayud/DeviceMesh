@@ -13,6 +13,9 @@ export interface SyntheticMonitor {
   enabled: boolean
   httpMethod: 'GET' | 'HEAD' | null
   expectedStatus: number | null
+  httpHeaders: Record<string, string>
+  httpSecretHeaders: Record<string, string>
+  expectedBodyContains: string | null
   failureThreshold: number
   recoveryThreshold: number
   createdBy: string
