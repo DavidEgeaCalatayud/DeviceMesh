@@ -149,6 +149,9 @@ export async function createSyntheticMonitor(
     timeoutSeconds: number
     httpMethod: 'GET' | 'HEAD' | null
     expectedStatus: number | null
+    httpHeaders: Record<string, string>
+    httpSecretHeaders: Record<string, string>
+    expectedBodyContains: string | null
   },
 ): Promise<SyntheticMonitor> {
   const response = await apiFetch(`${apiBase}/api/v1/operator/synthetic-monitors`, {
