@@ -6,13 +6,13 @@ from datetime import datetime
 from ipaddress import IPv4Network
 
 from pysnmp.hlapi.v3arch.asyncio import (
+    USM_AUTH_HMAC192_SHA256,
     ContextData,
     ObjectIdentity,
     ObjectType,
     SnmpEngine,
     UdpTransportTarget,
     UsmUserData,
-    USM_AUTH_HMAC192_SHA256,
     bulk_walk_cmd,
     get_cmd,
 )
