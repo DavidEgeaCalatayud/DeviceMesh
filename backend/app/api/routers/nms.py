@@ -13,6 +13,7 @@ from app.api.schemas.nms import (
     NmsTargetStateRequest,
     VlanResponse,
 )
+from app.domain.nms import NetworkManagementTarget
 from app.infrastructure.nms_secrets import validate_nms_secret_ref
 from app.infrastructure.repositories.nms import SqlAlchemyNmsRepository
 from app.runtime import get_nms_repository
@@ -23,7 +24,7 @@ Repository = Annotated[SqlAlchemyNmsRepository, Depends(get_nms_repository)]
 Operator = Annotated[None, Depends(require_operator)]
 
 
-def _target_response(target: object) -> NmsTargetResponse:
+def _target_response(target: NetworkManagementTarget) -> NmsTargetResponse:
     return NmsTargetResponse(
         id=target.id,
         deviceId=target.device_id,
