@@ -10,7 +10,6 @@ from app.infrastructure.notification_delivery import (
     NotificationTransport,
 )
 from app.infrastructure.offline import OfflineDeviceSweeper
-from app.infrastructure.snmp_poller import NetworkPollWorker
 from app.infrastructure.realtime.events import (
     EventPublisher,
     InProcessEventPublisher,
@@ -40,6 +39,7 @@ from app.infrastructure.repositories.synthetic_http import (
 )
 from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
+from app.infrastructure.snmp_poller import NetworkPollWorker
 from app.infrastructure.synthetic_secrets import SyntheticSecretResolver
 from app.infrastructure.synthetic_worker import SyntheticProbeWorker
 from app.infrastructure.synthetics import SyntheticProbeExecutor
