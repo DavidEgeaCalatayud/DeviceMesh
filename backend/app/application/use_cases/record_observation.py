@@ -19,6 +19,7 @@ class RecordObservation:
         if self._network is None:
             return device
 
+        self._network.reconcile_interfaces(device.id, observation)
         transitions = self._network.reconcile_services(device.id, observation)
         if self._events is None:
             return device

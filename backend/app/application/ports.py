@@ -4,7 +4,12 @@ from typing import Protocol
 from app.domain.alerts.models import AlertIncident, AlertRule, AlertTransition, ThresholdRule
 from app.domain.devices.models import Device, DeviceIdentity, DeviceObservation
 from app.domain.events.models import DeviceEvent
-from app.domain.network.models import DeviceService, NetworkTopology, ServiceTransition
+from app.domain.network.models import (
+    DeviceService,
+    NetworkInterfaceInventory,
+    NetworkTopology,
+    ServiceTransition,
+)
 from app.domain.telemetry.models import MetricSample, MetricSeries, TelemetryBatch
 
 
@@ -55,6 +60,15 @@ class AlertRepository(Protocol):
 
 
 class NetworkRepository(Protocol):
+    def reconcile_interfaces(self, device_id: str, observation: DeviceObservation) -> None: ...
+
+    def list_interfaces(
+        self,
+        *,
+        device_id: str | None = None,
+        present_only: bool = True,
+    ) -> list[NetworkInterfaceInventory]: ...
+
     def reconcile_services(
         self,
         device_id: str,

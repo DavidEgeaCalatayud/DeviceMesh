@@ -16,6 +16,24 @@ class DeviceServiceResponse(BaseModel):
     networkCidr: str | None
 
 
+class NetworkInterfaceResponse(BaseModel):
+    deviceId: str
+    name: str
+    macAddress: str | None
+    operationalStatus: str
+    mtu: int | None
+    speedBps: int | None
+    vlanId: int | None
+    ipAddresses: list[str]
+    gateways: list[str]
+    dnsServers: list[str]
+    source: str
+    present: bool
+    firstSeen: datetime
+    lastSeen: datetime
+    lastChangedAt: datetime
+
+
 class TopologyNodeResponse(BaseModel):
     id: str
     kind: str

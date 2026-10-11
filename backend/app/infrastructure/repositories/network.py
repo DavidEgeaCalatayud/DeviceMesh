@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.domain.devices.models import DeviceObservation
 from app.domain.network.models import (
     DeviceService,
+    InterfaceOperationalStatus,
+    NetworkInterfaceInventory,
     NetworkTopology,
     ServiceState,
     ServiceTransition,
@@ -11,11 +13,111 @@ from app.domain.network.models import (
     TopologyNode,
 )
 from app.infrastructure.database import DeviceObservationRow, DeviceRow, DeviceServiceRow
+from app.infrastructure.repositories.network_inventory import NetworkInterfaceInventoryRow
+
+
+def _normalize_mac(value: str | None) -> str | None:
+    return value.strip().upper().replace("-", ":") if value else None
 
 
 class SqlAlchemyNetworkRepository:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
+
+    def reconcile_interfaces(self, device_id: str, observation: DeviceObservation) -> None:
+        if not observation.interfaces and not observation.interface_snapshot_complete:
+            return
+
+        observed = {item.name: item for item in observation.interfaces}
+        with self._session_factory() as session:
+            rows = session.scalars(
+                select(NetworkInterfaceInventoryRow).where(
+                    NetworkInterfaceInventoryRow.device_id == device_id
+                )
+            ).all()
+            by_name = {row.interface_name: row for row in rows}
+
+            for name, item in observed.items():
+                row = by_name.get(name)
+                mac = _normalize_mac(item.mac_address)
+                addresses = list(item.ip_addresses)
+                gateways = list(item.gateways)
+                dns_servers = list(item.dns_servers)
+                if row is None:
+                    session.add(
+                        NetworkInterfaceInventoryRow(
+                            device_id=device_id,
+                            interface_name=name,
+                            mac_address=mac,
+                            operational_status=item.operational_status.value,
+                            mtu=item.mtu,
+                            speed_bps=item.speed_bps,
+                            vlan_id=item.vlan_id,
+                            ip_addresses=addresses,
+                            gateways=gateways,
+                            dns_servers=dns_servers,
+                            source=observation.source,
+                            present=True,
+                            first_seen=observation.observed_at,
+                            last_seen=observation.observed_at,
+                            last_changed_at=observation.observed_at,
+                        )
+                    )
+                    continue
+
+                changed = (
+                    row.mac_address != mac
+                    or row.operational_status != item.operational_status.value
+                    or row.mtu != item.mtu
+                    or row.speed_bps != item.speed_bps
+                    or row.vlan_id != item.vlan_id
+                    or row.ip_addresses != addresses
+                    or row.gateways != gateways
+                    or row.dns_servers != dns_servers
+                    or not row.present
+                )
+                row.mac_address = mac
+                row.operational_status = item.operational_status.value
+                row.mtu = item.mtu
+                row.speed_bps = item.speed_bps
+                row.vlan_id = item.vlan_id
+                row.ip_addresses = addresses
+                row.gateways = gateways
+                row.dns_servers = dns_servers
+                row.source = observation.source
+                row.present = True
+                row.last_seen = observation.observed_at
+                if changed:
+                    row.last_changed_at = observation.observed_at
+
+            if observation.interface_snapshot_complete:
+                observed_names = set(observed)
+                for row in rows:
+                    if row.interface_name not in observed_names and row.present:
+                        row.present = False
+                        row.source = observation.source
+                        row.last_seen = observation.observed_at
+                        row.last_changed_at = observation.observed_at
+
+            session.commit()
+
+    def list_interfaces(
+        self,
+        *,
+        device_id: str | None = None,
+        present_only: bool = True,
+    ) -> list[NetworkInterfaceInventory]:
+        query = select(NetworkInterfaceInventoryRow)
+        if device_id is not None:
+            query = query.where(NetworkInterfaceInventoryRow.device_id == device_id)
+        if present_only:
+            query = query.where(NetworkInterfaceInventoryRow.present.is_(True))
+        query = query.order_by(
+            NetworkInterfaceInventoryRow.device_id,
+            NetworkInterfaceInventoryRow.interface_name,
+        )
+        with self._session_factory() as session:
+            return [self._interface_to_domain(row) for row in session.scalars(query).all()]
 
     def reconcile_services(
         self,
@@ -52,9 +154,7 @@ class SqlAlchemyNetworkRepository:
                     )
                     session.add(row)
                     session.flush()
-                    transitions.append(
-                        ServiceTransition("SERVICE_EXPOSED", self._to_domain(row))
-                    )
+                    transitions.append(ServiceTransition("SERVICE_EXPOSED", self._to_domain(row)))
                     continue
 
                 reopened = row.state != ServiceState.OPEN.value
@@ -65,14 +165,10 @@ class SqlAlchemyNetworkRepository:
                 row.network_cidr = observation.network_cidr or row.network_cidr
                 if reopened:
                     row.last_changed_at = observation.observed_at
-                    transitions.append(
-                        ServiceTransition("SERVICE_EXPOSED", self._to_domain(row))
-                    )
+                    transitions.append(ServiceTransition("SERVICE_EXPOSED", self._to_domain(row)))
 
             if observation.service_snapshot_complete and scanned_tcp_ports:
-                observed_tcp_ports = {
-                    port for transport, port in observed if transport == "tcp"
-                }
+                observed_tcp_ports = {port for transport, port in observed if transport == "tcp"}
                 for row in rows:
                     if (
                         row.transport == "tcp"
@@ -85,9 +181,7 @@ class SqlAlchemyNetworkRepository:
                         row.last_changed_at = observation.observed_at
                         row.source = observation.source
                         row.network_cidr = observation.network_cidr or row.network_cidr
-                        transitions.append(
-                            ServiceTransition("SERVICE_CLOSED", self._to_domain(row))
-                        )
+                        transitions.append(ServiceTransition("SERVICE_CLOSED", self._to_domain(row)))
 
             session.commit()
         return transitions
@@ -173,6 +267,26 @@ class SqlAlchemyNetworkRepository:
                 )
             )
         return NetworkTopology(nodes=tuple(nodes), edges=tuple(edges))
+
+    @staticmethod
+    def _interface_to_domain(row: NetworkInterfaceInventoryRow) -> NetworkInterfaceInventory:
+        return NetworkInterfaceInventory(
+            device_id=row.device_id,
+            name=row.interface_name,
+            mac_address=row.mac_address,
+            operational_status=InterfaceOperationalStatus(row.operational_status),
+            mtu=row.mtu,
+            speed_bps=row.speed_bps,
+            vlan_id=row.vlan_id,
+            ip_addresses=tuple(row.ip_addresses),
+            gateways=tuple(row.gateways),
+            dns_servers=tuple(row.dns_servers),
+            source=row.source,
+            present=row.present,
+            first_seen=row.first_seen,
+            last_seen=row.last_seen,
+            last_changed_at=row.last_changed_at,
+        )
 
     @staticmethod
     def _to_domain(row: DeviceServiceRow) -> DeviceService:

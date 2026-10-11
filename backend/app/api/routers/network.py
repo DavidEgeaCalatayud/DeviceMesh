@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.schemas.network import (
     DeviceServiceResponse,
+    NetworkInterfaceResponse,
     NetworkTopologyResponse,
     TopologyEdgeResponse,
     TopologyNodeResponse,
@@ -40,6 +41,37 @@ def list_services(
         for service in repository.list_services(
             device_id=device_id,
             active_only=active_only,
+        )
+    ]
+
+
+@router.get("/network/interfaces", response_model=list[NetworkInterfaceResponse])
+def list_network_interfaces(
+    repository: NetworkRepositoryDependency,
+    device_id: Annotated[str | None, Query(alias="deviceId")] = None,
+    present_only: Annotated[bool, Query(alias="presentOnly")] = True,
+) -> list[NetworkInterfaceResponse]:
+    return [
+        NetworkInterfaceResponse(
+            deviceId=item.device_id,
+            name=item.name,
+            macAddress=item.mac_address,
+            operationalStatus=item.operational_status.value,
+            mtu=item.mtu,
+            speedBps=item.speed_bps,
+            vlanId=item.vlan_id,
+            ipAddresses=list(item.ip_addresses),
+            gateways=list(item.gateways),
+            dnsServers=list(item.dns_servers),
+            source=item.source,
+            present=item.present,
+            firstSeen=item.first_seen,
+            lastSeen=item.last_seen,
+            lastChangedAt=item.last_changed_at,
+        )
+        for item in repository.list_interfaces(
+            device_id=device_id,
+            present_only=present_only,
         )
     ]
 
