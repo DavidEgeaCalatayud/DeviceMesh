@@ -38,6 +38,7 @@ from app.infrastructure.repositories.synthetic_http import (
     SqlAlchemySyntheticHttpSettingsRepository,
 )
 from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
+from app.infrastructure.repositories.syslog import SqlAlchemySyslogRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
 from app.infrastructure.snmp_poller import NetworkPollWorker
 from app.infrastructure.synthetic_secrets import SyntheticSecretResolver
@@ -92,6 +93,7 @@ nms_poll_worker = NetworkPollWorker(
 )
 raw_telemetry_repository = SqlAlchemyTelemetryRepository(SessionFactory)
 telemetry_retention_repository = SqlAlchemyTelemetryRetentionRepository(SessionFactory)
+syslog_repository = SqlAlchemySyslogRepository(SessionFactory)
 alert_repository = SqlAlchemyAlertRepository(SessionFactory, maintenance_repository)
 telemetry_repository = AlertingTelemetryRepository(
     raw_telemetry_repository,
@@ -145,6 +147,10 @@ def get_network_repository() -> SqlAlchemyNetworkRepository:
 
 def get_nms_repository() -> SqlAlchemyNmsRepository:
     return nms_repository
+
+
+def get_syslog_repository() -> SqlAlchemySyslogRepository:
+    return syslog_repository
 
 
 def get_telemetry_retention_repository() -> SqlAlchemyTelemetryRetentionRepository:
