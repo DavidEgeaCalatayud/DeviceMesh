@@ -147,6 +147,7 @@ jobs:
         with:
           subject-path: artifacts/windows-agent/*.msi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         with:
           name: windows-agent-msi
           path: |
@@ -202,6 +203,7 @@ jobs:
             artifacts/linux-agent/*.deb
             artifacts/linux-agent/*.rpm
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         with:
           name: linux-agent-packages
           path: |
@@ -261,6 +263,7 @@ jobs:
         with:
           subject-path: artifacts/macos-agent/*.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         with:
           name: macos-agent-package
           path: |
