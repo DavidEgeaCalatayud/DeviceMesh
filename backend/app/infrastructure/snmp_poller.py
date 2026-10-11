@@ -117,7 +117,7 @@ class SnmpV3Client:
             raise RuntimeError("SNMP agent returned an error")
         if not var_binds:
             return None
-        return var_binds[0][1].prettyPrint()
+        return str(var_binds[0][1].prettyPrint())
 
     async def _walk(
         self,
@@ -302,7 +302,9 @@ def parse_snapshot(hostname: str | None, values: dict[str, dict[str, str]]) -> S
                 "destination": destination,
                 "prefix_length": prefix,
                 "next_hop": next_hops.get(key),
-                "interface_name": index_to_name.get(route_if.get(key, "")),
+                "interface_name": (
+                    index_to_name.get(route_index) if (route_index := route_if.get(key)) else None
+                ),
                 "route_type": route_type.get(key),
             }
         )
