@@ -3,7 +3,7 @@ import asyncio
 import logging
 import signal
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from prometheus_client import start_http_server
 from sqlalchemy import text
@@ -24,6 +24,7 @@ from app.runtime import (
     notification_dispatcher,
     offline_device_sweeper,
     synthetic_probe_worker,
+    syslog_repository,
     telemetry_retention_repository,
 )
 
@@ -107,6 +108,11 @@ async def run_jobs(stop: asyncio.Event) -> None:
                     retention_deleted.labels("synthetic_checks").inc(
                         result.synthetic_checks_deleted
                     )
+                    syslog_deleted = await asyncio.to_thread(
+                        syslog_repository.delete_before,
+                        datetime.now(UTC) - timedelta(days=settings.syslog_retention_days),
+                    )
+                    retention_deleted.labels("syslog").inc(syslog_deleted)
                     next_retention = (
                         asyncio.get_running_loop().time()
                         + settings.retention_run_interval_seconds
