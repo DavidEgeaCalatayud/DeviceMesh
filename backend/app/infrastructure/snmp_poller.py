@@ -231,9 +231,14 @@ def parse_snapshot(hostname: str | None, values: dict[str, dict[str, str]]) -> S
     index_to_name: dict[str, str] = {}
     for index, name in names.items():
         index_to_name[index] = name
-        status = {"1": InterfaceOperationalStatus.UP, "2": InterfaceOperationalStatus.DOWN}.get(
-            oper.get(index),
-            InterfaceOperationalStatus.UNKNOWN,
+        oper_status = oper.get(index)
+        status = (
+            {"1": InterfaceOperationalStatus.UP, "2": InterfaceOperationalStatus.DOWN}.get(
+                oper_status,
+                InterfaceOperationalStatus.UNKNOWN,
+            )
+            if oper_status is not None
+            else InterfaceOperationalStatus.UNKNOWN
         )
         speed_mbps = _as_int(speed.get(index))
         interfaces.append(
