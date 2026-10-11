@@ -223,9 +223,11 @@ class SqlAlchemyNmsRepository:
         neighbors: list[dict[str, str | None]],
     ) -> None:
         with self._session_factory.begin() as session:
-            existing = session.scalars(
-                select(NetworkNeighborRow).where(NetworkNeighborRow.device_id == device_id)
-            ).all()
+            existing = list(
+                session.scalars(
+                    select(NetworkNeighborRow).where(NetworkNeighborRow.device_id == device_id)
+                ).all()
+            )
             matched: set[int] = set()
             for item in neighbors:
                 row = next(
@@ -282,14 +284,16 @@ class SqlAlchemyNmsRepository:
 
     def replace_routes(self, device_id: str, at: datetime, routes: list[dict[str, object]]) -> None:
         with self._session_factory.begin() as session:
-            rows = session.scalars(
-                select(NetworkRouteRow).where(NetworkRouteRow.device_id == device_id)
-            ).all()
+            rows = list(
+                session.scalars(
+                    select(NetworkRouteRow).where(NetworkRouteRow.device_id == device_id)
+                ).all()
+            )
             seen: set[tuple[str, int, str | None]] = set()
             for item in routes:
                 key = (
                     str(item["destination"]),
-                    int(item["prefix_length"]),
+                    self._required_int(item["prefix_length"]),
                     str(item["next_hop"]) if item.get("next_hop") else None,
                 )
                 seen.add(key)
@@ -330,9 +334,11 @@ class SqlAlchemyNmsRepository:
 
     def replace_arp(self, device_id: str, at: datetime, entries: list[dict[str, str | None]]) -> None:
         with self._session_factory.begin() as session:
-            rows = session.scalars(
-                select(NetworkArpRow).where(NetworkArpRow.device_id == device_id)
-            ).all()
+            rows = list(
+                session.scalars(
+                    select(NetworkArpRow).where(NetworkArpRow.device_id == device_id)
+                ).all()
+            )
             seen: set[str] = set()
             for item in entries:
                 ip_value = str(item["ip_address"])
@@ -363,12 +369,14 @@ class SqlAlchemyNmsRepository:
 
     def replace_vlans(self, device_id: str, at: datetime, vlans: list[dict[str, object]]) -> None:
         with self._session_factory.begin() as session:
-            rows = session.scalars(
-                select(NetworkVlanRow).where(NetworkVlanRow.device_id == device_id)
-            ).all()
+            rows = list(
+                session.scalars(
+                    select(NetworkVlanRow).where(NetworkVlanRow.device_id == device_id)
+                ).all()
+            )
             seen: set[int] = set()
             for item in vlans:
-                vlan_id = int(item["vlan_id"])
+                vlan_id = self._required_int(item["vlan_id"])
                 seen.add(vlan_id)
                 row = next((x for x in rows if x.vlan_id == vlan_id), None)
                 if row is None:
@@ -488,8 +496,18 @@ class SqlAlchemyNmsRepository:
         return None
 
     @staticmethod
+    def _required_int(value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise TypeError("NMS integer value must be an integer or numeric string")
+        return int(value)
+
+    @staticmethod
     def _optional_int(value: object) -> int | None:
-        return int(value) if value is not None else None
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise TypeError("NMS counter value must be an integer or numeric string")
+        return int(value)
 
     @staticmethod
     def _target(row: NetworkManagementTargetRow) -> NetworkManagementTarget:
