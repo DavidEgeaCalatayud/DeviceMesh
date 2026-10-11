@@ -20,6 +20,7 @@ from app.core.metrics import (
 )
 from app.infrastructure.database import engine
 from app.runtime import (
+    nms_poll_worker,
     notification_dispatcher,
     offline_device_sweeper,
     synthetic_probe_worker,
@@ -34,6 +35,7 @@ async def run_jobs(stop: asyncio.Event) -> None:
     settings = get_settings()
     next_offline = 0.0
     next_notifications = 0.0
+    next_nms = 0.0
     next_retention = 0.0
     while not stop.is_set():
         loop_time = asyncio.get_running_loop().time()
@@ -41,6 +43,7 @@ async def run_jobs(stop: asyncio.Event) -> None:
             ("offline", loop_time >= next_offline),
             ("synthetics", True),
             ("notifications", loop_time >= next_notifications),
+            ("nms", loop_time >= next_nms),
             ("retention", loop_time >= next_retention),
         )
         for name, due in jobs:
@@ -69,6 +72,23 @@ async def run_jobs(stop: asyncio.Event) -> None:
                             extra={
                                 "route": "notifications",
                                 "status": f"delivered={delivered},failed={failed}",
+                            },
+                        )
+                elif name == "nms":
+                    succeeded, failed = await asyncio.to_thread(
+                        nms_poll_worker.run_due,
+                        datetime.now(UTC),
+                    )
+                    next_nms = (
+                        asyncio.get_running_loop().time()
+                        + settings.nms_poll_interval_seconds
+                    )
+                    if succeeded or failed:
+                        logger.info(
+                            "NMS polling cycle processed",
+                            extra={
+                                "route": "nms",
+                                "status": f"succeeded={succeeded},failed={failed}",
                             },
                         )
                 elif name == "retention":
