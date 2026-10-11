@@ -27,6 +27,7 @@ from app.api.routers import (
     probe_credentials,
     probe_runtime,
     synthetics,
+    syslog,
     telemetry,
 )
 from app.api.websocket.manager import ConnectionManager
@@ -125,6 +126,7 @@ app.include_router(nms.operator_router)
 app.include_router(operational_health.router)
 app.include_router(operations.router)
 app.include_router(synthetics.router)
+app.include_router(syslog.router)
 app.include_router(probe_credentials.router)
 app.include_router(probe_runtime.router)
 
