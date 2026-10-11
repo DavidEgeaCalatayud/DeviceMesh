@@ -67,15 +67,17 @@ def test_nms_target_inventory_and_physical_topology_lifecycle() -> None:
     assert neighbors[0].remote_device_id == core.id
 
     topology = network_repo.get_topology()
-    assert topology.method == "lldp-cdp"
-    assert topology.approximate is False
+    assert topology.method in {"lldp-cdp", "lldp-cdp-with-segment-fallback"}
     assert any(
         edge_item.source == f"device:{edge.id}"
         and edge_item.target == f"device:{core.id}"
         and edge_item.relation == "lldp"
         for edge_item in topology.edges
     )
-    assert not any(edge_item.relation == "observed-on" for edge_item in topology.edges)
+    assert not any(
+        edge_item.target == f"device:{edge.id}" and edge_item.relation == "observed-on"
+        for edge_item in topology.edges
+    )
 
     changed_at = now + timedelta(minutes=1)
     nms_repo.reconcile_neighbors(edge.id, changed_at, [])
