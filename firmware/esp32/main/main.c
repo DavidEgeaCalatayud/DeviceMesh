@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "identity.h"
 #include "network_probe.h"
+#include "offline_queue.h"
 #include "nvs_flash.h"
 #include "sensors.h"
 #include "time_sync.h"
@@ -58,23 +59,35 @@ void app_main(void) {
         ESP_LOGW(TAG, "SNTP synchronization not ready; cloud loop will retry");
     }
 
+    if (dm_offline_queue_init() != 0) {
+        ESP_LOGW(TAG, "Offline telemetry queue unavailable");
+    }
+
     esp_task_wdt_add(NULL);
     uint32_t failed_cycles = 0;
     for (;;) {
         esp_task_wdt_reset();
 
-        if (dm_cloud_enroll_if_needed(agent_id) == 0) {
-            dm_telemetry_t telemetry = {.failed_delivery_cycles = failed_cycles};
-            dm_read_sensors(&telemetry);
-            dm_network_probe_gateway(&telemetry);
-            if (dm_cloud_send_heartbeat(agent_id, &telemetry) == 0 &&
-                dm_cloud_send_telemetry(agent_id, &telemetry) == 0) {
-                failed_cycles = 0;
-            } else if (failed_cycles < UINT32_MAX) {
-                failed_cycles++;
+        dm_telemetry_t telemetry = {.failed_delivery_cycles = failed_cycles};
+        dm_read_sensors(&telemetry);
+        dm_network_probe_gateway(&telemetry);
+
+        if (dm_cloud_enroll_if_needed(agent_id) == 0 &&
+            dm_cloud_send_heartbeat(agent_id, &telemetry) == 0) {
+            dm_telemetry_t queued;
+            while (dm_offline_queue_peek(&queued) == 0) {
+                if (dm_cloud_send_telemetry(agent_id, &queued) != 0) break;
+                dm_offline_queue_pop();
             }
-        } else if (failed_cycles < UINT32_MAX) {
-            failed_cycles++;
+            if (dm_cloud_send_telemetry(agent_id, &telemetry) == 0) {
+                failed_cycles = 0;
+            } else {
+                dm_offline_queue_push(&telemetry);
+                if (failed_cycles < UINT32_MAX) failed_cycles++;
+            }
+        } else {
+            dm_offline_queue_push(&telemetry);
+            if (failed_cycles < UINT32_MAX) failed_cycles++;
         }
 
         vTaskDelay(pdMS_TO_TICKS(30000));
