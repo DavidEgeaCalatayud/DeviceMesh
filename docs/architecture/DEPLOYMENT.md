@@ -43,7 +43,7 @@ flowchart TB
 | Public/edge | Only Caddy ports 80/443 are intended for remote access. |
 | Operator-local observability | Prometheus and Grafana bind to loopback by default; remote access should use SSH tunnelling or an authenticated proxy. |
 | Application network | API, web, worker, PostgreSQL and Redis communicate on the private Compose network. |
-| Secrets | Database URLs, operator bootstrap credential material and Grafana credentials are mounted as files rather than committed or placed in command lines. |
+| Secrets | Database URLs, operator bootstrap credential material, mobile-push token encryption material and Grafana credentials are mounted as files rather than committed or placed in command lines. |
 
 ## Persistence
 
