@@ -104,6 +104,47 @@ actor DeviceMeshAPI {
         try await request(path: "/api/v1/devices")
     }
 
+    func deviceHealth(_ deviceId: String) async throws -> DeviceHealth {
+        let safe = deviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? deviceId
+        return try await request(path: "/api/v1/devices/" + safe + "/health")
+    }
+
+    func latestMetrics(_ deviceId: String) async throws -> [MetricSample] {
+        let rows: [MetricSample] = try await request(path: "/api/v1/telemetry/latest")
+        return rows.filter { $0.deviceId == deviceId }.sorted { $0.name < $1.name }
+    }
+
+    func queueRemoteOperation(
+        deviceId: String,
+        operationType: String
+    ) async throws -> RemoteOperation {
+        let allowed = Set([
+            "telemetry.collect",
+            "inventory.refresh",
+            "agent.health_check",
+        ])
+        guard allowed.contains(operationType) else {
+            throw DeviceMeshAPIError.server(0, "Unsupported mobile operation")
+        }
+        struct Body: Codable {
+            let deviceId: String
+            let operationType: String
+            let arguments: [String: String]
+            let ttlSeconds: Int
+        }
+        return try await request(
+            path: "/api/v1/operator/remote-operations",
+            method: "POST",
+            body: Body(
+                deviceId: deviceId,
+                operationType: operationType,
+                arguments: [:],
+                ttlSeconds: 300
+            )
+        )
+    }
+
     func incidents() async throws -> [Incident] {
         try await request(path: "/api/v1/incidents?limit=100&activeOnly=false")
     }
