@@ -244,11 +244,10 @@ private struct DeviceDetailView: View {
         loading = true
         defer { loading = false }
         do {
-            async let detail = model.deviceDetail(device.id)
-            async let _: Void = model.loadOperations(deviceId: device.id)
-            let resolved = try await detail
-            health = resolved.0
-            metrics = resolved.1
+            let detail = try await model.deviceDetail(device.id)
+            health = detail.0
+            metrics = detail.1
+            await model.loadOperations(deviceId: device.id)
         } catch {
             model.error = error.localizedDescription
         }
