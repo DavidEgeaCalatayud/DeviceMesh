@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseApp
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessaging
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
@@ -51,6 +53,7 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
                 val session = api.login(username, password, mfaCode)
                 store.save(session)
                 state = state.copy(server = normalized, session = session, loading = false)
+                syncPushRegistration()
                 refreshAll()
             } catch (error: Exception) {
                 state = state.copy(loading = false, error = error.message ?: "Login failed")
@@ -71,6 +74,7 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
                         val refreshed = api.refresh(current.refreshToken)
                         store.save(refreshed)
                         state = state.copy(session = refreshed)
+                        syncPushRegistration()
                         loadData()
                         syncPushRegistration()
                     } catch (refreshError: Exception) {
@@ -130,6 +134,27 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
             .getOrNull()
             ?.token
             ?.addOnSuccessListener(::register)
+    }
+
+    fun syncPushRegistration() {
+        val session = state.session ?: return
+        if (FirebaseApp.getApps(getApplication()).isEmpty()) return
+        runCatching {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                if (token.isBlank()) return@addOnSuccessListener
+                store.savePushToken(token)
+                viewModelScope.launch {
+                    runCatching {
+                        api.registerPushToken(
+                            provider = "fcm",
+                            environment = "production",
+                            installationId = store.installationId(),
+                            token = token,
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun logout() {
