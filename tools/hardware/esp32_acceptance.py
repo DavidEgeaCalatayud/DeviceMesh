@@ -79,7 +79,13 @@ def wait_for_backend(base_url: str, token: str, agent_id: str, timeout: float) -
     raise RuntimeError("DeviceMesh backend never observed the flashed ESP32")
 
 
-def require_metrics(base_url: str, token: str, agent_id: str) -> list[str]:
+def require_metrics(
+    base_url: str,
+    token: str,
+    agent_id: str,
+    *,
+    require_environment: bool,
+) -> list[str]:
     rows = api_json(base_url, "/api/v1/telemetry/latest", token)
     if not isinstance(rows, list):
         raise RuntimeError("telemetry endpoint returned an unexpected payload")
@@ -90,7 +96,21 @@ def require_metrics(base_url: str, token: str, agent_id: str) -> list[str]:
             if isinstance(row, dict) and row.get("deviceId") == agent_id
         }
     )
-    required = {"network.wifi.rssi.dbm", "memory.free.bytes", "system.uptime.seconds"}
+    required = {
+        "network.wifi.rssi.dbm",
+        "memory.free.bytes",
+        "system.uptime.seconds",
+        "network.gateway.rtt.ms",
+        "network.gateway.packet_loss.percent",
+    }
+    if require_environment:
+        required.update(
+            {
+                "environment.temperature.celsius",
+                "environment.humidity.percent",
+                "environment.pressure.hpa",
+            }
+        )
     missing = required - set(names)
     if missing:
         raise RuntimeError("missing ESP32 telemetry metrics: " + ", ".join(sorted(missing)))
@@ -106,6 +126,8 @@ def main() -> None:
     parser.add_argument("--base-url", default=os.getenv("DEVICEMESH_HIL_BASE_URL"))
     parser.add_argument("--operator-token", default=os.getenv("DEVICEMESH_HIL_OPERATOR_TOKEN"))
     parser.add_argument("--output", default="artifacts/esp32-hil.json")
+    parser.add_argument("--require-environment", action="store_true")
+    parser.add_argument("--require-hardening", action="store_true")
     args = parser.parse_args()
     if not args.base_url or not args.base_url.startswith("https://"):
         parser.error("an HTTPS DeviceMesh HIL base URL is required")
@@ -123,13 +145,30 @@ def main() -> None:
         first.agent_id,
         args.backend_timeout,
     )
-    metrics = require_metrics(args.base_url, args.operator_token, first.agent_id)
+    all_lines = (*first.lines, *second.lines)
+    if any("Provisioning proof-of-possession:" in line for line in all_lines):
+        raise RuntimeError("serial log exposed provisioning proof-of-possession")
+    if args.require_hardening and not any(
+        "Secure Boot and flash encryption verified" in line for line in all_lines
+    ):
+        raise RuntimeError("production hardening verification was not observed in serial evidence")
+
+    metrics = require_metrics(
+        args.base_url,
+        args.operator_token,
+        first.agent_id,
+        require_environment=args.require_environment,
+    )
 
     evidence = {
         "agentId": first.agent_id,
         "identityStableAcrossReset": True,
         "backendStatus": device.get("status"),
         "telemetryMetrics": metrics,
+        "networkProbeVerified": True,
+        "environmentVerified": args.require_environment,
+        "hardeningVerified": args.require_hardening,
+        "sensitiveProvisioningMaterialAbsentFromSerial": True,
         "firstBootTail": list(first.lines),
         "secondBootTail": list(second.lines),
     }
