@@ -82,6 +82,17 @@ actor DeviceMeshAPI {
         accessToken = nil
     }
 
+    func deviceHealth(_ deviceId: String) async throws -> DeviceHealth {
+        let safe = deviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? deviceId
+        return try await request(path: "/api/v1/devices/" + safe + "/health")
+    }
+
+    func latestMetrics(_ deviceId: String) async throws -> [MetricSample] {
+        let rows: [MetricSample] = try await request(path: "/api/v1/telemetry/latest")
+        return rows.filter { $0.deviceId == deviceId }.sorted { $0.name < $1.name }
+    }
+
     func remoteOperations(deviceId: String) async throws -> [RemoteOperation] {
         guard let encoded = deviceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             throw DeviceMeshAPIError.server(0, "Invalid device identifier")
