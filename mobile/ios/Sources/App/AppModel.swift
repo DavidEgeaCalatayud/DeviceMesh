@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
     @Published var alerts: [Alert] = []
     @Published var monitors: [SyntheticMonitor] = []
     @Published var probes: [SyntheticProbe] = []
+    @Published var operationsByDevice: [String: [RemoteOperation]] = [:]
     @Published var loading = false
     @Published var error: String?
 
@@ -76,6 +77,33 @@ final class AppModel: ObservableObject {
         self.alerts = try await alerts
         self.monitors = try await monitors
         self.probes = (try? await api.syntheticProbes()) ?? []
+    }
+
+    func loadOperations(deviceId: String) async {
+        do {
+            operationsByDevice[deviceId] = try await api.remoteOperations(deviceId: deviceId)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func queueOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String? = nil
+    ) async {
+        loading = true
+        defer { loading = false }
+        do {
+            _ = try await api.queueRemoteOperation(
+                deviceId: deviceId,
+                operationType: operationType,
+                hostname: hostname
+            )
+            operationsByDevice[deviceId] = try await api.remoteOperations(deviceId: deviceId)
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     func logout() async {
