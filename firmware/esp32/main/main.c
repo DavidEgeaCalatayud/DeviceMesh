@@ -14,6 +14,7 @@
 #include "recovery.h"
 #include "nvs_flash.h"
 #include "sensors.h"
+#include "security.h"
 #include "time_sync.h"
 #include "wifi.h"
 
@@ -29,6 +30,10 @@ static int init_nvs(void) {
 }
 
 void app_main(void) {
+    if (dm_security_assert_runtime() != 0) {
+        ESP_LOGE(TAG, "Hardware security requirements are not satisfied");
+        return;
+    }
     if (init_nvs() != 0 || dm_identity_init() != 0) {
         ESP_LOGE(TAG, "Unable to initialize persistent identity");
         return;
