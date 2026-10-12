@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.database import DeviceEventRow, DeviceRow
+from app.infrastructure.repositories.nms import NetworkNeighborRow
 from app.infrastructure.repositories.platform import (
     ServiceDependencyRow,
     ServiceMonitorRow,
@@ -210,6 +211,8 @@ class RcaRepository:
             target_start = _aware(incident.opened_at)
             evidence_start = target_start - timedelta(minutes=30)
             evidence_end = target_start + timedelta(minutes=10)
+            monitor = session.get(SyntheticMonitorRow, incident.monitor_id)
+            target_device_id = monitor.device_id if monitor is not None else None
             impacted_service_ids = list(
                 session.scalars(
                     select(ServiceMonitorRow.service_id).where(
@@ -278,10 +281,37 @@ class RcaRepository:
                         evidence_start,
                         evidence_end,
                     )
+                    if target_device_id and service.device_id != target_device_id:
+                        physical = session.scalar(
+                            select(NetworkNeighborRow)
+                            .where(
+                                NetworkNeighborRow.present.is_(True),
+                                or_(
+                                    (
+                                        (NetworkNeighborRow.device_id == service.device_id)
+                                        & (NetworkNeighborRow.remote_device_id == target_device_id)
+                                    ),
+                                    (
+                                        (NetworkNeighborRow.device_id == target_device_id)
+                                        & (NetworkNeighborRow.remote_device_id == service.device_id)
+                                    ),
+                                ),
+                            )
+                            .limit(1)
+                        )
+                        if physical is not None:
+                            candidate.add(
+                                kind="physical_topology",
+                                summary=(
+                                    f"Current {physical.protocol.upper()} topology directly links "
+                                    f"candidate device {service.device_id} with impacted device "
+                                    f"{target_device_id}"
+                                ),
+                                weight=8,
+                            )
 
                 candidates[(candidate.kind, candidate.entity_id)] = candidate
 
-            monitor = session.get(SyntheticMonitorRow, incident.monitor_id)
             if monitor is not None and monitor.device_id:
                 device = session.get(DeviceRow, monitor.device_id)
                 label = (device.hostname if device else None) or monitor.device_id
