@@ -91,6 +91,7 @@ jobs:
           name: performance-${{ env.DEVICE_COUNT }}
           path: artifacts/
           if-no-files-found: warn
+          retention-days: 7
       - name: Diagnostics
         if: failure()
         run: tools/deployment/compose.sh logs --tail 150
