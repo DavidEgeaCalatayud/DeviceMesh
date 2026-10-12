@@ -79,6 +79,12 @@ final class AppModel: ObservableObject {
         self.probes = (try? await api.syntheticProbes()) ?? []
     }
 
+    func deviceDetail(_ deviceId: String) async throws -> (DeviceHealth, [MetricSample]) {
+        async let health = api.deviceHealth(deviceId)
+        async let metrics = api.latestMetrics(deviceId)
+        return try await (health, metrics)
+    }
+
     func loadOperations(deviceId: String) async {
         do {
             operationsByDevice[deviceId] = try await api.remoteOperations(deviceId: deviceId)
@@ -92,6 +98,10 @@ final class AppModel: ObservableObject {
         operationType: String,
         hostname: String? = nil
     ) async {
+        guard session?.user.role != "viewer" else {
+            self.error = "Viewer role cannot queue operations"
+            return
+        }
         loading = true
         defer { loading = false }
         do {
