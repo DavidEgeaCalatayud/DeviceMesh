@@ -9,6 +9,7 @@ idf_component_register(
         "identity.c"
         "credentials.c"
         "cloud.c"
+        "time_sync.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
