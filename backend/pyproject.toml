@@ -19,6 +19,8 @@ dependencies = [
   "argon2-cffi>=25.1,<26",
   "prometheus-client>=0.22,<1",
   "pysnmp==7.1.30",
+  "cryptography>=50,<51",
+  "h2>=4.4,<5",
 ]
 
 [project.optional-dependencies]

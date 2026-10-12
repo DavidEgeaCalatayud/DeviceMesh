@@ -1,4 +1,6 @@
 import Foundation
+import UIKit
+import UserNotifications
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -8,6 +10,7 @@ final class AppModel: ObservableObject {
     @Published var alerts: [Alert] = []
     @Published var monitors: [SyntheticMonitor] = []
     @Published var probes: [SyntheticProbe] = []
+    @Published var operationsByDevice: [String: [RemoteOperation]] = [:]
     @Published var loading = false
     @Published var error: String?
 
@@ -15,10 +18,40 @@ final class AppModel: ObservableObject {
     private var api: DeviceMeshAPI
 
     init() {
+        let arguments = ProcessInfo.processInfo.arguments
+#if DEBUG
+        if arguments.contains("-DeviceMeshUITestAuthenticated") {
+            let fixture = SessionTokens(
+                accessToken: "ui-test-access",
+                refreshToken: "ui-test-refresh",
+                expiresAt: "2099-01-01T00:00:00Z",
+                user: HumanUser(
+                    id: "ui-test-user",
+                    username: "ui-test",
+                    role: "administrator",
+                    mfaEnabled: true
+                )
+            )
+            self.session = fixture
+            self.api = try! DeviceMeshAPI(
+                baseURL: URL(string: "https://mesh.example.com")!,
+                accessToken: fixture.accessToken
+            )
+            return
+        }
+#endif
+        if arguments.contains("-DeviceMeshUITestReset") {
+            store.clear()
+        }
         let restored = store.load()
         self.session = restored
         self.api = try! DeviceMeshAPI(baseURL: store.server, accessToken: restored?.accessToken)
-        if restored != nil { Task { await refreshAll() } }
+        if restored != nil {
+            Task {
+                await refreshAll()
+                await enablePushNotifications()
+            }
+        }
     }
 
     func login(server: String, username: String, password: String, mfaCode: String) async {
@@ -38,6 +71,7 @@ final class AppModel: ObservableObject {
             api = nextAPI
             session = nextSession
             await refreshAll()
+            await enablePushNotifications()
         } catch {
             self.error = error.localizedDescription
         }
@@ -78,8 +112,80 @@ final class AppModel: ObservableObject {
         self.probes = (try? await api.syntheticProbes()) ?? []
     }
 
+    func deviceDetail(_ deviceId: String) async throws -> (DeviceHealth, [MetricSample]) {
+        async let health = api.deviceHealth(deviceId)
+        async let metrics = api.latestMetrics(deviceId)
+        return try await (health, metrics)
+    }
+
+    func loadOperations(deviceId: String) async {
+        do {
+            operationsByDevice[deviceId] = try await api.remoteOperations(deviceId: deviceId)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func queueOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String? = nil
+    ) async {
+        guard session?.user.role != "viewer" else {
+            self.error = "Viewer role cannot queue operations"
+            return
+        }
+        loading = true
+        defer { loading = false }
+        do {
+            _ = try await api.queueRemoteOperation(
+                deviceId: deviceId,
+                operationType: operationType,
+                hostname: hostname
+            )
+            operationsByDevice[deviceId] = try await api.remoteOperations(deviceId: deviceId)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func enablePushNotifications() async {
+        do {
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(
+                options: [.alert, .badge, .sound]
+            )
+            guard granted else { return }
+            UIApplication.shared.registerForRemoteNotifications()
+            if let token = store.pushToken() {
+                try await api.registerPushToken(
+                    provider: "apns",
+                    environment: DeviceMeshAppDelegate.apnsEnvironment,
+                    installationId: store.installationId,
+                    token: token
+                )
+            }
+        } catch {
+            // Push is optional. Keep the operator app usable when notification permission
+            // is denied or APNs registration is temporarily unavailable.
+        }
+    }
+
+    var serverURL: URL { store.server }
+
+    func createHardwareEnrollmentToken() async throws -> String {
+        guard session?.user.role == "administrator" else {
+            throw DeviceMeshAPIError.server(
+                403,
+                "Administrator role is required to provision hardware"
+            )
+        }
+        return try await api.createAgentEnrollmentToken(ttlSeconds: 900)
+    }
+
     func logout() async {
+        try? await api.unregisterPushToken(installationId: store.installationId)
         await api.logout()
+        UIApplication.shared.unregisterForRemoteNotifications()
         store.clear()
         session = nil
         devices = []

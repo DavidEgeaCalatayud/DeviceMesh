@@ -18,6 +18,7 @@ from app.api.routers import (
     enrollment,
     events,
     health,
+    mobile_push,
     network,
     nms,
     notifications,
@@ -109,6 +110,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(health.router)
+app.include_router(mobile_push.router)
 app.include_router(auth.router)
 app.include_router(platform.router)
 app.include_router(enrollment.router)

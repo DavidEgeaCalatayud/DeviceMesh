@@ -9,7 +9,7 @@ import secrets
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE_SECRET_NAMES = ("postgres_password", "application_password", "application_url", "migration_url", "operator_token")
-SECRET_NAMES = CORE_SECRET_NAMES + ("grafana_admin_password",)
+SECRET_NAMES = CORE_SECRET_NAMES + ("grafana_admin_password", "mobile_push_encryption")
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -71,6 +71,8 @@ def initialize(directory: Path) -> None:
         # Upgrade-safe addition for deployments created before bundled observability.
         if not (directory / "grafana_admin_password").exists():
             _write_secret(directory, "grafana_admin_password", secrets.token_urlsafe(36))
+        if not (directory / "mobile_push_encryption").exists():
+            _write_secret(directory, "mobile_push_encryption", secrets.token_urlsafe(48))
         return
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory.chmod(0o700)
@@ -80,6 +82,7 @@ def initialize(directory: Path) -> None:
         "application_password": application,
         "operator_token": secrets.token_hex(32),
         "grafana_admin_password": secrets.token_urlsafe(36),
+        "mobile_push_encryption": secrets.token_urlsafe(48),
         "application_url": f"postgresql+psycopg://devicemesh_app:{application}@postgres:5432/devicemesh",
         "migration_url": f"postgresql+psycopg://devicemesh_owner:{owner}@postgres:5432/devicemesh",
     }

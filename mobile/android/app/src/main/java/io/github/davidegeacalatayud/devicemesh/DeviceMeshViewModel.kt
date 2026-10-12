@@ -6,9 +6,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseApp
+import com.google.firebase.messaging.FirebaseMessaging
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
+import io.github.davidegeacalatayud.devicemesh.core.model.DeviceHealth
+import io.github.davidegeacalatayud.devicemesh.core.model.HumanUser
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.MetricSample
+import io.github.davidegeacalatayud.devicemesh.core.model.RemoteOperation
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticProbe
@@ -28,6 +34,9 @@ data class MobileState(
     val alerts: List<Alert> = emptyList(),
     val monitors: List<SyntheticMonitor> = emptyList(),
     val probes: List<SyntheticProbe> = emptyList(),
+    val operationsByDevice: Map<String, List<RemoteOperation>> = emptyMap(),
+    val deviceHealth: Map<String, DeviceHealth> = emptyMap(),
+    val deviceMetrics: Map<String, List<MetricSample>> = emptyMap(),
 )
 
 class DeviceMeshViewModel(application: Application) : AndroidViewModel(application) {
@@ -50,6 +59,7 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
                 val session = api.login(username, password, mfaCode)
                 store.save(session)
                 state = state.copy(server = normalized, session = session, loading = false)
+                syncPushRegistration()
                 refreshAll()
             } catch (error: Exception) {
                 state = state.copy(loading = false, error = error.message ?: "Login failed")
@@ -63,12 +73,14 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
             state = state.copy(loading = true, error = null)
             try {
                 loadData()
+                syncPushRegistration()
             } catch (error: ApiException) {
                 if (error.statusCode == 401) {
                     try {
                         val refreshed = api.refresh(current.refreshToken)
                         store.save(refreshed)
                         state = state.copy(session = refreshed)
+                        syncPushRegistration()
                         loadData()
                     } catch (refreshError: Exception) {
                         store.clear()
@@ -105,9 +117,105 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    fun loadDeviceDetails(deviceId: String) {
+        viewModelScope.launch {
+            try {
+                val operations = async { api.remoteOperations(deviceId) }
+                val health = async { api.deviceHealth(deviceId) }
+                val metrics = async { api.latestMetrics(deviceId) }
+                state = state.copy(
+                    operationsByDevice = state.operationsByDevice + (deviceId to operations.await()),
+                    deviceHealth = state.deviceHealth + (deviceId to health.await()),
+                    deviceMetrics = state.deviceMetrics + (deviceId to metrics.await()),
+                )
+            } catch (error: Exception) {
+                state = state.copy(error = error.message ?: "Unable to load device details")
+            }
+        }
+    }
+
+    fun loadOperations(deviceId: String) = loadDeviceDetails(deviceId)
+
+    fun queueOperation(deviceId: String, operationType: String, hostname: String? = null) {
+        if (state.session?.user?.role == "viewer") {
+            state = state.copy(error = "Viewer role cannot queue operations")
+            return
+        }
+        viewModelScope.launch {
+            state = state.copy(loading = true, error = null)
+            try {
+                api.queueRemoteOperation(deviceId, operationType, hostname)
+                val operations = api.remoteOperations(deviceId)
+                state = state.copy(
+                    operationsByDevice = state.operationsByDevice + (deviceId to operations),
+                )
+            } catch (error: Exception) {
+                state = state.copy(error = error.message ?: "Unable to queue operation")
+            } finally {
+                state = state.copy(loading = false)
+            }
+        }
+    }
+
+    fun seedAuthenticatedUiTestSession() {
+        check(BuildConfig.DEBUG) { "UI-test session seeding is disabled in release builds" }
+        state = MobileState(
+            server = "https://mesh.example.com",
+            session = SessionTokens(
+                accessToken = "ui-test-access",
+                refreshToken = "ui-test-refresh",
+                expiresAt = "2099-01-01T00:00:00Z",
+                user = HumanUser(
+                    id = "ui-test-user",
+                    username = "ui-test",
+                    role = "administrator",
+                    mfaEnabled = true,
+                ),
+            ),
+        )
+    }
+
+    private fun syncPushRegistration() {
+        if (state.session == null) return
+        if (FirebaseApp.getApps(getApplication()).isEmpty()) return
+
+        fun register(token: String) {
+            if (token.isBlank()) return
+            store.savePushToken(token)
+            viewModelScope.launch {
+                runCatching {
+                    api.registerPushToken(
+                        provider = "fcm",
+                        environment = "production",
+                        installationId = store.installationId(),
+                        token = token,
+                    )
+                }
+            }
+        }
+
+        store.pushToken()?.let(::register)
+        runCatching { FirebaseMessaging.getInstance() }
+            .getOrNull()
+            ?.token
+            ?.addOnSuccessListener(::register)
+    }
+
+    suspend fun createHardwareEnrollmentToken(): String {
+        val session = state.session ?: throw IllegalStateException("No active session")
+        require(session.user.role == "administrator") {
+            "Administrator role is required to provision hardware"
+        }
+        return api.createAgentEnrollmentToken(900)
+    }
+
     fun logout() {
         viewModelScope.launch {
+            runCatching { api.unregisterPushToken(store.installationId()) }
             runCatching { api.logout() }
+            if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
+                runCatching { FirebaseMessaging.getInstance().deleteToken() }
+            }
             store.clear()
             state = MobileState(server = store.server())
         }

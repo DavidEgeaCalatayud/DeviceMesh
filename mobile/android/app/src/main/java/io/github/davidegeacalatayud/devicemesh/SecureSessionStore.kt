@@ -11,6 +11,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import java.util.UUID
 import org.json.JSONObject
 
 class SecureSessionStore(context: Context) {
@@ -52,6 +53,24 @@ class SecureSessionStore(context: Context) {
     fun clear() { preferences.edit().remove("session").apply() }
     fun saveServer(server: String) { preferences.edit().putString("server", server).apply() }
     fun server(): String = preferences.getString("server", null) ?: "https://mesh.example.com"
+
+    fun installationId(): String {
+        preferences.getString("installation_id", null)?.let { return it }
+        val created = UUID.randomUUID().toString()
+        preferences.edit().putString("installation_id", created).apply()
+        return created
+    }
+
+    fun savePushToken(token: String) {
+        preferences.edit()
+            .putString("push_token", encrypt(token.toByteArray(Charsets.UTF_8)))
+            .apply()
+    }
+
+    fun pushToken(): String? {
+        val encrypted = preferences.getString("push_token", null) ?: return null
+        return runCatching { decrypt(encrypted).toString(Charsets.UTF_8) }.getOrNull()
+    }
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

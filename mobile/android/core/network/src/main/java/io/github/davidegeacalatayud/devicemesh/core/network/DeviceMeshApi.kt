@@ -3,8 +3,11 @@ package io.github.davidegeacalatayud.devicemesh.core.network
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
 import io.github.davidegeacalatayud.devicemesh.core.model.DeviceStatus
+import io.github.davidegeacalatayud.devicemesh.core.model.DeviceHealth
 import io.github.davidegeacalatayud.devicemesh.core.model.HumanUser
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.MetricSample
+import io.github.davidegeacalatayud.devicemesh.core.model.RemoteOperation
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticProbe
@@ -18,16 +21,44 @@ import org.json.JSONObject
 
 class ApiException(val statusCode: Int, message: String) : RuntimeException(message)
 
+private val REMOTE_OPERATION_TYPES = setOf(
+    "telemetry.collect",
+    "inventory.refresh",
+    "agent.health_check",
+    "network.dns_lookup",
+    "network.route_snapshot",
+)
+
+fun validateRemoteOperationType(operationType: String) {
+    require(operationType in REMOTE_OPERATION_TYPES) { "Unsupported remote operation" }
+}
+
 interface DeviceMeshApi {
     suspend fun health(): Boolean
     suspend fun login(username: String, password: String, mfaCode: String? = null): SessionTokens
     suspend fun refresh(refreshToken: String): SessionTokens
     suspend fun logout()
     suspend fun devices(): List<Device>
+    suspend fun deviceHealth(deviceId: String): DeviceHealth
+    suspend fun latestMetrics(deviceId: String): List<MetricSample>
     suspend fun incidents(): List<Incident>
     suspend fun alerts(): List<Alert>
     suspend fun syntheticMonitors(): List<SyntheticMonitor>
     suspend fun syntheticProbes(): List<SyntheticProbe>
+    suspend fun createAgentEnrollmentToken(ttlSeconds: Int = 900): String
+    suspend fun registerPushToken(
+        provider: String,
+        environment: String,
+        installationId: String,
+        token: String,
+    )
+    suspend fun unregisterPushToken(installationId: String)
+    suspend fun remoteOperations(deviceId: String): List<RemoteOperation>
+    suspend fun queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String? = null,
+    ): RemoteOperation
 }
 
 fun validateBaseUrl(raw: String): String {
@@ -103,6 +134,51 @@ class HttpDeviceMeshApi(
         }
     }
 
+    override suspend fun deviceHealth(deviceId: String): DeviceHealth =
+        withContext(Dispatchers.IO) {
+            val safeId = java.net.URLEncoder.encode(deviceId, Charsets.UTF_8.name())
+            val (_, text) = request("GET", "/api/v1/devices/" + safeId + "/health")
+            val row = JSONObject(text)
+            val windows = row.optJSONArray("windows") ?: JSONArray()
+            var availability24h: Double? = null
+            for (index in 0 until windows.length()) {
+                val window = windows.getJSONObject(index)
+                if (window.optString("label") == "24h" && !window.isNull("availabilityPercent")) {
+                    availability24h = window.optDouble("availabilityPercent")
+                }
+            }
+            DeviceHealth(
+                deviceId = row.getString("deviceId"),
+                currentState = row.optNullableString("currentState"),
+                currentOutageSeconds = if (row.isNull("currentOutageSeconds")) {
+                    null
+                } else {
+                    row.optDouble("currentOutageSeconds")
+                },
+                maintenanceActive = row.optBoolean("maintenanceActive"),
+                availability24h = availability24h,
+            )
+        }
+
+    override suspend fun latestMetrics(deviceId: String): List<MetricSample> =
+        withContext(Dispatchers.IO) {
+            val rows = requestArray("GET", "/api/v1/telemetry/latest")
+            buildList {
+                for (index in 0 until rows.length()) {
+                    val row = rows.getJSONObject(index)
+                    if (row.optString("deviceId") != deviceId) continue
+                    add(
+                        MetricSample(
+                            name = row.getString("name"),
+                            value = row.getDouble("value"),
+                            unit = row.optNullableString("unit"),
+                            timestamp = row.getString("timestamp"),
+                        ),
+                    )
+                }
+            }.sortedBy { it.name }
+        }
+
     override suspend fun incidents(): List<Incident> = withContext(Dispatchers.IO) {
         val rows = requestArray("GET", "/api/v1/incidents?limit=100&activeOnly=false")
         buildList {
@@ -173,6 +249,105 @@ class HttpDeviceMeshApi(
                 )
             }
         }
+    }
+
+    override suspend fun createAgentEnrollmentToken(ttlSeconds: Int): String =
+        withContext(Dispatchers.IO) {
+            require(ttlSeconds in 60..3600)
+            requestJson(
+                "POST",
+                "/api/v1/operator/agent-enrollment-tokens",
+                JSONObject().put("ttlSeconds", ttlSeconds),
+            ).getString("token")
+        }
+
+    override suspend fun registerPushToken(
+        provider: String,
+        environment: String,
+        installationId: String,
+        token: String,
+    ) = withContext(Dispatchers.IO) {
+        requestJson(
+            "POST",
+            "/api/v1/mobile/push-subscriptions",
+            JSONObject()
+                .put("provider", provider)
+                .put("environment", environment)
+                .put("installationId", installationId)
+                .put("token", token),
+        )
+        Unit
+    }
+
+    override suspend fun unregisterPushToken(installationId: String) =
+        withContext(Dispatchers.IO) {
+            val safeId = java.net.URLEncoder.encode(installationId, Charsets.UTF_8.name())
+            request("DELETE", "/api/v1/mobile/push-subscriptions/" + safeId)
+            Unit
+        }
+
+    override suspend fun remoteOperations(deviceId: String): List<RemoteOperation> =
+        withContext(Dispatchers.IO) {
+            val rows = requestArray(
+                "GET",
+                "/api/v1/operator/remote-operations?deviceId=" + java.net.URLEncoder.encode(
+                    deviceId,
+                    Charsets.UTF_8.name(),
+                ) + "&limit=100",
+            )
+            buildList {
+                for (index in 0 until rows.length()) {
+                    add(parseRemoteOperation(rows.getJSONObject(index)))
+                }
+            }
+        }
+
+    override suspend fun queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String?,
+    ): RemoteOperation = withContext(Dispatchers.IO) {
+        validateRemoteOperationType(operationType)
+        val arguments = JSONObject()
+        if (operationType == "network.dns_lookup") {
+            val value = hostname?.trim().orEmpty()
+            require(value.isNotBlank() && value.length <= 253) {
+                "DNS lookup requires a valid hostname"
+            }
+            arguments.put("hostname", value)
+        }
+        parseRemoteOperation(
+            requestJson(
+                "POST",
+                "/api/v1/operator/remote-operations",
+                JSONObject()
+                    .put("deviceId", deviceId)
+                    .put("operationType", operationType)
+                    .put("arguments", arguments)
+                    .put("ttlSeconds", 300),
+            ),
+        )
+    }
+
+    private fun parseRemoteOperation(row: JSONObject): RemoteOperation {
+        val result = row.optJSONObject("result") ?: JSONObject()
+        val flattened = buildMap {
+            val keys = result.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                put(key, result.opt(key)?.toString().orEmpty())
+            }
+        }
+        return RemoteOperation(
+            id = row.getString("id"),
+            deviceId = row.getString("deviceId"),
+            operationType = row.getString("operationType"),
+            status = row.getString("status"),
+            createdAt = row.getString("createdAt"),
+            completedAt = row.optNullableString("completedAt"),
+            result = flattened,
+            error = row.optNullableString("error"),
+        )
     }
 
     private fun parseSession(body: JSONObject): SessionTokens {

@@ -16,6 +16,16 @@ jobs:
       - name: Install Android SDK components
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
       - working-directory: mobile/android
         run: gradle :core:network:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleRelease
+      - name: Create Android emulator
+        run: |
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd             --force --name devicemesh-ci --package "system-images;android-35;google_apis;x86_64"
+      - name: Run Android UI tests
+        run: |
+          nohup "$ANDROID_HOME/emulator/emulator" -avd devicemesh-ci -no-window -no-audio             -no-boot-anim -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
+          "$ANDROID_HOME/platform-tools/adb" wait-for-device
+          "$ANDROID_HOME/platform-tools/adb" shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+          cd mobile/android
+          gradle :app:connectedDebugAndroidTest

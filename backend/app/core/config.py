@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     operator_token: str = "development-operator-change-me"
     operator_token_file: str | None = None
     database_url_file: str | None = None
+    mobile_push_encryption_secret: str = "development-mobile-push-encryption-change-me"
+    mobile_push_encryption_secret_file: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
     public_reads: bool = True
     embedded_workers: bool = True
@@ -65,7 +67,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime(self) -> Self:
-        for field in ("operator_token", "database_url"):
+        for field in ("operator_token", "database_url", "mobile_push_encryption_secret"):
             filename = getattr(self, f"{field}_file")
             if filename:
                 setattr(self, field, Path(filename).read_text().strip())
@@ -76,6 +78,13 @@ class Settings(BaseSettings):
                 raise ValueError("production requires a unique operator token of at least 32 characters")
             if not self.database_url.startswith("postgresql+psycopg://"):
                 raise ValueError("production requires PostgreSQL with the psycopg driver")
+            if "change-me" in self.mobile_push_encryption_secret or len(
+                self.mobile_push_encryption_secret
+            ) < 32:
+                raise ValueError(
+                    "production requires a unique mobile push encryption secret "
+                    "of at least 32 characters"
+                )
             if self.public_reads:
                 raise ValueError("public_reads must be false in production")
             if "*" in self.cors_origins:

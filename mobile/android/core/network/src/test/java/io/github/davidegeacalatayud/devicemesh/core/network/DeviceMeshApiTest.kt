@@ -15,4 +15,16 @@ class DeviceMeshApiTest {
             validateBaseUrl("https://user:password@mesh.example.com")
         }
     }
+
+    @Test
+    fun remoteOperationsAreStrictlyAllowlisted() {
+        validateRemoteOperationType("telemetry.collect")
+        validateRemoteOperationType("network.route_snapshot")
+        assertThrows(IllegalArgumentException::class.java) {
+            validateRemoteOperationType("shell")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            validateRemoteOperationType("powershell.exec")
+        }
+    }
 }

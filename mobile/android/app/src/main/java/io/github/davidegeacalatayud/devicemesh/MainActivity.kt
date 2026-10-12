@@ -1,7 +1,12 @@
 package io.github.davidegeacalatayud.devicemesh
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,24 +27,38 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.davidegeacalatayud.devicemesh.core.designsystem.DeviceMeshTheme
 import io.github.davidegeacalatayud.devicemesh.core.model.DeviceStatus
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val authenticatedUiTest =
+            BuildConfig.DEBUG && intent.getBooleanExtra("DeviceMeshUITestAuthenticated", false)
         setContent {
+            val model: DeviceMeshViewModel = viewModel()
+            LaunchedEffect(authenticatedUiTest) {
+                if (authenticatedUiTest) model.seedAuthenticatedUiTestSession()
+            }
             DeviceMeshTheme {
-                Surface(Modifier.fillMaxSize()) { DeviceMeshApp() }
+                Surface(Modifier.fillMaxSize()) { DeviceMeshApp(model) }
             }
         }
     }
@@ -51,6 +70,7 @@ private enum class Tab(val label: String) {
     INCIDENTS("Incidents"),
     ALERTS("Alerts"),
     SYNTHETICS("Synthetics"),
+    PROVISION("Provision"),
 }
 
 @Composable
@@ -60,8 +80,10 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
         LoginScreen(state.server, state.loading, state.error, model::login)
         return
     }
+    PushNotificationPermission()
     var tabName by rememberSaveable { mutableStateOf(Tab.DASHBOARD.name) }
     val tab = Tab.valueOf(tabName)
+    var selectedDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
     Scaffold(
         topBar = {
             Row(
@@ -101,10 +123,24 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
             }
             when (tab) {
                 Tab.DASHBOARD -> Dashboard(state)
-                Tab.DEVICES -> Devices(state)
+                Tab.DEVICES -> {
+                    val selected = state.devices.firstOrNull { it.id == selectedDeviceId }
+                    if (selected == null) {
+                        Devices(state) { selectedDeviceId = it }
+                    } else {
+                        DeviceDetail(
+                            state = state,
+                            deviceId = selected.id,
+                            onBack = { selectedDeviceId = null },
+                            loadOperations = model::loadOperations,
+                            queueOperation = model::queueOperation,
+                        )
+                    }
+                }
                 Tab.INCIDENTS -> Incidents(state)
                 Tab.ALERTS -> Alerts(state)
                 Tab.SYNTHETICS -> Synthetics(state)
+                Tab.PROVISION -> ProvisionHardware(state, model)
             }
         }
     }
@@ -190,16 +226,134 @@ private fun Metric(label: String, value: String) {
 }
 
 @Composable
-private fun Devices(state: MobileState) = LazyColumn(Modifier.padding(16.dp)) {
+private fun Devices(state: MobileState, onOpen: (String) -> Unit) = LazyColumn(Modifier.padding(16.dp)) {
     item { Text("Devices", style = MaterialTheme.typography.headlineSmall) }
     items(state.devices, key = { it.id }) { device ->
-        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-            Text(device.hostname ?: device.id, style = MaterialTheme.typography.titleMedium)
-            val ipText = device.ipAddresses.joinToString().ifBlank { "No IP" }
-            Text(device.status.name.lowercase() + " · " + ipText)
-            device.operatingSystem?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = { onOpen(device.id) }, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Text(device.hostname ?: device.id, style = MaterialTheme.typography.titleMedium)
+                val ipText = device.ipAddresses.joinToString().ifBlank { "No IP" }
+                Text(device.status.name.lowercase() + " · " + ipText)
+                device.operatingSystem?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
         }
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun DeviceDetail(
+    state: MobileState,
+    deviceId: String,
+    onBack: () -> Unit,
+    loadOperations: (String) -> Unit,
+    queueOperation: (String, String, String?) -> Unit,
+) {
+    val device = state.devices.firstOrNull { it.id == deviceId } ?: return
+    val health = state.deviceHealth[deviceId]
+    val metrics = state.deviceMetrics[deviceId].orEmpty()
+    var menuOpen by rememberSaveable { mutableStateOf(false) }
+    var dnsHost by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(deviceId) { loadOperations(deviceId) }
+    LazyColumn(Modifier.padding(16.dp)) {
+        item {
+            TextButton(onClick = onBack) { Text("← Devices") }
+            Text(device.hostname ?: device.id, style = MaterialTheme.typography.headlineSmall)
+            Text(device.status.name.lowercase())
+            Text("IP: " + device.ipAddresses.joinToString().ifBlank { "—" })
+            Text("OS: " + (device.operatingSystem ?: "—"))
+            Text("Manufacturer: " + (device.manufacturer ?: "—"))
+            Text("Last seen: " + (device.lastSeen ?: "—"))
+        }
+        item {
+            Text(
+                "Operational health",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 20.dp),
+            )
+            if (health == null) {
+                Text("Loading…")
+            } else {
+                Text("State: " + (health.currentState ?: "unknown"))
+                health.availability24h?.let {
+                    Text("Availability 24h: " + String.format("%.3f%%", it))
+                }
+                health.currentOutageSeconds?.let {
+                    Text("Current outage: " + it.toLong() + " s")
+                }
+                if (health.maintenanceActive) Text("Maintenance active")
+            }
+        }
+        if (metrics.isNotEmpty()) {
+            item {
+                Text(
+                    "Latest metrics",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+            }
+            items(metrics.take(12), key = { it.name }) { metric ->
+                Text(
+                    metric.name + ": " + metric.value +
+                        (metric.unit?.let { " " + it } ?: ""),
+                    modifier = Modifier.padding(vertical = 3.dp),
+                )
+            }
+        }
+        if (state.session?.user?.role != "viewer") {
+            item {
+                Text(
+                    "Safe operations",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+                Button(onClick = { menuOpen = true }) { Text("Queue operation") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    listOf(
+                        "telemetry.collect" to "Collect telemetry",
+                        "inventory.refresh" to "Refresh inventory",
+                        "agent.health_check" to "Agent health check",
+                        "network.route_snapshot" to "Route snapshot",
+                    ).forEach { (type, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                menuOpen = false
+                                queueOperation(deviceId, type, null)
+                            },
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = dnsHost,
+                    onValueChange = { dnsHost = it },
+                    label = { Text("DNS hostname") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    enabled = dnsHost.isNotBlank(),
+                    onClick = { queueOperation(deviceId, "network.dns_lookup", dnsHost.trim()) },
+                ) { Text("DNS lookup") }
+            }
+        }
+        item {
+            Text(
+                "Operation history",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 20.dp),
+            )
+        }
+        items(state.operationsByDevice[deviceId].orEmpty(), key = { it.id }) { operation ->
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Text(operation.operationType, style = MaterialTheme.typography.titleMedium)
+                Text(operation.status + " · " + operation.createdAt)
+                operation.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (operation.result.isNotEmpty()) {
+                    Text(operation.result.entries.joinToString { it.key + "=" + it.value })
+                }
+            }
+            HorizontalDivider()
+        }
     }
 }
 
@@ -252,5 +406,156 @@ private fun Synthetics(state: MobileState) = LazyColumn(Modifier.padding(16.dp))
             probe.name + " · " + probe.location + " · " + if (probe.online) "online" else "offline",
             modifier = Modifier.padding(vertical = 8.dp),
         )
+    }
+}
+
+
+@Composable
+private fun ProvisionHardware(state: MobileState, model: DeviceMeshViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val provisioner = remember { DeviceMeshBleProvisioner(context) }
+    val devices = remember { mutableStateListOf<ProvisioningDevice>() }
+    var selectedAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    var proof by rememberSaveable { mutableStateOf("") }
+    var ssid by rememberSaveable { mutableStateOf("") }
+    var wifiPassword by rememberSaveable { mutableStateOf("") }
+    var status by rememberSaveable { mutableStateOf("") }
+    var working by rememberSaveable { mutableStateOf(false) }
+
+    fun startScan() {
+        devices.clear()
+        selectedAddress = null
+        status = "Scanning for DeviceMesh hardware…"
+        provisioner.scan(
+            onDevice = { found ->
+                if (devices.none { it.address == found.address }) devices.add(found)
+            },
+            onComplete = {
+                status = if (devices.isEmpty()) "No DM-* devices found" else "Select a device"
+            },
+            onFailure = { status = it.message ?: "Bluetooth scan failed" },
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.all { it }) startScan()
+        else status = "Bluetooth permission is required for provisioning"
+    }
+
+    LazyColumn(Modifier.padding(16.dp)) {
+        item {
+            Text("Provision DeviceMesh hardware", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Creates a one-use 15 minute enrollment token and sends it with the HTTPS server " +
+                    "inside the encrypted ESP-IDF BLE provisioning session.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
+        if (state.session?.user?.role != "administrator") {
+            item {
+                Text(
+                    "Administrator role is required.",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            return@LazyColumn
+        }
+        item {
+            Button(
+                enabled = !working,
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        permissionLauncher.launch(DeviceMeshBleProvisioner.runtimePermissions)
+                    } else {
+                        startScan()
+                    }
+                },
+            ) { Text("Scan BLE") }
+        }
+        items(devices, key = { it.address }) { device ->
+            TextButton(onClick = { selectedAddress = device.address }) {
+                Text((if (selectedAddress == device.address) "✓ " else "") + device.name)
+            }
+        }
+        item {
+            OutlinedTextField(
+                value = proof,
+                onValueChange = { proof = it },
+                label = { Text("Proof of possession") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = ssid,
+                onValueChange = { ssid = it },
+                label = { Text("Wi-Fi SSID") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = wifiPassword,
+                onValueChange = { wifiPassword = it },
+                label = { Text("Wi-Fi password") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                enabled = !working &&
+                    selectedAddress != null &&
+                    proof.isNotBlank() &&
+                    ssid.isNotBlank(),
+                onClick = {
+                    val selected = devices.firstOrNull { it.address == selectedAddress }
+                        ?: return@Button
+                    scope.launch {
+                        working = true
+                        status = "Creating enrollment token…"
+                        try {
+                            val token = model.createHardwareEnrollmentToken()
+                            status = "Provisioning secure BLE session…"
+                            provisioner.provision(
+                                device = selected,
+                                proofOfPossession = proof.trim(),
+                                serverUrl = state.server,
+                                enrollmentToken = token,
+                                ssid = ssid,
+                                passphrase = wifiPassword,
+                            )
+                            status = "Provisioning complete. Device will enroll automatically."
+                            wifiPassword = ""
+                        } catch (error: Exception) {
+                            status = error.message ?: "Provisioning failed"
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                modifier = Modifier.padding(top = 12.dp),
+            ) { Text(if (working) "Provisioning…" else "Provision") }
+            if (status.isNotBlank()) {
+                Text(status, modifier = Modifier.padding(top = 12.dp))
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun PushNotificationPermission() {
+    if (Build.VERSION.SDK_INT < 33) return
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+    LaunchedEffect(Unit) {
+        if (
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 }
