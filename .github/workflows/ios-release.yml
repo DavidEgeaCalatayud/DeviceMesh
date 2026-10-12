@@ -163,3 +163,5 @@ jobs:
           security delete-keychain "$IOS_SIGNING_KEYCHAIN" || true
           rm -rf "$HOME/.appstoreconnect/private_keys" || true
           rm -f "$RUNNER_TEMP/devicemesh-distribution.p12" "$RUNNER_TEMP/devicemesh.mobileprovision" || true
+
+            retention-days: 30
