@@ -29,3 +29,12 @@ jobs:
           "$ANDROID_HOME/platform-tools/adb" shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
           cd mobile/android
           gradle :app:connectedDebugAndroidTest
+
+      - name: Publish debug APK
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: devicemesh-android-debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
