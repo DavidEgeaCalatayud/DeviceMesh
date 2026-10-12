@@ -14,6 +14,7 @@ from app.domain.network.models import (
 )
 from app.infrastructure.database import DeviceObservationRow, DeviceRow, DeviceServiceRow
 from app.infrastructure.repositories.network_inventory import NetworkInterfaceInventoryRow
+from app.infrastructure.repositories.nms import NetworkNeighborRow
 
 
 def _normalize_mac(value: str | None) -> str | None:
@@ -231,42 +232,120 @@ class SqlAlchemyNetworkRepository:
                 row.id: row
                 for row in session.scalars(select(DeviceRow).order_by(DeviceRow.id)).all()
             }
+            physical = session.scalars(
+                select(NetworkNeighborRow)
+                .where(NetworkNeighborRow.present.is_(True))
+                .order_by(
+                    NetworkNeighborRow.device_id,
+                    NetworkNeighborRow.local_interface,
+                    NetworkNeighborRow.protocol,
+                )
+            ).all()
+
+        physical_device_ids = {
+            row.device_id for row in physical
+        } | {
+            row.remote_device_id for row in physical if row.remote_device_id is not None
+        }
+        nodes: list[TopologyNode] = []
+        edges: list[TopologyEdge] = []
+        added_nodes: set[str] = set()
+
+        def add_device_node(device_id: str) -> None:
+            node_id = f"device:{device_id}"
+            if node_id in added_nodes:
+                return
+            device = devices.get(device_id)
+            nodes.append(
+                TopologyNode(
+                    id=node_id,
+                    kind="device",
+                    label=(device.hostname if device is not None else None) or device_id,
+                    device_id=device_id,
+                    status=device.status if device is not None else None,
+                )
+            )
+            added_nodes.add(node_id)
+
+        for neighbor in physical:
+            add_device_node(neighbor.device_id)
+            if neighbor.remote_device_id is not None:
+                add_device_node(neighbor.remote_device_id)
+                target = f"device:{neighbor.remote_device_id}"
+            else:
+                identity = (
+                    neighbor.remote_system_name
+                    or neighbor.remote_chassis_id
+                    or neighbor.remote_port_id
+                    or "unknown"
+                )
+                target = (
+                    "neighbor:"
+                    + neighbor.protocol
+                    + ":"
+                    + neighbor.device_id
+                    + ":"
+                    + neighbor.local_interface
+                    + ":"
+                    + identity
+                )
+                if target not in added_nodes:
+                    nodes.append(
+                        TopologyNode(
+                            id=target,
+                            kind="neighbor",
+                            label=identity,
+                        )
+                    )
+                    added_nodes.add(target)
+            edges.append(
+                TopologyEdge(
+                    source=f"device:{neighbor.device_id}",
+                    target=target,
+                    relation=neighbor.protocol,
+                )
+            )
 
         segments = sorted({row.network_cidr for row in memberships if row.network_cidr})
-        nodes: list[TopologyNode] = [
-            TopologyNode(
-                id=f"network:{cidr}",
-                kind="network",
-                label=cidr,
-                network_cidr=cidr,
-            )
-            for cidr in segments
-        ]
-        edges: list[TopologyEdge] = []
-        linked_devices: set[str] = set()
+        for cidr in segments:
+            node_id = f"network:{cidr}"
+            if node_id not in added_nodes:
+                nodes.append(
+                    TopologyNode(
+                        id=node_id,
+                        kind="network",
+                        label=cidr,
+                        network_cidr=cidr,
+                    )
+                )
+                added_nodes.add(node_id)
+
         for membership in memberships:
             if not membership.network_cidr or membership.device_id not in devices:
                 continue
-            device = devices[membership.device_id]
-            if device.id not in linked_devices:
-                nodes.append(
-                    TopologyNode(
-                        id=f"device:{device.id}",
-                        kind="device",
-                        label=device.hostname or device.id,
-                        device_id=device.id,
-                        network_cidr=membership.network_cidr,
-                        status=device.status,
-                    )
-                )
-                linked_devices.add(device.id)
+            if membership.device_id in physical_device_ids:
+                continue
+            add_device_node(membership.device_id)
             edges.append(
                 TopologyEdge(
                     source=f"network:{membership.network_cidr}",
-                    target=f"device:{device.id}",
+                    target=f"device:{membership.device_id}",
+                    relation="observed-on",
                 )
             )
-        return NetworkTopology(nodes=tuple(nodes), edges=tuple(edges))
+
+        has_physical = bool(physical)
+        has_fallback = any(edge.relation == "observed-on" for edge in edges)
+        if has_physical:
+            method = "lldp-cdp-with-segment-fallback" if has_fallback else "lldp-cdp"
+        else:
+            method = "observation-segment"
+        return NetworkTopology(
+            nodes=tuple(nodes),
+            edges=tuple(edges),
+            method=method,
+            approximate=not has_physical or has_fallback,
+        )
 
     @staticmethod
     def _interface_to_domain(row: NetworkInterfaceInventoryRow) -> NetworkInterfaceInventory:

@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     worker_metrics_host: str = "0.0.0.0"
     worker_metrics_port: int = Field(default=9100, ge=1, le=65535)
     notification_secret_directory: str = "/run/secrets/devicemesh-notifications"
+    nms_secret_directory: str = "/run/secrets/devicemesh-nms"
+    nms_poll_interval_seconds: int = Field(default=5, ge=1, le=300)
     notification_delivery_interval_seconds: int = Field(default=5, ge=1, le=300)
     notification_delivery_timeout_seconds: int = Field(default=10, ge=1, le=60)
     notification_delivery_batch_size: int = Field(default=25, ge=1, le=500)

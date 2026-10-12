@@ -3,6 +3,7 @@ from app.application.use_cases.record_observation import RecordObservation
 from app.application.use_cases.record_telemetry import RecordTelemetry
 from app.core.config import get_settings
 from app.infrastructure.database import SessionFactory
+from app.infrastructure.nms_secrets import NmsSecretResolver
 from app.infrastructure.notification_delivery import (
     NotificationDispatcher,
     NotificationSecretResolver,
@@ -24,6 +25,7 @@ from app.infrastructure.repositories.health import (
     SqlAlchemyMaintenanceRepository,
 )
 from app.infrastructure.repositories.network import SqlAlchemyNetworkRepository
+from app.infrastructure.repositories.nms import SqlAlchemyNmsRepository
 from app.infrastructure.repositories.notifications import SqlAlchemyNotificationRepository
 from app.infrastructure.repositories.operations import SqlAlchemyRemoteOperationRepository
 from app.infrastructure.repositories.retention import SqlAlchemyTelemetryRetentionRepository
@@ -37,6 +39,7 @@ from app.infrastructure.repositories.synthetic_http import (
 )
 from app.infrastructure.repositories.synthetics import SqlAlchemySyntheticRepository
 from app.infrastructure.security.agent_auth import AgentAuthService
+from app.infrastructure.snmp_poller import NetworkPollWorker
 from app.infrastructure.synthetic_secrets import SyntheticSecretResolver
 from app.infrastructure.synthetic_worker import SyntheticProbeWorker
 from app.infrastructure.synthetics import SyntheticProbeExecutor
@@ -81,6 +84,12 @@ device_repository = EventRecordingDeviceRepository(
     health_repository,
 )
 network_repository = SqlAlchemyNetworkRepository(SessionFactory)
+nms_repository = SqlAlchemyNmsRepository(SessionFactory)
+nms_poll_worker = NetworkPollWorker(
+    nms_repository,
+    network_repository,
+    NmsSecretResolver(settings),
+)
 raw_telemetry_repository = SqlAlchemyTelemetryRepository(SessionFactory)
 telemetry_retention_repository = SqlAlchemyTelemetryRetentionRepository(SessionFactory)
 alert_repository = SqlAlchemyAlertRepository(SessionFactory, maintenance_repository)
@@ -132,6 +141,10 @@ def get_notification_repository() -> SqlAlchemyNotificationRepository:
 
 def get_network_repository() -> SqlAlchemyNetworkRepository:
     return network_repository
+
+
+def get_nms_repository() -> SqlAlchemyNmsRepository:
+    return nms_repository
 
 
 def get_telemetry_retention_repository() -> SqlAlchemyTelemetryRetentionRepository:

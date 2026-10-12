@@ -18,6 +18,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "argon2-cffi>=25.1,<26",
   "prometheus-client>=0.22,<1",
+  "pysnmp==7.1.30",
 ]
 
 [project.optional-dependencies]
@@ -44,3 +45,8 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+
+[[tool.mypy.overrides]]
+module = ["pysnmp.*"]
+ignore_missing_imports = true

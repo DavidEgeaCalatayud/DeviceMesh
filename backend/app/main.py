@@ -19,6 +19,7 @@ from app.api.routers import (
     events,
     health,
     network,
+    nms,
     notifications,
     operational_health,
     operations,
@@ -119,6 +120,8 @@ app.include_router(telemetry.operator_router)
 app.include_router(alerts.router)
 app.include_router(notifications.router)
 app.include_router(network.router)
+app.include_router(nms.router)
+app.include_router(nms.operator_router)
 app.include_router(operational_health.router)
 app.include_router(operations.router)
 app.include_router(synthetics.router)

@@ -88,7 +88,7 @@ def test_topology_groups_latest_device_observation_by_network() -> None:
 
     topology = network_repo.get_topology()
     assert topology.approximate is True
-    assert topology.method == "observation-segment"
+    assert topology.method in {"observation-segment", "lldp-cdp-with-segment-fallback"}
     assert any(node.id == "network:10.78.0.0/24" for node in topology.nodes)
     assert any(node.device_id == device.id for node in topology.nodes)
     assert any(
