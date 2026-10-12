@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class NotificationChannelCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    kind: Literal["webhook", "slack", "email"]
+    kind: Literal["webhook", "slack", "email", "push"]
     secretRef: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._-]+$")
     config: dict[str, object] = Field(default_factory=dict)
 
