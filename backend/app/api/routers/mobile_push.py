@@ -8,8 +8,6 @@ from app.api.schemas.mobile_push import (
     MobilePushRegistrationResponse,
 )
 from app.infrastructure.repositories.mobile_push import (
-    PushEnvironment,
-    PushProvider,
     SqlAlchemyMobilePushRepository,
 )
 from app.infrastructure.security.human_auth import HumanPrincipal
@@ -32,8 +30,8 @@ def register_push_subscription(
 ) -> MobilePushRegistrationResponse:
     target = repository.register(
         user_id=principal.id,
-        provider=PushProvider(request.provider),
-        environment=PushEnvironment(request.environment),
+        provider=request.provider,
+        environment=request.environment,
         installation_id=request.installationId,
         token=request.token,
     )
