@@ -14,9 +14,19 @@ from app.main import app
 def test_production_rejects_insecure_defaults() -> None:
     with pytest.raises(ValueError, match="unique operator token"):
         Settings(env="production")
+    secure_push_key = "b" * 64
     with pytest.raises(ValueError, match="public_reads"):
-        Settings(env="production", operator_token="a" * 64)
-    Settings(env="production", operator_token="a" * 64, public_reads=False)
+        Settings(
+            env="production",
+            operator_token="a" * 64,
+            mobile_push_encryption_secret=secure_push_key,
+        )
+    Settings(
+        env="production",
+        operator_token="a" * 64,
+        mobile_push_encryption_secret=secure_push_key,
+        public_reads=False,
+    )
 
 
 def test_readiness_reports_database_failure_without_leaking_credentials() -> None:

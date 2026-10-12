@@ -12,6 +12,7 @@ import httpx
 
 from app.core.config import Settings
 from app.domain.alerts.notifications import NotificationChannel
+from app.infrastructure.mobile_push_delivery import MobilePushTransport
 from app.infrastructure.repositories.notifications import SqlAlchemyNotificationRepository
 
 _SECRET_REF_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
@@ -41,8 +42,13 @@ class NotificationSecretResolver:
 
 
 class NotificationTransport:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        mobile_push: MobilePushTransport | None = None,
+    ) -> None:
         self._settings = settings
+        self._mobile_push = mobile_push
 
     def send(
         self,
@@ -58,6 +64,11 @@ class NotificationTransport:
             return
         if channel.kind.value == "email":
             self._send_email(channel, payload, secret)
+            return
+        if channel.kind.value == "push":
+            if self._mobile_push is None:
+                raise RuntimeError("mobile push transport is not configured")
+            self._mobile_push.send(channel, payload, secret)
             return
         raise ValueError(f"unsupported notification channel kind: {channel.kind.value}")
 

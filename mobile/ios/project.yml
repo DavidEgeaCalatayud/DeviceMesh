@@ -1,4 +1,8 @@
 name: DeviceMesh
+packages:
+  ESPProvision:
+    url: https://github.com/espressif/esp-idf-provisioning-ios.git
+    from: 2.1.1
 targets:
   DeviceMesh:
     type: application
@@ -8,11 +12,22 @@ targets:
       - path: Sources
         excludes:
           - "**/*.md"
+    dependencies:
+      - package: ESPProvision
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "DeviceMesh uses Bluetooth to securely provision DeviceMesh hardware."
+        CODE_SIGN_ENTITLEMENTS: Resources/DeviceMesh.entitlements
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
   DeviceMeshTests:
     type: bundle.unit-test
     platform: iOS
@@ -28,3 +43,32 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh.tests
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES
+
+
+  DeviceMeshUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: DeviceMesh
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh.uitests
+        SWIFT_VERSION: 5.10
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  DeviceMesh:
+    build:
+      targets:
+        DeviceMesh: all
+    test:
+      targets:
+        - DeviceMeshTests
+        - DeviceMeshUITests
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -3,6 +3,7 @@ from app.application.use_cases.record_observation import RecordObservation
 from app.application.use_cases.record_telemetry import RecordTelemetry
 from app.core.config import get_settings
 from app.infrastructure.database import SessionFactory
+from app.infrastructure.mobile_push_delivery import MobilePushTransport
 from app.infrastructure.nms_secrets import NmsSecretResolver
 from app.infrastructure.notification_delivery import (
     NotificationDispatcher,
@@ -23,6 +24,10 @@ from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.health import (
     SqlAlchemyHealthRepository,
     SqlAlchemyMaintenanceRepository,
+)
+from app.infrastructure.repositories.mobile_push import (
+    PushTokenCipher,
+    SqlAlchemyMobilePushRepository,
 )
 from app.infrastructure.repositories.network import SqlAlchemyNetworkRepository
 from app.infrastructure.repositories.nms import SqlAlchemyNmsRepository
@@ -56,10 +61,17 @@ health_repository = SqlAlchemyHealthRepository(SessionFactory)
 maintenance_repository = SqlAlchemyMaintenanceRepository(SessionFactory)
 remote_operation_repository = SqlAlchemyRemoteOperationRepository(SessionFactory)
 notification_repository = SqlAlchemyNotificationRepository(SessionFactory)
+mobile_push_repository = SqlAlchemyMobilePushRepository(
+    SessionFactory,
+    PushTokenCipher(settings.mobile_push_encryption_secret),
+)
 notification_dispatcher = NotificationDispatcher(
     notification_repository,
     NotificationSecretResolver(settings),
-    NotificationTransport(settings),
+    NotificationTransport(
+        settings,
+        MobilePushTransport(mobile_push_repository, settings),
+    ),
     settings,
 )
 synthetic_repository: SqlAlchemySyntheticRepository = RoundAwareSyntheticRepository(
@@ -139,6 +151,10 @@ def get_alert_repository() -> SqlAlchemyAlertRepository:
 
 def get_notification_repository() -> SqlAlchemyNotificationRepository:
     return notification_repository
+
+
+def get_mobile_push_repository() -> SqlAlchemyMobilePushRepository:
+    return mobile_push_repository
 
 
 def get_network_repository() -> SqlAlchemyNetworkRepository:

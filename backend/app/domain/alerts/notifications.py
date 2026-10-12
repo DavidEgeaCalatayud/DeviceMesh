@@ -7,6 +7,7 @@ class NotificationChannelKind(StrEnum):
     WEBHOOK = "webhook"
     SLACK = "slack"
     EMAIL = "email"
+    PUSH = "push"
 
 
 class NotificationTransitionFilter(StrEnum):

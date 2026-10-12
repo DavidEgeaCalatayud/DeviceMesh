@@ -54,3 +54,41 @@ struct SyntheticProbe: Codable, Identifiable {
     let online: Bool
     let lastSeenAt: String?
 }
+
+
+struct DeviceHealthWindow: Codable {
+    let label: String
+    let availabilityPercent: Double?
+}
+
+struct DeviceHealth: Codable {
+    let deviceId: String
+    let currentState: String?
+    let currentOutageSeconds: Double?
+    let maintenanceActive: Bool
+    let windows: [DeviceHealthWindow]
+
+    var availability24h: Double? {
+        windows.first(where: { $0.label == "24h" })?.availabilityPercent
+    }
+}
+
+struct MetricSample: Codable, Identifiable {
+    var id: String { name }
+    let deviceId: String
+    let timestamp: String
+    let name: String
+    let value: Double
+    let unit: String?
+}
+
+struct RemoteOperation: Codable, Identifiable {
+    let id: String
+    let deviceId: String
+    let operationType: String
+    let status: String
+    let createdAt: String
+    let completedAt: String?
+    let result: [String: String]
+    let error: String?
+}

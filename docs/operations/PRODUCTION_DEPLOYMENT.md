@@ -18,7 +18,10 @@ tools/deployment/compose.sh exec api python -m app.admin admin
 
 The last command prompts for the initial administrator password. Sign in at your HTTPS hostname, then create Viewer/Operator accounts under Administration. `install.sh` validates configuration, generates unique secrets once, builds images, runs Alembic before writers start, and checks private API reads and HTTPS web delivery. It never executes `.env` as a shell script. Existing credentials are not silently rotated on reruns.
 
-The secret directory must remain mode 0700. Compose grants containers only their selected secret files. Those files are readable by the application's non-root container UID, while the host parent directory prevents traversal by other host users. PostgreSQL's owner credential is reserved for initialization/migration/backup; the API and worker use a role with DML grants and no schema ownership. Operators with Docker access remain fully trusted administrators.
+The secret directory must remain mode 0700. `tools/deployment/config.py --init-secrets`
+also creates the dedicated `mobile_push_encryption` key used to encrypt FCM/APNs device tokens
+at rest; upgrades add that file without rotating existing secrets. Compose grants containers only
+their selected secret files. Those files are readable by the application's non-root container UID, while the host parent directory prevents traversal by other host users. PostgreSQL's owner credential is reserved for initialization/migration/backup; the API and worker use a role with DML grants and no schema ownership. Operators with Docker access remain fully trusted administrators.
 
 The bootstrap operator token remains an emergency administrator credential: protect it and use individual accounts day to day. Session access tokens last one hour by default, rotating refresh tokens seven days. Disabling a user revokes their sessions. Login throttling is persisted by username and source IP; behind the bundled proxy the IP bucket may represent the proxy, so accounts also have independent limits. Do not trust arbitrary forwarded IP headers.
 

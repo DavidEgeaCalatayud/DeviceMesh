@@ -14,6 +14,22 @@ enum DeviceMeshAPIError: Error, LocalizedError {
     }
 }
 
+enum RemoteOperationPolicy {
+    static let allowed: Set<String> = [
+        "telemetry.collect",
+        "inventory.refresh",
+        "agent.health_check",
+        "network.dns_lookup",
+        "network.route_snapshot",
+    ]
+
+    static func validate(_ operationType: String) throws {
+        guard allowed.contains(operationType) else {
+            throw DeviceMeshAPIError.server(0, "Unsupported remote operation")
+        }
+    }
+}
+
 actor DeviceMeshAPI {
     private let baseURL: URL
     private var accessToken: String?
@@ -64,6 +80,107 @@ actor DeviceMeshAPI {
     func logout() async {
         let _: EmptyResponse? = try? await request(path: "/api/v1/auth/logout", method: "POST")
         accessToken = nil
+    }
+
+    func deviceHealth(_ deviceId: String) async throws -> DeviceHealth {
+        let safe = deviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? deviceId
+        return try await request(path: "/api/v1/devices/" + safe + "/health")
+    }
+
+    func latestMetrics(_ deviceId: String) async throws -> [MetricSample] {
+        let rows: [MetricSample] = try await request(path: "/api/v1/telemetry/latest")
+        return rows.filter { $0.deviceId == deviceId }.sorted { $0.name < $1.name }
+    }
+
+    func remoteOperations(deviceId: String) async throws -> [RemoteOperation] {
+        guard let encoded = deviceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw DeviceMeshAPIError.server(0, "Invalid device identifier")
+        }
+        return try await request(
+            path: "/api/v1/operator/remote-operations?deviceId=\(encoded)&limit=100"
+        )
+    }
+
+    func queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String? = nil
+    ) async throws -> RemoteOperation {
+        try RemoteOperationPolicy.validate(operationType)
+        var arguments: [String: String] = [:]
+        if operationType == "network.dns_lookup" {
+            guard let hostname,
+                  !hostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  hostname.count <= 253 else {
+                throw DeviceMeshAPIError.server(0, "DNS lookup requires a valid hostname")
+            }
+            arguments["hostname"] = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        struct Payload: Codable {
+            let deviceId: String
+            let operationType: String
+            let arguments: [String: String]
+            let ttlSeconds: Int
+        }
+        return try await request(
+            path: "/api/v1/operator/remote-operations",
+            method: "POST",
+            body: Payload(
+                deviceId: deviceId,
+                operationType: operationType,
+                arguments: arguments,
+                ttlSeconds: 300
+            )
+        )
+    }
+
+    func registerPushToken(
+        provider: String,
+        environment: String,
+        installationId: String,
+        token: String
+    ) async throws {
+        struct Body: Codable {
+            let provider: String
+            let environment: String
+            let installationId: String
+            let token: String
+        }
+        let _: EmptyResponse = try await request(
+            path: "/api/v1/mobile/push-subscriptions",
+            method: "POST",
+            body: Body(
+                provider: provider,
+                environment: environment,
+                installationId: installationId,
+                token: token
+            )
+        )
+    }
+
+    func unregisterPushToken(installationId: String) async throws {
+        let safe = installationId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? installationId
+        let _: EmptyResponse = try await request(
+            path: "/api/v1/mobile/push-subscriptions/" + safe,
+            method: "DELETE"
+        )
+    }
+
+    func createAgentEnrollmentToken(ttlSeconds: Int = 900) async throws -> String {
+        guard (60...3600).contains(ttlSeconds) else {
+            throw DeviceMeshAPIError.server(0, "Invalid enrollment TTL")
+        }
+        struct Request: Codable { let ttlSeconds: Int }
+        struct Response: Codable { let token: String; let expiresAt: String }
+        let response: Response = try await request(
+            path: "/api/v1/operator/agent-enrollment-tokens",
+            method: "POST",
+            body: Request(ttlSeconds: ttlSeconds)
+        )
+        return response.token
     }
 
     func devices() async throws -> [Device] {
