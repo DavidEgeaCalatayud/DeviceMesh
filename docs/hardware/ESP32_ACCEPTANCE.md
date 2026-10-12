@@ -62,7 +62,7 @@ On production samples:
 - Secure Boot is enabled;
 - `CONFIG_DM_REQUIRE_HARDENING=y`;
 - an unhardened board fails closed before credentials are used;
-- serial logs contain no agent credential, Wi-Fi passphrase or enrollment token;
+- serial logs contain no provisioning PoP, agent credential, Wi-Fi passphrase or enrollment token;
 - firmware signed by an untrusted key does not boot.
 
 ### Soak
