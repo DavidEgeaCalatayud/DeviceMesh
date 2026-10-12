@@ -1,9 +1,14 @@
 name: Android CI
 on:
   push:
+    branches: [main]
     paths: ["mobile/android/**", ".github/workflows/android-ci.yml"]
   pull_request:
     paths: ["mobile/android/**", ".github/workflows/android-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

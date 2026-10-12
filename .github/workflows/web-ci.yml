@@ -1,9 +1,14 @@
 name: Web CI
 on:
   push:
+    branches: [main]
     paths: ["web/**", ".github/workflows/web-ci.yml"]
   pull_request:
     paths: ["web/**", ".github/workflows/web-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest

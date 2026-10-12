@@ -8,12 +8,17 @@ on:
       - "tools/docs/**"
       - ".github/workflows/docs-ci.yml"
   push:
+    branches: [main]
     paths:
       - "backend/app/api/**"
       - "backend/app/main.py"
       - "docs/**"
       - "tools/docs/**"
       - ".github/workflows/docs-ci.yml"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
@@ -35,3 +40,4 @@ jobs:
         with:
           name: generated-api-catalog
           path: /tmp/ENDPOINT_CATALOG.md
+          retention-days: 3

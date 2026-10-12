@@ -1,13 +1,18 @@
 name: Failure acceptance
 
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - "backend/**"
       - "infra/**"
       - "tools/deployment/**"
       - ".github/workflows/failure-acceptance.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

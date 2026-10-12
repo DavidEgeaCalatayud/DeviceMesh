@@ -1,9 +1,14 @@
 name: ESP32 Firmware CI
 on:
   push:
+    branches: [main]
     paths: ["firmware/esp32/**", ".github/workflows/firmware-ci.yml"]
   pull_request:
     paths: ["firmware/esp32/**", ".github/workflows/firmware-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

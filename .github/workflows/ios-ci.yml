@@ -1,9 +1,14 @@
 name: iOS CI
 on:
   push:
+    branches: [main]
     paths: ["mobile/ios/**", ".github/workflows/ios-ci.yml"]
   pull_request:
     paths: ["mobile/ios/**", ".github/workflows/ios-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-15

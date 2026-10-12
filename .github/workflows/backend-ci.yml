@@ -1,9 +1,14 @@
 name: Backend CI
 on:
   push:
+    branches: [main]
     paths: ["backend/**", "protocol/**", ".github/workflows/backend-ci.yml"]
   pull_request:
     paths: ["backend/**", "protocol/**", ".github/workflows/backend-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -45,6 +50,7 @@ jobs:
         with:
           name: backend-ruff-report
           path: ruff-report.json
+          retention-days: 3
       - id: mypy
         working-directory: backend
         run: |
@@ -58,5 +64,6 @@ jobs:
         with:
           name: backend-mypy-report
           path: mypy-report.txt
+          retention-days: 3
       - working-directory: backend
         run: pytest --cov=app --cov-report=term-missing

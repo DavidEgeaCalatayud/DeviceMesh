@@ -1,9 +1,14 @@
 name: Windows Agent CI
 on:
   push:
+    branches: [main]
     paths: ["agents/windows/**", "protocol/**", ".github/workflows/windows-agent-ci.yml"]
   pull_request:
     paths: ["agents/windows/**", "protocol/**", ".github/workflows/windows-agent-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: windows-latest

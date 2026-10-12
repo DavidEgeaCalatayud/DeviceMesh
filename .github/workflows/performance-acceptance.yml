@@ -1,7 +1,8 @@
 name: Performance acceptance
 
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - "backend/**"
       - "infra/**"
@@ -21,6 +22,10 @@ on:
         default: "5"
         type: choice
         options: ["3", "5", "10"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -86,6 +91,7 @@ jobs:
           name: performance-${{ env.DEVICE_COUNT }}
           path: artifacts/
           if-no-files-found: warn
+          retention-days: 7
       - name: Diagnostics
         if: failure()
         run: tools/deployment/compose.sh logs --tail 150

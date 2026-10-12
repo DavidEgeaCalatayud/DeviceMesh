@@ -1,9 +1,14 @@
 name: Network Probe CI
 on:
   push:
+    branches: [main]
     paths: ["agents/probe/**", ".github/workflows/probe-ci.yml"]
   pull_request:
     paths: ["agents/probe/**", ".github/workflows/probe-ci.yml"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
