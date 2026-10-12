@@ -61,8 +61,15 @@ Run on a dedicated host that will not be reclaimed:
 The soak is resumable through its credential cache/state file and records one load report plus
 one PostgreSQL capacity report per chunk. A 48-hour run uses `--duration-hours 48`.
 
+At completion the harness writes `capacity-summary.json`, comparing the first and last database
+snapshots. It reports database bytes/hour, per-table row/byte/index growth, dead-tuple ratios,
+maximum PostgreSQL connection utilization, minimum buffer-cache hit ratio and maximum p95/p99
+latency/failure rate across all load chunks. Append-heavy tables crossing the configurable
+10-million-row review threshold are listed as partition-review candidates; crossing the threshold
+triggers engineering review rather than blindly enabling partitioning.
+
 A soak is accepted only if all chunks stay within failure/p95 objectives and review of the
-capacity snapshots shows no monotonic resource leak or uncontrolled storage/index growth.
+summary/snapshots shows no monotonic resource leak or uncontrolled storage/index growth.
 WebSocket reconnect behaviour, Redis memory and worker leadership should be captured from the
 existing Prometheus endpoints alongside the soak artifacts.
 
