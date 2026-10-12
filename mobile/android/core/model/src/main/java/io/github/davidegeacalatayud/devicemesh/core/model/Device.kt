@@ -20,6 +20,21 @@ data class SyntheticMonitor(val id: String, val name: String, val kind: String, 
 data class SyntheticProbe(val id: String, val name: String, val location: String, val online: Boolean, val lastSeenAt: String?)
 
 
+data class DeviceHealth(
+    val deviceId: String,
+    val currentState: String?,
+    val currentOutageSeconds: Double?,
+    val maintenanceActive: Boolean,
+    val availability24h: Double?,
+)
+
+data class MetricSample(
+    val name: String,
+    val value: Double,
+    val unit: String?,
+    val timestamp: String,
+)
+
 data class RemoteOperation(
     val id: String,
     val deviceId: String,
