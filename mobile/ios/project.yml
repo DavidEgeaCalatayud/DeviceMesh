@@ -13,6 +13,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
   DeviceMeshTests:
     type: bundle.unit-test
     platform: iOS
@@ -52,3 +54,7 @@ schemes:
       targets:
         - DeviceMeshTests
         - DeviceMeshUITests
+    run:
+      config: Debug
+    archive:
+      config: Release
