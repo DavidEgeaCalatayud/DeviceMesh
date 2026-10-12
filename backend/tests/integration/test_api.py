@@ -53,6 +53,9 @@ def test_system_version_publishes_compatibility_contract() -> None:
         "linux-agent": {"minimumVersion": "0.2.0", "protocolVersions": [1]},
         "macos-agent": {"minimumVersion": "0.1.0", "protocolVersions": [1]},
         "distributed-probe": {"minimumVersion": "0.2.0", "protocolVersions": [1]},
+        "android-client": {"minimumVersion": "0.1.0", "protocolVersions": [1]},
+        "ios-client": {"minimumVersion": "0.1.0", "protocolVersions": [1]},
+        "esp32-probe": {"minimumVersion": "0.3.0", "protocolVersions": [1]},
     }
 
 
@@ -63,6 +66,9 @@ def test_system_version_publishes_compatibility_contract() -> None:
         ("linux-agent", "0.2.0"),
         ("macos-agent", "0.1.0"),
         ("distributed-probe", "0.2.0"),
+        ("android-client", "0.1.0"),
+        ("ios-client", "0.1.0"),
+        ("esp32-probe", "0.3.0"),
     ],
 )
 def test_component_compatibility_accepts_supported_clients(
