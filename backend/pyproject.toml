@@ -14,7 +14,7 @@ dependencies = [
   "sqlalchemy>=2.0,<3",
   "alembic>=1.16,<2",
   "psycopg[binary]>=3.2,<4",
-  "redis>=6,<7",
+  "redis>=6,<9",
   "httpx>=0.28,<1",
   "argon2-cffi>=25.1,<26",
   "prometheus-client>=0.22,<1",
@@ -27,10 +27,10 @@ dependencies = [
 dev = [
   "hypothesis>=6.138,<7",
   "jsonschema[format]>=4.25,<5",
-  "pytest>=8.4,<9",
-  "pytest-cov>=6,<7",
+  "pytest>=8.4,<10",
+  "pytest-cov>=6,<8",
   "ruff>=0.13,<1",
-  "mypy>=1.18,<2",
+  "mypy>=1.18,<3",
 ]
 
 [tool.setuptools.packages.find]
