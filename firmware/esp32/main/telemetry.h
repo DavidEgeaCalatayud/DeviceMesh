@@ -12,4 +12,8 @@ typedef struct {
     bool gateway_probe_valid;
     float gateway_rtt_ms;
     float gateway_loss_percent;
+    bool environment_sensor_valid;
+    float temperature_celsius;
+    float humidity_percent;
+    float pressure_hpa;
 } dm_telemetry_t;
