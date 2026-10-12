@@ -98,8 +98,14 @@ Repository secrets:
 
 The workflow builds and flashes the selected target, resets the board twice, verifies that the
 persistent DeviceMesh UUID is identical after both boots, waits until the backend observes that
-agent, and requires the real Wi-Fi RSSI, free-heap and uptime metrics. It retains
-`esp32-hardware-acceptance/esp32-hil.json` as evidence.
+agent, and requires real Wi-Fi RSSI, free-heap, uptime, gateway RTT and packet-loss metrics. It
+also fails if provisioning PoP material appears in captured serial logs.
+
+Set `require_environment=true` when the reference fixture includes BME280; the evidence then
+requires real temperature, humidity and pressure metrics. Set `require_hardening=true` only on
+a manufacturing sample with Secure Boot and flash encryption provisioned; the workflow enables
+the fail-closed firmware gate and requires the runtime hardening verification marker. Each run
+retains a uniquely named `esp32-hardware-acceptance-<run-id>` artifact for 30 days.
 
 This smoke is necessary but not sufficient for #28/#48. A release candidate still needs the
 manual matrix above for BLE provisioning from both mobile platforms, long offline buffering,
