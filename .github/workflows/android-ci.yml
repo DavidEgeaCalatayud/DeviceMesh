@@ -16,6 +16,30 @@ jobs:
       - name: Install Android SDK components
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platforms;android-35"             "build-tools;35.0.0"             "emulator"             "system-images;android-35;google_apis;x86_64"
       - working-directory: mobile/android
         run: gradle :core:network:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:bundleRelease
+      - name: Start Android 35 emulator
+        run: |
+          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd             --force --name devicemesh-ci             --package "system-images;android-35;google_apis;x86_64"
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+          nohup "$ANDROID_HOME/emulator/emulator"             -avd devicemesh-ci             -no-window -no-audio -no-boot-anim             -gpu swiftshader_indirect             > /tmp/devicemesh-emulator.log 2>&1 &
+          adb wait-for-device
+          for attempt in {1..90}; do
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
+              break
+            fi
+            if [[ "$attempt" == 90 ]]; then
+              cat /tmp/devicemesh-emulator.log
+              exit 1
+            fi
+            sleep 2
+          done
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+      - name: Run Android UI tests
+        working-directory: mobile/android
+        run: gradle :app:connectedDebugAndroidTest
+      - if: failure()
+        run: cat /tmp/devicemesh-emulator.log 2>/dev/null || true
