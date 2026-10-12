@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -37,9 +38,15 @@ import io.github.davidegeacalatayud.devicemesh.core.model.DeviceStatus
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val authenticatedUiTest =
+            BuildConfig.DEBUG && intent.getBooleanExtra("DeviceMeshUITestAuthenticated", false)
         setContent {
+            val model: DeviceMeshViewModel = viewModel()
+            LaunchedEffect(authenticatedUiTest) {
+                if (authenticatedUiTest) model.seedAuthenticatedUiTestSession()
+            }
             DeviceMeshTheme {
-                Surface(Modifier.fillMaxSize()) { DeviceMeshApp() }
+                Surface(Modifier.fillMaxSize()) { DeviceMeshApp(model) }
             }
         }
     }
