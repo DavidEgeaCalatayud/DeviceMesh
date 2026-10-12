@@ -19,6 +19,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "DeviceMesh uses Bluetooth to securely provision DeviceMesh hardware."
   DeviceMeshTests:
     type: bundle.unit-test
     platform: iOS
