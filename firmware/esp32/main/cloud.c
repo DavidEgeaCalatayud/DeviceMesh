@@ -238,6 +238,20 @@ int dm_cloud_send_telemetry(const char *agent_id, const dm_telemetry_t *telemetr
     cJSON_AddStringToObject(failures, "unit", "count");
     cJSON_AddItemToArray(metrics, failures);
 
+    if (telemetry->gateway_probe_valid) {
+        cJSON *rtt = cJSON_CreateObject();
+        cJSON_AddStringToObject(rtt, "name", "network.gateway.rtt.ms");
+        cJSON_AddNumberToObject(rtt, "value", telemetry->gateway_rtt_ms);
+        cJSON_AddStringToObject(rtt, "unit", "ms");
+        cJSON_AddItemToArray(metrics, rtt);
+
+        cJSON *loss = cJSON_CreateObject();
+        cJSON_AddStringToObject(loss, "name", "network.gateway.packet_loss.percent");
+        cJSON_AddNumberToObject(loss, "value", telemetry->gateway_loss_percent);
+        cJSON_AddStringToObject(loss, "unit", "percent");
+        cJSON_AddItemToArray(metrics, loss);
+    }
+
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!body) return -1;
