@@ -20,7 +20,7 @@ config DM_BME280_SCL_GPIO
 
 config DM_LOG_PROVISIONING_POP
     bool "Print BLE proof-of-possession to serial log"
-    default y
+    default n
     help
         Development convenience only. Disable for production/manufacturing
         images after recording the provisioning PoP in the controlled device
