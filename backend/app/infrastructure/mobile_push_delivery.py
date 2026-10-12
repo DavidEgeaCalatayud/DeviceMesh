@@ -78,6 +78,41 @@ def _string(config: Mapping[str, object], name: str) -> str:
     return value.strip()
 
 
+def _fcm_token_is_invalid(response: httpx.Response) -> bool:
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return False
+    details = error.get("details")
+    if not isinstance(details, list):
+        return False
+    for detail in details:
+        if not isinstance(detail, dict):
+            continue
+        if detail.get("@type") != "type.googleapis.com/google.firebase.fcm.v1.FcmError":
+            continue
+        return detail.get("errorCode") == "UNREGISTERED"
+    return False
+
+
+def _apns_token_is_invalid(response: httpx.Response) -> bool:
+    if response.status_code == 410:
+        return True
+    if response.status_code != 400:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    reason = payload.get("reason") if isinstance(payload, dict) else None
+    return reason in {"BadDeviceToken", "DeviceTokenNotForTopic", "Unregistered"}
+
+
 class MobilePushTransport:
     def __init__(
         self,
@@ -183,7 +218,7 @@ class MobilePushTransport:
                 )
                 if response.is_success:
                     continue
-                if response.status_code in {404, 410}:
+                if _fcm_token_is_invalid(response):
                     self._repository.disable(target.id)
                     continue
                 failures.append(f"fcm:{response.status_code}")
@@ -273,7 +308,7 @@ class MobilePushTransport:
                 )
                 if response.is_success:
                     continue
-                if response.status_code in {404, 410}:
+                if _apns_token_is_invalid(response):
                     self._repository.disable(target.id)
                     continue
                 failures.append(f"apns:{response.status_code}")
