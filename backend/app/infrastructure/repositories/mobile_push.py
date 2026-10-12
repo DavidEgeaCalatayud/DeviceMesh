@@ -5,7 +5,7 @@ import hashlib
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -201,8 +201,8 @@ class SqlAlchemyMobilePushRepository:
             raise ValueError("stored push provider is invalid")
         if row.environment not in {"production", "sandbox"}:
             raise ValueError("stored push environment is invalid")
-        provider = row.provider
-        environment = row.environment
+        provider = cast(PushProvider, row.provider)
+        environment = cast(PushEnvironment, row.environment)
         return PushTarget(
             id=row.id,
             user_id=row.user_id,
