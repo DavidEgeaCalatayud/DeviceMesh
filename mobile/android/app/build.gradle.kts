@@ -3,7 +3,14 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 android { namespace = "io.github.davidegeacalatayud.devicemesh"; compileSdk = 35
-    defaultConfig { applicationId = "io.github.davidegeacalatayud.devicemesh"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "0.1.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig {
+        applicationId = "io.github.davidegeacalatayud.devicemesh"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = System.getenv("DEVICEMESH_ANDROID_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("DEVICEMESH_ANDROID_VERSION_NAME") ?: "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true }
     signingConfigs {
