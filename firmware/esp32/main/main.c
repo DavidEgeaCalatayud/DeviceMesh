@@ -9,6 +9,7 @@
 #include "identity.h"
 #include "network_probe.h"
 #include "offline_queue.h"
+#include "recovery.h"
 #include "nvs_flash.h"
 #include "sensors.h"
 #include "time_sync.h"
@@ -37,6 +38,12 @@ void app_main(void) {
 
     if (dm_wifi_prepare() != 0) {
         ESP_LOGE(TAG, "Unable to initialize Wi-Fi stack");
+        return;
+    }
+
+    if (dm_recovery_requested()) {
+        dm_recovery_execute();
+        ESP_LOGW(TAG, "Recovery complete; restart the device to provision again");
         return;
     }
 
