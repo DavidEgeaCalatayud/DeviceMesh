@@ -18,6 +18,14 @@ config DM_BME280_SCL_GPIO
     default 22
     range 0 48
 
+config DM_LOG_PROVISIONING_POP
+    bool "Print BLE proof-of-possession to serial log"
+    default y
+    help
+        Development convenience only. Disable for production/manufacturing
+        images after recording the provisioning PoP in the controlled device
+        label/asset system.
+
 config DM_REQUIRE_HARDENING
     bool "Require Secure Boot and flash encryption at runtime"
     default n
