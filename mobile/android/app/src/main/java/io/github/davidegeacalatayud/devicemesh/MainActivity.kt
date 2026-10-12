@@ -22,9 +22,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -62,6 +65,7 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
     }
     var tabName by rememberSaveable { mutableStateOf(Tab.DASHBOARD.name) }
     val tab = Tab.valueOf(tabName)
+    var selectedDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
     Scaffold(
         topBar = {
             Row(
@@ -101,7 +105,20 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
             }
             when (tab) {
                 Tab.DASHBOARD -> Dashboard(state)
-                Tab.DEVICES -> Devices(state)
+                Tab.DEVICES -> {
+                    val selected = state.devices.firstOrNull { it.id == selectedDeviceId }
+                    if (selected == null) {
+                        Devices(state) { selectedDeviceId = it }
+                    } else {
+                        DeviceDetail(
+                            state = state,
+                            deviceId = selected.id,
+                            onBack = { selectedDeviceId = null },
+                            loadOperations = model::loadOperations,
+                            queueOperation = model::queueOperation,
+                        )
+                    }
+                }
                 Tab.INCIDENTS -> Incidents(state)
                 Tab.ALERTS -> Alerts(state)
                 Tab.SYNTHETICS -> Synthetics(state)
@@ -190,16 +207,87 @@ private fun Metric(label: String, value: String) {
 }
 
 @Composable
-private fun Devices(state: MobileState) = LazyColumn(Modifier.padding(16.dp)) {
+private fun Devices(state: MobileState, onOpen: (String) -> Unit) = LazyColumn(Modifier.padding(16.dp)) {
     item { Text("Devices", style = MaterialTheme.typography.headlineSmall) }
     items(state.devices, key = { it.id }) { device ->
-        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-            Text(device.hostname ?: device.id, style = MaterialTheme.typography.titleMedium)
-            val ipText = device.ipAddresses.joinToString().ifBlank { "No IP" }
-            Text(device.status.name.lowercase() + " · " + ipText)
-            device.operatingSystem?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = { onOpen(device.id) }, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Text(device.hostname ?: device.id, style = MaterialTheme.typography.titleMedium)
+                val ipText = device.ipAddresses.joinToString().ifBlank { "No IP" }
+                Text(device.status.name.lowercase() + " · " + ipText)
+                device.operatingSystem?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
         }
         HorizontalDivider()
+    }
+}
+
+@Composable
+private fun DeviceDetail(
+    state: MobileState,
+    deviceId: String,
+    onBack: () -> Unit,
+    loadOperations: (String) -> Unit,
+    queueOperation: (String, String, String?) -> Unit,
+) {
+    val device = state.devices.firstOrNull { it.id == deviceId } ?: return
+    var menuOpen by rememberSaveable { mutableStateOf(false) }
+    var dnsHost by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(deviceId) { loadOperations(deviceId) }
+    LazyColumn(Modifier.padding(16.dp)) {
+        item {
+            TextButton(onClick = onBack) { Text("← Devices") }
+            Text(device.hostname ?: device.id, style = MaterialTheme.typography.headlineSmall)
+            Text(device.status.name.lowercase())
+            Text("IP: " + device.ipAddresses.joinToString().ifBlank { "—" })
+            Text("OS: " + (device.operatingSystem ?: "—"))
+            Text("Manufacturer: " + (device.manufacturer ?: "—"))
+            Text("Last seen: " + (device.lastSeen ?: "—"))
+        }
+        item {
+            Text("Safe operations", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 20.dp))
+            Button(onClick = { menuOpen = true }) { Text("Queue operation") }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                listOf(
+                    "telemetry.collect" to "Collect telemetry",
+                    "inventory.refresh" to "Refresh inventory",
+                    "agent.health_check" to "Agent health check",
+                    "network.route_snapshot" to "Route snapshot",
+                ).forEach { (type, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            menuOpen = false
+                            queueOperation(deviceId, type, null)
+                        },
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = dnsHost,
+                onValueChange = { dnsHost = it },
+                label = { Text("DNS hostname") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                enabled = dnsHost.isNotBlank(),
+                onClick = { queueOperation(deviceId, "network.dns_lookup", dnsHost.trim()) },
+            ) { Text("DNS lookup") }
+        }
+        item {
+            Text("Operation history", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 20.dp))
+        }
+        items(state.operationsByDevice[deviceId].orEmpty(), key = { it.id }) { operation ->
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Text(operation.operationType, style = MaterialTheme.typography.titleMedium)
+                Text(operation.status + " · " + operation.createdAt)
+                operation.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (operation.result.isNotEmpty()) {
+                    Text(operation.result.entries.joinToString { it.key + "=" + it.value })
+                }
+            }
+            HorizontalDivider()
+        }
     }
 }
 
