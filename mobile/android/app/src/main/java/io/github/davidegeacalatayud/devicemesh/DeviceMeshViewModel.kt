@@ -8,7 +8,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.messaging.FirebaseMessaging
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
@@ -114,8 +113,10 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun syncPushRegistration() {
         if (state.session == null) return
+        if (FirebaseApp.getApps(getApplication()).isEmpty()) return
 
         fun register(token: String) {
+            if (token.isBlank()) return
             store.savePushToken(token)
             viewModelScope.launch {
                 runCatching {
@@ -136,31 +137,13 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
             ?.addOnSuccessListener(::register)
     }
 
-    fun syncPushRegistration() {
-        val session = state.session ?: return
-        if (FirebaseApp.getApps(getApplication()).isEmpty()) return
-        runCatching {
-            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                if (token.isBlank()) return@addOnSuccessListener
-                store.savePushToken(token)
-                viewModelScope.launch {
-                    runCatching {
-                        api.registerPushToken(
-                            provider = "fcm",
-                            environment = "production",
-                            installationId = store.installationId(),
-                            token = token,
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     fun logout() {
         viewModelScope.launch {
             runCatching { api.unregisterPushToken(store.installationId()) }
             runCatching { api.logout() }
+            if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
+                runCatching { FirebaseMessaging.getInstance().deleteToken() }
+            }
             store.clear()
             state = MobileState(server = store.server())
         }
