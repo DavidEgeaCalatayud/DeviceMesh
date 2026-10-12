@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.RemoteOperation
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticProbe
@@ -28,6 +29,7 @@ data class MobileState(
     val alerts: List<Alert> = emptyList(),
     val monitors: List<SyntheticMonitor> = emptyList(),
     val probes: List<SyntheticProbe> = emptyList(),
+    val operationsByDevice: Map<String, List<RemoteOperation>> = emptyMap(),
 )
 
 class DeviceMeshViewModel(application: Application) : AndroidViewModel(application) {
@@ -103,6 +105,37 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
             monitors = monitors.await(),
             probes = probes.await(),
         )
+    }
+
+    fun loadOperations(deviceId: String) {
+        viewModelScope.launch {
+            runCatching { api.remoteOperations(deviceId) }
+                .onSuccess { operations ->
+                    state = state.copy(
+                        operationsByDevice = state.operationsByDevice + (deviceId to operations),
+                    )
+                }
+                .onFailure { error ->
+                    state = state.copy(error = error.message ?: "Unable to load operations")
+                }
+        }
+    }
+
+    fun queueOperation(deviceId: String, operationType: String, hostname: String? = null) {
+        viewModelScope.launch {
+            state = state.copy(loading = true, error = null)
+            try {
+                api.queueRemoteOperation(deviceId, operationType, hostname)
+                val operations = api.remoteOperations(deviceId)
+                state = state.copy(
+                    operationsByDevice = state.operationsByDevice + (deviceId to operations),
+                )
+            } catch (error: Exception) {
+                state = state.copy(error = error.message ?: "Unable to queue operation")
+            } finally {
+                state = state.copy(loading = false)
+            }
+        }
     }
 
     fun logout() {
