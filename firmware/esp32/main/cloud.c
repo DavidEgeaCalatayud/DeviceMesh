@@ -254,6 +254,26 @@ int dm_cloud_send_telemetry(const char *agent_id, const dm_telemetry_t *telemetr
         cJSON_AddItemToArray(metrics, loss);
     }
 
+    if (telemetry->environment_sensor_valid) {
+        cJSON *temperature = cJSON_CreateObject();
+        cJSON_AddStringToObject(temperature, "name", "environment.temperature.celsius");
+        cJSON_AddNumberToObject(temperature, "value", telemetry->temperature_celsius);
+        cJSON_AddStringToObject(temperature, "unit", "celsius");
+        cJSON_AddItemToArray(metrics, temperature);
+
+        cJSON *humidity = cJSON_CreateObject();
+        cJSON_AddStringToObject(humidity, "name", "environment.humidity.percent");
+        cJSON_AddNumberToObject(humidity, "value", telemetry->humidity_percent);
+        cJSON_AddStringToObject(humidity, "unit", "percent");
+        cJSON_AddItemToArray(metrics, humidity);
+
+        cJSON *pressure = cJSON_CreateObject();
+        cJSON_AddStringToObject(pressure, "name", "environment.pressure.hpa");
+        cJSON_AddNumberToObject(pressure, "value", telemetry->pressure_hpa);
+        cJSON_AddStringToObject(pressure, "unit", "hPa");
+        cJSON_AddItemToArray(metrics, pressure);
+    }
+
     char *body = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!body) return -1;
