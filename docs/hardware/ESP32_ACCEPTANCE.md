@@ -83,3 +83,25 @@ unexplained reset, credential leak, unbounded queue/storage growth or failed rol
 
 CI build success does not satisfy this checklist. Roadmap #48/#28 should remain open until this
 evidence exists for the actual board revision being shipped.
+
+
+## Automated HIL smoke
+
+A self-hosted GitHub runner with labels `self-hosted, linux, devicemesh-esp32` can execute the
+`ESP32 Hardware Acceptance` workflow. The fixture must expose a supported ESP32 serial port and
+have ESP-IDF available through `IDF_PATH`.
+
+Repository secrets:
+
+- `DEVICEMESH_HIL_BASE_URL`: HTTPS URL of the isolated DeviceMesh acceptance deployment.
+- `DEVICEMESH_HIL_OPERATOR_TOKEN`: operator credential for that isolated environment.
+
+The workflow builds and flashes the selected target, resets the board twice, verifies that the
+persistent DeviceMesh UUID is identical after both boots, waits until the backend observes that
+agent, and requires the real Wi-Fi RSSI, free-heap and uptime metrics. It retains
+`esp32-hardware-acceptance/esp32-hil.json` as evidence.
+
+This smoke is necessary but not sufficient for #28/#48. A release candidate still needs the
+manual matrix above for BLE provisioning from both mobile platforms, long offline buffering,
+sensor disconnect/recovery, recovery button, valid/invalid OTA, rollback and hardened eFuse
+configuration.
