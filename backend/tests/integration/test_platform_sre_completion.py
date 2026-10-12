@@ -204,6 +204,30 @@ def test_explainable_rca_prioritizes_earlier_upstream_failure(sre_client) -> Non
     assert {"dependency_path", "correlated_incident"} <= evidence_kinds
 
 
+def test_rca_reports_insufficient_data_without_causal_signals(sre_client) -> None:
+    client, sessions, headers = sre_client
+    now = datetime.now(UTC)
+    service = create_service(client, headers, "Isolated API")
+    monitor_id, incident_id = str(uuid4()), str(uuid4())
+
+    with sessions.begin() as session:
+        add_monitor(session, monitor_id, "Isolated API health", now)
+        session.flush()
+        add_incident(session, incident_id, monitor_id, now - timedelta(minutes=1))
+
+    assert client.put(
+        f"/api/v1/service-catalog/{service['id']}/monitors/{monitor_id}",
+        headers=headers,
+    ).status_code == 200
+
+    response = client.get(f"/api/v1/incidents/{incident_id}/rca", headers=headers)
+    assert response.status_code == 200
+    report = response.json()
+    assert report["status"] == "insufficient_data"
+    assert report["primaryCandidate"]["entityId"] == service["id"]
+    assert report["primaryCandidate"]["score"] < 40
+
+
 def test_time_weighted_slo_and_multiwindow_burn_alert(sre_client) -> None:
     client, sessions, headers = sre_client
     now = datetime.now(UTC)
