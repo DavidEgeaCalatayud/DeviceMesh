@@ -9,6 +9,8 @@
 #include "identity.h"
 #include "network_probe.h"
 #include "offline_queue.h"
+#include "operations.h"
+#include "ota.h"
 #include "recovery.h"
 #include "nvs_flash.h"
 #include "sensors.h"
@@ -88,6 +90,8 @@ void app_main(void) {
             }
             if (dm_cloud_send_telemetry(agent_id, &telemetry) == 0) {
                 failed_cycles = 0;
+                dm_ota_confirm_running_image();
+                (void)dm_operations_poll(agent_id);
             } else {
                 dm_offline_queue_push(&telemetry);
                 if (failed_cycles < UINT32_MAX) failed_cycles++;
