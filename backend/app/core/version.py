@@ -17,13 +17,16 @@ class ComponentCompatibility:
     protocol_versions: tuple[int, ...]
 
 
-# Only components with a production-capable implementation belong here. Mobile and
-# firmware scaffolds are intentionally excluded until they implement the contract.
+# Components listed here implement a versioned DeviceMesh contract. External acceptance
+# (store publication or physical HIL) is tracked separately from wire compatibility.
 COMPONENT_COMPATIBILITY: dict[str, ComponentCompatibility] = {
     "windows-agent": ComponentCompatibility("0.2.0", (1,)),
     "linux-agent": ComponentCompatibility("0.2.0", (1,)),
     "macos-agent": ComponentCompatibility("0.1.0", (1,)),
     "distributed-probe": ComponentCompatibility("0.2.0", (1,)),
+    "android-client": ComponentCompatibility("0.1.0", (1,)),
+    "ios-client": ComponentCompatibility("0.1.0", (1,)),
+    "esp32-probe": ComponentCompatibility("0.3.0", (1,)),
 }
 
 
