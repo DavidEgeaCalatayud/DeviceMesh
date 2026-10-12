@@ -38,6 +38,13 @@ class RetentionPolicyResponse(BaseModel):
     telemetryHourlyDays: int
     deviceEventsDays: int
     syntheticChecksDays: int
+    discoveryObservationsDays: int
+    nmsInterfaceCountersDays: int
+    syslogDays: int
+    auditLogDays: int
+    securityAuditDays: int
+    notificationDeliveriesDays: int
+    indefiniteClasses: list[str]
 
 
 class DiagnosticSignalResponse(BaseModel):
