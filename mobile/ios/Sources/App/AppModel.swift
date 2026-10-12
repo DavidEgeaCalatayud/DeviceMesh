@@ -15,7 +15,29 @@ final class AppModel: ObservableObject {
     private var api: DeviceMeshAPI
 
     init() {
-        if ProcessInfo.processInfo.arguments.contains("-DeviceMeshUITestReset") {
+        let arguments = ProcessInfo.processInfo.arguments
+#if DEBUG
+        if arguments.contains("-DeviceMeshUITestAuthenticated") {
+            let fixture = SessionTokens(
+                accessToken: "ui-test-access",
+                refreshToken: "ui-test-refresh",
+                expiresAt: "2099-01-01T00:00:00Z",
+                user: HumanUser(
+                    id: "ui-test-user",
+                    username: "ui-test",
+                    role: "administrator",
+                    mfaEnabled: true
+                )
+            )
+            self.session = fixture
+            self.api = try! DeviceMeshAPI(
+                baseURL: URL(string: "https://mesh.example.com")!,
+                accessToken: fixture.accessToken
+            )
+            return
+        }
+#endif
+        if arguments.contains("-DeviceMeshUITestReset") {
             store.clear()
         }
         let restored = store.load()
