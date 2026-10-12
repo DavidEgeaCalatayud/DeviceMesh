@@ -134,7 +134,11 @@ int dm_ble_init(const char *device_id) {
         return -1;
     }
     ESP_LOGI(TAG, "BLE provisioning service %s", service_name);
+#if CONFIG_DM_LOG_PROVISIONING_POP
     ESP_LOGI(TAG, "Provisioning proof-of-possession: %s", pop);
+#else
+    ESP_LOGI(TAG, "Provisioning proof available from manufacturing label/asset record");
+#endif
 
     if (wifi_prov_mgr_endpoint_create(CONFIG_ENDPOINT) != ESP_OK) {
         wifi_prov_mgr_deinit();
