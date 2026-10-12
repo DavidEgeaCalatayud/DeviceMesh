@@ -110,16 +110,96 @@ struct DashboardView: View {
 
 private struct DeviceListView: View {
     @EnvironmentObject private var model: AppModel
+
     var body: some View {
         NavigationStack {
             List(model.devices) { device in
-                VStack(alignment: .leading) {
-                    Text(device.hostname ?? device.id).font(.headline)
-                    Text(device.status + " · " + device.ipAddresses.joined(separator: ", "))
-                        .font(.caption).foregroundStyle(.secondary)
+                NavigationLink {
+                    DeviceDetailView(device: device)
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(device.hostname ?? device.id).font(.headline)
+                        Text(device.status + " · " + device.ipAddresses.joined(separator: ", "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }.navigationTitle("Devices")
+            }
+            .navigationTitle("Devices")
         }
+    }
+}
+
+private struct DeviceDetailView: View {
+    @EnvironmentObject private var model: AppModel
+    let device: Device
+    @State private var dnsHost = ""
+
+    var body: some View {
+        List {
+            Section("Device") {
+                LabeledContent("Status", value: device.status)
+                LabeledContent("IP", value: device.ipAddresses.joined(separator: ", "))
+                LabeledContent("OS", value: device.operatingSystem ?? "—")
+                LabeledContent("Manufacturer", value: device.manufacturer ?? "—")
+                LabeledContent("Last seen", value: device.lastSeen ?? "—")
+            }
+            Section("Safe operations") {
+                ForEach([
+                    ("telemetry.collect", "Collect telemetry"),
+                    ("inventory.refresh", "Refresh inventory"),
+                    ("agent.health_check", "Agent health check"),
+                    ("network.route_snapshot", "Route snapshot"),
+                ], id: \.0) { type, label in
+                    Button(label) {
+                        Task {
+                            await model.queueOperation(
+                                deviceId: device.id,
+                                operationType: type
+                            )
+                        }
+                    }
+                }
+                TextField("DNS hostname", text: $dnsHost)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button("DNS lookup") {
+                    Task {
+                        await model.queueOperation(
+                            deviceId: device.id,
+                            operationType: "network.dns_lookup",
+                            hostname: dnsHost
+                        )
+                    }
+                }
+                .disabled(dnsHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Section("Operation history") {
+                ForEach(model.operationsByDevice[device.id] ?? []) { operation in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(operation.operationType).font(.headline)
+                        Text(operation.status + " · " + operation.createdAt)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let error = operation.error {
+                            Text(error).foregroundStyle(.red)
+                        }
+                        if !operation.result.isEmpty {
+                            Text(
+                                operation.result
+                                    .sorted(by: { $0.key < $1.key })
+                                    .map { $0.key + "=" + $0.value }
+                                    .joined(separator: ", ")
+                            )
+                            .font(.caption2)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(device.hostname ?? "Device")
+        .task { await model.loadOperations(deviceId: device.id) }
+        .refreshable { await model.loadOperations(deviceId: device.id) }
     }
 }
 
