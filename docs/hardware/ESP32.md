@@ -194,6 +194,7 @@ Secure Boot trust root.
 
 ## Release evidence
 
-A firmware build is not by itself physical acceptance. Before calling a hardware revision
-production-ready, execute and retain the checklist in
+A firmware build is not by itself physical acceptance. Before calling a hardware revision production-ready, execute and retain the checklist in
 `docs/hardware/ESP32_ACCEPTANCE.md` against named physical boards and firmware artifacts.
+The self-hosted acceptance workflow can independently require the BME280 profile and the
+Secure-Boot/flash-encryption profile so evidence never relies on a development configuration.
