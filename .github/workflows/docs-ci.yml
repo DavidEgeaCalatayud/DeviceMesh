@@ -40,3 +40,4 @@ jobs:
         with:
           name: generated-api-catalog
           path: /tmp/ENDPOINT_CATALOG.md
+          retention-days: 3
