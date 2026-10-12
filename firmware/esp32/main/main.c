@@ -7,6 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "identity.h"
+#include "network_probe.h"
 #include "nvs_flash.h"
 #include "sensors.h"
 #include "time_sync.h"
@@ -64,8 +65,9 @@ void app_main(void) {
 
         if (dm_cloud_enroll_if_needed(agent_id) == 0) {
             dm_telemetry_t telemetry = {.failed_delivery_cycles = failed_cycles};
-            if (dm_read_sensors(&telemetry) == 0 &&
-                dm_cloud_send_heartbeat(agent_id, &telemetry) == 0 &&
+            dm_read_sensors(&telemetry);
+            dm_network_probe_gateway(&telemetry);
+            if (dm_cloud_send_heartbeat(agent_id, &telemetry) == 0 &&
                 dm_cloud_send_telemetry(agent_id, &telemetry) == 0) {
                 failed_cycles = 0;
             } else if (failed_cycles < UINT32_MAX) {
