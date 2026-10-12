@@ -231,6 +231,8 @@ private fun DeviceDetail(
     queueOperation: (String, String, String?) -> Unit,
 ) {
     val device = state.devices.firstOrNull { it.id == deviceId } ?: return
+    val health = state.deviceHealth[deviceId]
+    val metrics = state.deviceMetrics[deviceId].orEmpty()
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     var dnsHost by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(deviceId) { loadOperations(deviceId) }
@@ -245,37 +247,82 @@ private fun DeviceDetail(
             Text("Last seen: " + (device.lastSeen ?: "—"))
         }
         item {
-            Text("Safe operations", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 20.dp))
-            Button(onClick = { menuOpen = true }) { Text("Queue operation") }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                listOf(
-                    "telemetry.collect" to "Collect telemetry",
-                    "inventory.refresh" to "Refresh inventory",
-                    "agent.health_check" to "Agent health check",
-                    "network.route_snapshot" to "Route snapshot",
-                ).forEach { (type, label) ->
-                    DropdownMenuItem(
-                        text = { Text(label) },
-                        onClick = {
-                            menuOpen = false
-                            queueOperation(deviceId, type, null)
-                        },
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = dnsHost,
-                onValueChange = { dnsHost = it },
-                label = { Text("DNS hostname") },
-                modifier = Modifier.fillMaxWidth(),
+            Text(
+                "Operational health",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 20.dp),
             )
-            Button(
-                enabled = dnsHost.isNotBlank(),
-                onClick = { queueOperation(deviceId, "network.dns_lookup", dnsHost.trim()) },
-            ) { Text("DNS lookup") }
+            if (health == null) {
+                Text("Loading…")
+            } else {
+                Text("State: " + (health.currentState ?: "unknown"))
+                health.availability24h?.let {
+                    Text("Availability 24h: " + String.format("%.3f%%", it))
+                }
+                health.currentOutageSeconds?.let {
+                    Text("Current outage: " + it.toLong() + " s")
+                }
+                if (health.maintenanceActive) Text("Maintenance active")
+            }
+        }
+        if (metrics.isNotEmpty()) {
+            item {
+                Text(
+                    "Latest metrics",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+            }
+            items(metrics.take(12), key = { it.name }) { metric ->
+                Text(
+                    metric.name + ": " + metric.value +
+                        (metric.unit?.let { " " + it } ?: ""),
+                    modifier = Modifier.padding(vertical = 3.dp),
+                )
+            }
+        }
+        if (state.session?.user?.role != "viewer") {
+            item {
+                Text(
+                    "Safe operations",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+                Button(onClick = { menuOpen = true }) { Text("Queue operation") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    listOf(
+                        "telemetry.collect" to "Collect telemetry",
+                        "inventory.refresh" to "Refresh inventory",
+                        "agent.health_check" to "Agent health check",
+                        "network.route_snapshot" to "Route snapshot",
+                    ).forEach { (type, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                menuOpen = false
+                                queueOperation(deviceId, type, null)
+                            },
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = dnsHost,
+                    onValueChange = { dnsHost = it },
+                    label = { Text("DNS hostname") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    enabled = dnsHost.isNotBlank(),
+                    onClick = { queueOperation(deviceId, "network.dns_lookup", dnsHost.trim()) },
+                ) { Text("DNS lookup") }
+            }
         }
         item {
-            Text("Operation history", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 20.dp))
+            Text(
+                "Operation history",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 20.dp),
+            )
         }
         items(state.operationsByDevice[deviceId].orEmpty(), key = { it.id }) { operation ->
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
