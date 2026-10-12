@@ -133,7 +133,10 @@ private struct DeviceListView: View {
 private struct DeviceDetailView: View {
     @EnvironmentObject private var model: AppModel
     let device: Device
+    @State private var health: DeviceHealth?
+    @State private var metrics: [MetricSample] = []
     @State private var dnsHost = ""
+    @State private var loading = true
 
     var body: some View {
         List {
@@ -144,35 +147,70 @@ private struct DeviceDetailView: View {
                 LabeledContent("Manufacturer", value: device.manufacturer ?? "—")
                 LabeledContent("Last seen", value: device.lastSeen ?? "—")
             }
-            Section("Safe operations") {
-                ForEach([
-                    ("telemetry.collect", "Collect telemetry"),
-                    ("inventory.refresh", "Refresh inventory"),
-                    ("agent.health_check", "Agent health check"),
-                    ("network.route_snapshot", "Route snapshot"),
-                ], id: \.0) { type, label in
-                    Button(label) {
-                        Task {
-                            await model.queueOperation(
-                                deviceId: device.id,
-                                operationType: type
-                            )
-                        }
+            Section("Operational health") {
+                if let health {
+                    LabeledContent("State", value: health.currentState ?? "unknown")
+                    if let availability = health.availability24h {
+                        LabeledContent(
+                            "Availability 24h",
+                            value: String(format: "%.3f%%", availability)
+                        )
                     }
+                    if let outage = health.currentOutageSeconds {
+                        LabeledContent("Current outage", value: String(Int(outage)) + " s")
+                    }
+                    if health.maintenanceActive {
+                        Label("Maintenance active", systemImage: "wrench.and.screwdriver")
+                    }
+                } else if loading {
+                    ProgressView()
+                } else {
+                    Text("Health data unavailable")
                 }
-                TextField("DNS hostname", text: $dnsHost)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Button("DNS lookup") {
-                    Task {
-                        await model.queueOperation(
-                            deviceId: device.id,
-                            operationType: "network.dns_lookup",
-                            hostname: dnsHost
+            }
+            if !metrics.isEmpty {
+                Section("Latest metrics") {
+                    ForEach(metrics.prefix(12)) { metric in
+                        LabeledContent(
+                            metric.name,
+                            value: String(metric.value) + (metric.unit.map { " " + $0 } ?? "")
                         )
                     }
                 }
-                .disabled(dnsHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if model.session?.user.role != "viewer" {
+                Section("Safe operations") {
+                    ForEach([
+                        ("telemetry.collect", "Collect telemetry"),
+                        ("inventory.refresh", "Refresh inventory"),
+                        ("agent.health_check", "Agent health check"),
+                        ("network.route_snapshot", "Route snapshot"),
+                    ], id: \.0) { type, label in
+                        Button(label) {
+                            Task {
+                                await model.queueOperation(
+                                    deviceId: device.id,
+                                    operationType: type
+                                )
+                            }
+                        }
+                    }
+                    TextField("DNS hostname", text: $dnsHost)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("DNS lookup") {
+                        Task {
+                            await model.queueOperation(
+                                deviceId: device.id,
+                                operationType: "network.dns_lookup",
+                                hostname: dnsHost
+                            )
+                        }
+                    }
+                    .disabled(
+                        dnsHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                }
             }
             Section("Operation history") {
                 ForEach(model.operationsByDevice[device.id] ?? []) { operation in
@@ -198,8 +236,22 @@ private struct DeviceDetailView: View {
             }
         }
         .navigationTitle(device.hostname ?? "Device")
-        .task { await model.loadOperations(deviceId: device.id) }
-        .refreshable { await model.loadOperations(deviceId: device.id) }
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            async let detail = model.deviceDetail(device.id)
+            async let _: Void = model.loadOperations(deviceId: device.id)
+            let resolved = try await detail
+            health = resolved.0
+            metrics = resolved.1
+        } catch {
+            model.error = error.localizedDescription
+        }
     }
 }
 
