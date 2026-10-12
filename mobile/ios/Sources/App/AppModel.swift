@@ -15,6 +15,9 @@ final class AppModel: ObservableObject {
     private var api: DeviceMeshAPI
 
     init() {
+        if ProcessInfo.processInfo.arguments.contains("-DeviceMeshUITestReset") {
+            store.clear()
+        }
         let restored = store.load()
         self.session = restored
         self.api = try! DeviceMeshAPI(baseURL: store.server, accessToken: restored?.accessToken)
