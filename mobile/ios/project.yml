@@ -13,3 +13,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES
+  DeviceMeshTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests
+        excludes:
+          - "**/*.md"
+    dependencies:
+      - target: DeviceMesh
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh.tests
+        SWIFT_VERSION: 5.10
+        GENERATE_INFOPLIST_FILE: YES
