@@ -30,13 +30,17 @@ def main() -> None:
     directory = Path(args.directory)
     capacity_files = sorted(directory.glob("capacity-*.json"))
     load_files = sorted(directory.glob("load-*.json"))
+    runtime_files = sorted(directory.glob("runtime-*.json"))
     if len(capacity_files) < 2:
         parser.error("at least two capacity snapshots are required")
     if not load_files:
         parser.error("at least one load report is required")
+    if not runtime_files:
+        parser.error("at least one runtime snapshot is required")
 
     capacity = [_read(path) for path in capacity_files]
     loads = [_read(path) for path in load_files]
+    runtime = [_read(path) for path in runtime_files]
     first = capacity[0]
     last = capacity[-1]
     start = datetime.fromisoformat(str(first["generatedAt"]))
@@ -156,6 +160,41 @@ def main() -> None:
         for report in loads
     ]
 
+    def nested_number(report: dict[str, object], section: str, key: str) -> float:
+        block = report.get(section, {})
+        if not isinstance(block, dict):
+            return 0.0
+        value = block.get(key, 0.0)
+        return float(value or 0.0)
+
+    redis_used = [nested_number(row, "redis", "usedMemoryBytes") for row in runtime]
+    redis_evicted = [nested_number(row, "redis", "evictedKeys") for row in runtime]
+    api_rss = [
+        nested_number(row, "api", "process_resident_memory_bytes")
+        for row in runtime
+    ]
+    worker_rss = [
+        nested_number(row, "worker", "process_resident_memory_bytes")
+        for row in runtime
+    ]
+    worker_leaders = [
+        nested_number(row, "worker", "devicemesh_worker_leader")
+        for row in runtime
+    ]
+    websocket_rates = [
+        nested_number(row, "websocketReconnect", "successRate")
+        for row in runtime
+    ]
+    websocket_failures = sum(
+        len(
+            block.get("failures", [])
+            if isinstance((block := row.get("websocketReconnect", {})), dict)
+            and isinstance(block.get("failures", []), list)
+            else []
+        )
+        for row in runtime
+    )
+
     warnings: list[str] = []
     if max_connection_utilization >= 0.8:
         warnings.append("PostgreSQL connection utilization reached or exceeded 80%")
@@ -165,6 +204,24 @@ def main() -> None:
         warnings.append("One or more tables ended with at least 20% dead tuples")
     if partition_candidates:
         warnings.append("High-volume append tables reached the partition-review row threshold")
+    if worker_leaders and any(value < 1.0 for value in worker_leaders):
+        warnings.append("Worker leadership was absent in one or more runtime snapshots")
+    if websocket_rates and min(websocket_rates) < 1.0:
+        warnings.append("One or more authenticated WebSocket reconnect probes failed")
+    if redis_evicted and redis_evicted[-1] > redis_evicted[0]:
+        warnings.append("Redis evicted keys during the soak window")
+    if (
+        len(api_rss) >= 2
+        and api_rss[-1] - api_rss[0] > 100 * 1024 * 1024
+        and api_rss[-1] > api_rss[0] * 1.5
+    ):
+        warnings.append("API resident memory grew by more than 100 MiB and 50%")
+    if (
+        len(worker_rss) >= 2
+        and worker_rss[-1] - worker_rss[0] > 100 * 1024 * 1024
+        and worker_rss[-1] > worker_rss[0] * 1.5
+    ):
+        warnings.append("Worker resident memory grew by more than 100 MiB and 50%")
 
     result = {
         "generatedAt": datetime.now().astimezone().isoformat(),
@@ -174,6 +231,7 @@ def main() -> None:
             "hours": duration_hours,
             "capacitySnapshots": len(capacity),
             "loadChunks": len(loads),
+            "runtimeSnapshots": len(runtime),
         },
         "database": {
             "bytesBefore": database_before,
@@ -187,6 +245,21 @@ def main() -> None:
             "maximumFailureRate": max(failure_rates, default=0.0),
             "maximumP95Ms": max(p95_values, default=0.0),
             "maximumP99Ms": max(p99_values, default=0.0),
+        },
+        "runtime": {
+            "apiResidentMemoryBytesFirst": api_rss[0] if api_rss else 0.0,
+            "apiResidentMemoryBytesLast": api_rss[-1] if api_rss else 0.0,
+            "apiResidentMemoryBytesMax": max(api_rss, default=0.0),
+            "workerResidentMemoryBytesFirst": worker_rss[0] if worker_rss else 0.0,
+            "workerResidentMemoryBytesLast": worker_rss[-1] if worker_rss else 0.0,
+            "workerResidentMemoryBytesMax": max(worker_rss, default=0.0),
+            "workerLeaderMinimum": min(worker_leaders, default=0.0),
+            "redisUsedMemoryBytesMax": max(redis_used, default=0.0),
+            "redisEvictedKeysDelta": (
+                redis_evicted[-1] - redis_evicted[0] if len(redis_evicted) >= 2 else 0.0
+            ),
+            "websocketReconnectMinimumSuccessRate": min(websocket_rates, default=0.0),
+            "websocketReconnectFailures": websocket_failures,
         },
         "partitionReview": {
             "rowThreshold": args.partition_review_rows,
