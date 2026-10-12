@@ -109,7 +109,7 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
             }
             when (tab) {
                 Tab.DASHBOARD -> Dashboard(state)
-                Tab.DEVICES -> Devices(state)
+                Tab.DEVICES -> Devices(state, model)
                 Tab.INCIDENTS -> Incidents(state)
                 Tab.ALERTS -> Alerts(state)
                 Tab.SYNTHETICS -> Synthetics(state)
@@ -198,16 +198,93 @@ private fun Metric(label: String, value: String) {
 }
 
 @Composable
-private fun Devices(state: MobileState) = LazyColumn(Modifier.padding(16.dp)) {
-    item { Text("Devices", style = MaterialTheme.typography.headlineSmall) }
-    items(state.devices, key = { it.id }) { device ->
-        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-            Text(device.hostname ?: device.id, style = MaterialTheme.typography.titleMedium)
-            val ipText = device.ipAddresses.joinToString().ifBlank { "No IP" }
-            Text(device.status.name.lowercase() + " · " + ipText)
-            device.operatingSystem?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+private fun Devices(state: MobileState, model: DeviceMeshViewModel) {
+    var selectedDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
+    LazyColumn(Modifier.padding(16.dp)) {
+        item { Text("Devices", style = MaterialTheme.typography.headlineSmall) }
+        items(state.devices, key = { it.id }) { device ->
+            val selected = selectedDeviceId == device.id
+            Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                TextButton(
+                    onClick = {
+                        selectedDeviceId = if (selected) null else device.id
+                        if (!selected) model.loadDeviceDetails(device.id)
+                    },
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text(
+                            device.hostname ?: device.id,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        val ipText = device.ipAddresses.joinToString().ifBlank { "No IP" }
+                        Text(device.status.name.lowercase() + " · " + ipText)
+                        device.operatingSystem?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                if (selected) {
+                    val health = state.deviceHealth[device.id]
+                    val metrics = state.deviceMetrics[device.id].orEmpty()
+                    HorizontalDivider()
+                    Text("Operational health", style = MaterialTheme.typography.titleSmall)
+                    if (health == null) {
+                        Text("Loading…")
+                    } else {
+                        Text("State: " + (health.currentState ?: "unknown"))
+                        health.availability24h?.let {
+                            Text("Availability 24h: " + String.format("%.3f%%", it))
+                        }
+                        health.currentOutageSeconds?.let {
+                            Text("Current outage: " + it.toLong() + " s")
+                        }
+                        if (health.maintenanceActive) Text("Maintenance active")
+                    }
+                    if (metrics.isNotEmpty()) {
+                        Text(
+                            "Latest metrics",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        metrics.take(8).forEach { metric ->
+                            Text(
+                                metric.name + ": " + metric.value +
+                                    (metric.unit?.let { " " + it } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    if (state.session?.user?.role != "viewer") {
+                        Text(
+                            "Safe operations",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        Row {
+                            TextButton(
+                                onClick = {
+                                    model.queueDeviceOperation(device.id, "telemetry.collect")
+                                },
+                            ) { Text("Collect") }
+                            TextButton(
+                                onClick = {
+                                    model.queueDeviceOperation(device.id, "inventory.refresh")
+                                },
+                            ) { Text("Inventory") }
+                            TextButton(
+                                onClick = {
+                                    model.queueDeviceOperation(device.id, "agent.health_check")
+                                },
+                            ) { Text("Health") }
+                        }
+                        state.operationMessage?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+            HorizontalDivider()
         }
-        HorizontalDivider()
     }
 }
 
