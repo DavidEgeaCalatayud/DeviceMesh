@@ -1,6 +1,9 @@
 package io.github.davidegeacalatayud.devicemesh
 
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -24,15 +27,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.davidegeacalatayud.devicemesh.core.designsystem.DeviceMeshTheme
 import io.github.davidegeacalatayud.devicemesh.core.model.DeviceStatus
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,6 +59,7 @@ private enum class Tab(val label: String) {
     INCIDENTS("Incidents"),
     ALERTS("Alerts"),
     SYNTHETICS("Synthetics"),
+    PROVISION("Provision"),
 }
 
 @Composable
@@ -105,6 +114,7 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
                 Tab.INCIDENTS -> Incidents(state)
                 Tab.ALERTS -> Alerts(state)
                 Tab.SYNTHETICS -> Synthetics(state)
+                Tab.PROVISION -> ProvisionHardware(state, model)
             }
         }
     }
@@ -252,5 +262,136 @@ private fun Synthetics(state: MobileState) = LazyColumn(Modifier.padding(16.dp))
             probe.name + " · " + probe.location + " · " + if (probe.online) "online" else "offline",
             modifier = Modifier.padding(vertical = 8.dp),
         )
+    }
+}
+
+
+@Composable
+private fun ProvisionHardware(state: MobileState, model: DeviceMeshViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val provisioner = remember { DeviceMeshBleProvisioner(context) }
+    val devices = remember { mutableStateListOf<ProvisioningDevice>() }
+    var selectedAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    var proof by rememberSaveable { mutableStateOf("") }
+    var ssid by rememberSaveable { mutableStateOf("") }
+    var wifiPassword by rememberSaveable { mutableStateOf("") }
+    var status by rememberSaveable { mutableStateOf("") }
+    var working by rememberSaveable { mutableStateOf(false) }
+
+    fun startScan() {
+        devices.clear()
+        selectedAddress = null
+        status = "Scanning for DeviceMesh hardware…"
+        provisioner.scan(
+            onDevice = { found ->
+                if (devices.none { it.address == found.address }) devices.add(found)
+            },
+            onComplete = { status = if (devices.isEmpty()) "No DM-* devices found" else "Select a device" },
+            onFailure = { status = it.message ?: "Bluetooth scan failed" },
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants.values.all { it }) startScan()
+        else status = "Bluetooth permission is required for provisioning"
+    }
+
+    LazyColumn(Modifier.padding(16.dp)) {
+        item {
+            Text("Provision DeviceMesh hardware", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Creates a one-use 15 minute enrollment token and sends it with the HTTPS server " +
+                    "inside the encrypted ESP-IDF BLE provisioning session.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
+        if (state.session?.user?.role != "administrator") {
+            item {
+                Text(
+                    "Administrator role is required.",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            return@LazyColumn
+        }
+        item {
+            Button(
+                enabled = !working,
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        permissionLauncher.launch(DeviceMeshBleProvisioner.runtimePermissions)
+                    } else {
+                        startScan()
+                    }
+                },
+            ) { Text("Scan BLE") }
+        }
+        items(devices, key = { it.address }) { device ->
+            TextButton(onClick = { selectedAddress = device.address }) {
+                Text((if (selectedAddress == device.address) "✓ " else "") + device.name)
+            }
+        }
+        item {
+            OutlinedTextField(
+                value = proof,
+                onValueChange = { proof = it },
+                label = { Text("Proof of possession") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = ssid,
+                onValueChange = { ssid = it },
+                label = { Text("Wi-Fi SSID") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = wifiPassword,
+                onValueChange = { wifiPassword = it },
+                label = { Text("Wi-Fi password") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                enabled = !working &&
+                    selectedAddress != null &&
+                    proof.isNotBlank() &&
+                    ssid.isNotBlank(),
+                onClick = {
+                    val selected = devices.firstOrNull { it.address == selectedAddress }
+                        ?: return@Button
+                    scope.launch {
+                        working = true
+                        status = "Creating enrollment token…"
+                        try {
+                            val token = model.createHardwareEnrollmentToken()
+                            status = "Provisioning secure BLE session…"
+                            provisioner.provision(
+                                device = selected,
+                                proofOfPossession = proof.trim(),
+                                serverUrl = state.server,
+                                enrollmentToken = token,
+                                ssid = ssid,
+                                passphrase = wifiPassword,
+                            )
+                            status = "Provisioning complete. Device will enroll automatically."
+                            wifiPassword = ""
+                        } catch (error: Exception) {
+                            status = error.message ?: "Provisioning failed"
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                modifier = Modifier.padding(top = 12.dp),
+            ) { Text(if (working) "Provisioning…" else "Provision") }
+            if (status.isNotBlank()) {
+                Text(status, modifier = Modifier.padding(top = 12.dp))
+            }
+        }
     }
 }
