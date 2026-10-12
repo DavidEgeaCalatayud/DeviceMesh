@@ -9,6 +9,7 @@ Operator-managed channels support:
 - `webhook`: POST the canonical alert transition payload as JSON.
 - `slack`: POST a compact text message to a Slack incoming-webhook URL.
 - `email`: send the canonical payload through SMTP.
+- `push`: deliver native mobile notifications through FCM HTTP v1 and APNs HTTP/2.
 
 Channel records persist only a `secretRef`; endpoint credentials are not stored in PostgreSQL.
 
@@ -35,6 +36,39 @@ For email, the secret value is a JSON object such as:
 ```
 
 Recipients are non-secret channel configuration (`config.to`). In production, SMTP must use `starttls` or `ssl`.
+
+For `push`, the secret is a JSON object containing one or both provider credentials. Device
+registration tokens are never placed in this secret: mobile clients register them through the
+authenticated `/api/v1/mobile/push-subscriptions` endpoint, and PostgreSQL stores those tokens
+with AES-256-GCM encryption plus a SHA-256 dedupe digest.
+
+A complete dual-provider secret looks like:
+
+```json
+{
+  "fcm": {
+    "projectId": "firebase-project-id",
+    "clientEmail": "firebase-adminsdk@example.iam.gserviceaccount.com",
+    "privateKey": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n",
+    "tokenUri": "https://oauth2.googleapis.com/token"
+  },
+  "apns": {
+    "teamId": "APPLE_TEAM_ID",
+    "keyId": "APNS_KEY_ID",
+    "bundleId": "io.github.davidegeacalatayud.devicemesh",
+    "privateKey": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
+  }
+}
+```
+
+The FCM credential is exchanged for a short-lived OAuth access token at Google's fixed HTTPS
+OAuth host. APNs provider tokens are signed ES256 locally and sent only to Apple's production or
+sandbox push hosts. Invalid/unregistered device tokens are disabled; transient provider failures
+remain in the normal DeviceMesh retry/dead-letter lifecycle.
+
+Push channel configuration may contain `userIds`, `roles`, or both. Both filters are
+intersected. With neither configured, push defaults to active `operator` and
+`administrator` users rather than broadcasting to viewers.
 
 ## Routes
 
@@ -70,3 +104,20 @@ The authenticated operator surface provides:
 - `POST /api/v1/operator/notification-deliveries/{id}/retry`
 
 Human mutation audit middleware records channel/route creation, state changes and retry requests like other authenticated operator mutations.
+
+
+## Mobile subscription lifecycle
+
+Android uses Firebase Cloud Messaging. A production build supplies `app/google-services.json`;
+CI deliberately does not require that secret configuration. The FCM token is cached under the
+Android Keystore-backed encrypted store, registered after login/refresh, updated on
+`onNewToken`, and unregistered from DeviceMesh on logout.
+
+iOS uses APNs directly. The token is stored in Keychain with ThisDeviceOnly accessibility and is
+registered against DeviceMesh after login/session restoration. Debug builds register the
+subscription as `sandbox`; Release builds register it as `production`. The app declares the
+`aps-environment` entitlement and unregisters the DeviceMesh installation on logout.
+
+`DEVICEMESH_MOBILE_PUSH_ENCRYPTION_SECRET` (or its `_FILE` form) protects provider tokens at
+rest. Production startup rejects the development placeholder and requires at least 32
+characters.
