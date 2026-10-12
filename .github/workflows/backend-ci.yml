@@ -50,6 +50,7 @@ jobs:
         with:
           name: backend-ruff-report
           path: ruff-report.json
+          retention-days: 3
       - id: mypy
         working-directory: backend
         run: |
@@ -63,5 +64,6 @@ jobs:
         with:
           name: backend-mypy-report
           path: mypy-report.txt
+          retention-days: 3
       - working-directory: backend
         run: pytest --cov=app --cov-report=term-missing
