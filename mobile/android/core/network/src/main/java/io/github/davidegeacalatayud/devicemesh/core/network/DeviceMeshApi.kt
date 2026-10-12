@@ -28,6 +28,7 @@ interface DeviceMeshApi {
     suspend fun alerts(): List<Alert>
     suspend fun syntheticMonitors(): List<SyntheticMonitor>
     suspend fun syntheticProbes(): List<SyntheticProbe>
+    suspend fun createAgentEnrollmentToken(ttlSeconds: Int = 900): String
 }
 
 fun validateBaseUrl(raw: String): String {
@@ -174,6 +175,16 @@ class HttpDeviceMeshApi(
             }
         }
     }
+
+    override suspend fun createAgentEnrollmentToken(ttlSeconds: Int): String =
+        withContext(Dispatchers.IO) {
+            require(ttlSeconds in 60..3600)
+            requestJson(
+                "POST",
+                "/api/v1/operator/agent-enrollment-tokens",
+                JSONObject().put("ttlSeconds", ttlSeconds),
+            ).getString("token")
+        }
 
     private fun parseSession(body: JSONObject): SessionTokens {
         val user = body.getJSONObject("user")
