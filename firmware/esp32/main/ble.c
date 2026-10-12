@@ -6,12 +6,43 @@
 
 #include "cJSON.h"
 #include "credentials.h"
+#include "esp_event.h"
 #include "esp_log.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "wifi_provisioning/manager.h"
 #include "wifi_provisioning/scheme_ble.h"
 
 static const char *TAG = "dm_provisioning";
 static const char *CONFIG_ENDPOINT = "devicemesh-config";
+
+static void restart_after_provisioning(void *arg) {
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(750));
+    esp_restart();
+}
+
+static void provisioning_event_handler(
+    void *arg,
+    esp_event_base_t event_base,
+    int32_t event_id,
+    void *event_data
+) {
+    (void)arg;
+    (void)event_data;
+    if (event_base == WIFI_PROV_EVENT && event_id == WIFI_PROV_END) {
+        ESP_LOGI(TAG, "Provisioning complete; restarting into normal agent mode");
+        xTaskCreate(
+            restart_after_provisioning,
+            "dm_prov_restart",
+            2048,
+            NULL,
+            tskIDLE_PRIORITY + 1,
+            NULL
+        );
+    }
+}
 
 static esp_err_t config_endpoint_handler(
     uint32_t session_id,
@@ -102,6 +133,17 @@ int dm_ble_init(const char *device_id) {
     ESP_LOGI(TAG, "Provisioning proof-of-possession: %s", pop);
 
     if (wifi_prov_mgr_endpoint_create(CONFIG_ENDPOINT) != ESP_OK) {
+        wifi_prov_mgr_deinit();
+        return -1;
+    }
+    if (
+        esp_event_handler_register(
+            WIFI_PROV_EVENT,
+            WIFI_PROV_END,
+            provisioning_event_handler,
+            NULL
+        ) != ESP_OK
+    ) {
         wifi_prov_mgr_deinit();
         return -1;
     }
