@@ -6,6 +6,7 @@
 
 #include "cJSON.h"
 #include "credentials.h"
+#include "esp_app_desc.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
@@ -165,6 +166,11 @@ int dm_cloud_send_heartbeat(const char *agent_id, const dm_telemetry_t *telemetr
     cJSON *device = cJSON_AddObjectToObject(root, "device");
     cJSON_AddStringToObject(device, "hostname", agent_id);
     cJSON_AddStringToObject(device, "operatingSystem", "esp-idf");
+    cJSON_AddStringToObject(
+        device,
+        "operatingSystemVersion",
+        esp_app_get_description()->version
+    );
     cJSON_AddStringToObject(device, "architecture", "xtensa");
     cJSON_AddStringToObject(device, "manufacturer", "Espressif");
     cJSON_AddArrayToObject(device, "ipAddresses");
