@@ -1,45 +1,47 @@
 # DeviceMesh Roadmap
 
-## Delivered core
-- FastAPI API and PostgreSQL persistence
-- LAN discovery and stable device identity model
-- Windows and Linux agent enrollment, heartbeat, host telemetry and controlled operations
-- Web dashboard, realtime state and event timeline
-- metric history, network diagnostics, threshold alerts and maintenance windows
-- service inventory and observed topology
-- agent SLA/outage history and telemetry retention rollups
-- synthetic HTTP/TCP monitoring with service SLA
-- distributed probes, multi-vantage consensus and service incidents/MTTR
-- Docker Compose deployment and multi-platform CI/security gates
+The authoritative implementation ledger is
+[`docs/product/IMPLEMENTATION_57_POINTS.md`](docs/product/IMPLEMENTATION_57_POINTS.md).
+This page is the compact product view.
 
-## Current — host platform expansion
-- native Swift macOS host agent
-- Keychain-backed credential persistence
-- launchd operation
-- parity for portable CPU/RAM/disk/network/uptime telemetry
+## Delivered software
 
-## Next — production hardening
-- clean-host end-to-end acceptance
-- exercised backup/restore and disaster-recovery runbook
-- 10/100/1,000-device performance baseline
-- production installation bundles and signed agent artifacts
-- users, sessions, RBAC and global audit
-- Prometheus metrics, structured logs and Grafana dashboards
+- production FastAPI/PostgreSQL/Redis platform, migrations, backup/restore and HTTPS deployment;
+- service catalogue, dependencies, incidents, SLO/error budgets, notification routing, audit and
+  explainable root-cause analysis;
+- Windows, Linux and macOS agents with authenticated telemetry and allowlisted operations;
+- distributed synthetic probes, quorum consensus and HTTP/TCP/DNS/TLS/ICMP monitoring;
+- SNMPv3 NMS polling, persistent interface counters/inventory, routes, ARP, VLAN, LLDP/CDP
+  physical topology and persistent correlated Syslog;
+- native Android and iOS operator clients with secure sessions, push lifecycle, signed-release
+  pipelines and ESP32 BLE provisioning;
+- ESP32 enrolled agent/probe software with secure provisioning, telemetry, optional BME280,
+  gateway probing, offline buffering, OTA/rollback, recovery and HIL tooling;
+- retention/capacity tooling, Prometheus/Grafana, structured logs, HA/failure/performance
+  acceptance and supply-chain provenance;
+- repository hygiene automation, compatibility policies and machine-readable ecosystem
+  readiness.
 
-## V2 — Mobile and operations
-- Android dashboard, incidents and alert client
-- push notifications and offline cache
-- advanced operations
-- richer network topology and diagnostics
+## External acceptance still required
 
-## V3 — Edge / NMS
-- ESP32 probe, BLE provisioning and sensor telemetry
-- SNMP, interfaces and LLDP-derived topology
+These are execution/evidence gates, not missing software features:
 
-## V4 — iOS
-- full SwiftUI client, APNs and BLE provisioning
+1. retain capacity reports for the intended 10/100/1000-agent operating profiles;
+2. execute and retain a sustained 24-hour soak (and 48-hour profile if that claim is required);
+3. install signed mobile builds on supported physical devices, verify FCM/APNs foreground and
+   background delivery, and retain Play internal/TestFlight distribution evidence;
+4. validate Android and iOS BLE provisioning end-to-end against the reference ESP32;
+5. execute the ESP32 HIL matrix including BME280 disconnect/recovery, offline queue, OTA/rollback,
+   Secure Boot/flash encryption and the declared hardware soak.
 
-## V5 — Intelligence
-- SLO/error budgets and richer incident management
-- baselines, anomaly detection and correlation/RCA
-- OpenTelemetry and production-scale observability
+Use `GET /api/v1/system/ecosystem` or the **Ecosystem** web page to keep software readiness
+separate from these external gates.
+
+## Explicitly deferred
+
+- OpenTelemetry tracing (#37);
+- Kubernetes/Helm until deployment scale justifies it (#41);
+- desktop-agent auto-update until release-channel policy requires it (#52);
+- statistical/ML anomaly detection until retained scale/soak evidence is available (#57).
+
+No deferred item is required to claim the current local-first V1 software implementation complete.
