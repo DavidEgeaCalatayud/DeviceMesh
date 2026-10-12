@@ -33,6 +33,14 @@ jobs:
           major="$(xcodebuild -version | awk '/Xcode/{split($2,v,"."); print v[1]}')"
           test "$major" -ge 26
       - run: brew install xcodegen
+      - name: Resolve release version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/ios-v* ]]; then
+            echo "IOS_MARKETING_VERSION=${GITHUB_REF_NAME#ios-v}" >> "$GITHUB_ENV"
+          else
+            echo "IOS_MARKETING_VERSION=0.1.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          fi
+          echo "IOS_BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Require signing material
         run: |
           test -n "$IOS_CERTIFICATE_P12_BASE64"
@@ -89,6 +97,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
+            MARKETING_VERSION="$IOS_MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
             archive
       - name: Export signed IPA
         run: |
