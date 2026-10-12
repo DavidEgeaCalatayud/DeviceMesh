@@ -24,7 +24,8 @@ static esp_err_t http_json(
     const char *agent_id,
     const char *credential,
     char *response,
-    size_t response_capacity
+    size_t response_capacity,
+    int *status_out
 ) {
     esp_http_client_config_t config = {
         .url = url,
@@ -68,6 +69,7 @@ static esp_err_t http_json(
 
     esp_err_t err = esp_http_client_perform(client);
     int status = err == ESP_OK ? esp_http_client_get_status_code(client) : 0;
+    if (status_out) *status_out = status;
     if (err == ESP_OK && response && response_capacity > 1) {
         int read = esp_http_client_read_response(client, response, response_capacity - 1);
         if (read >= 0) response[read] = '\0';
@@ -109,7 +111,7 @@ int dm_cloud_enroll_if_needed(const char *agent_id) {
     if (!body) return -1;
 
     char response[768] = {0};
-    esp_err_t err = http_json(url, body, NULL, NULL, response, sizeof(response));
+    esp_err_t err = http_json(url, body, NULL, NULL, response, sizeof(response), NULL);
     cJSON_free(body);
     if (err != ESP_OK) return -1;
 
@@ -175,7 +177,7 @@ int dm_cloud_send_heartbeat(const char *agent_id, const dm_telemetry_t *telemetr
     char url[320];
     int result = -1;
     if (build_url(url, sizeof(url), server, "/api/v1/agents/heartbeat") == 0 &&
-        http_json(url, body, agent_id, credential, NULL, 0) == ESP_OK) {
+        http_json(url, body, agent_id, credential, NULL, 0, NULL) == ESP_OK) {
         result = 0;
     }
     cJSON_free(body);
@@ -286,4 +288,160 @@ int dm_cloud_send_telemetry(const char *agent_id, const dm_telemetry_t *telemetr
     }
     cJSON_free(body);
     return result;
+}
+
+
+int dm_cloud_claim_operation(const char *agent_id, dm_remote_operation_t *operation) {
+    if (!agent_id || !operation) return -1;
+    memset(operation, 0, sizeof(*operation));
+
+    char server[256];
+    char credential_id[64];
+    char credential[256];
+    if (
+        dm_credentials_get_server(server, sizeof(server)) != 0 ||
+        dm_credentials_get_agent_credential(
+            credential_id,
+            sizeof(credential_id),
+            credential,
+            sizeof(credential)
+        ) != 0
+    ) {
+        return -1;
+    }
+
+    char url[320];
+    if (build_url(url, sizeof(url), server, "/api/v1/agents/operations/claim") != 0) {
+        return -1;
+    }
+
+    char response[3072] = {0};
+    int status = 0;
+    esp_err_t err = http_json(
+        url,
+        NULL,
+        agent_id,
+        credential,
+        response,
+        sizeof(response),
+        &status
+    );
+    if (err != ESP_OK) return -1;
+    if (status == 204) return 1;
+
+    cJSON *payload = cJSON_Parse(response);
+    if (!payload) return -1;
+    cJSON *id = cJSON_GetObjectItemCaseSensitive(payload, "id");
+    cJSON *operation_type = cJSON_GetObjectItemCaseSensitive(payload, "operationType");
+    cJSON *arguments = cJSON_GetObjectItemCaseSensitive(payload, "arguments");
+    int result = -1;
+
+    if (
+        cJSON_IsString(id) &&
+        cJSON_IsString(operation_type) &&
+        id->valuestring &&
+        operation_type->valuestring &&
+        strlen(id->valuestring) < sizeof(operation->id) &&
+        strlen(operation_type->valuestring) < sizeof(operation->operation_type)
+    ) {
+        strcpy(operation->id, id->valuestring);
+        strcpy(operation->operation_type, operation_type->valuestring);
+        result = 0;
+
+        if (strcmp(operation->operation_type, "firmware.update") == 0) {
+            cJSON *url_value = cJSON_GetObjectItemCaseSensitive(arguments, "url");
+            cJSON *sha_value = cJSON_GetObjectItemCaseSensitive(arguments, "sha256");
+            cJSON *version_value = cJSON_GetObjectItemCaseSensitive(arguments, "version");
+            if (
+                !cJSON_IsString(url_value) ||
+                !cJSON_IsString(sha_value) ||
+                !cJSON_IsString(version_value) ||
+                !url_value->valuestring ||
+                !sha_value->valuestring ||
+                !version_value->valuestring ||
+                strncmp(url_value->valuestring, "https://", 8) != 0 ||
+                strlen(url_value->valuestring) >= sizeof(operation->firmware_url) ||
+                strlen(sha_value->valuestring) != 64 ||
+                strlen(version_value->valuestring) >= sizeof(operation->firmware_version)
+            ) {
+                result = -1;
+            } else {
+                strcpy(operation->firmware_url, url_value->valuestring);
+                strcpy(operation->firmware_sha256, sha_value->valuestring);
+                strcpy(operation->firmware_version, version_value->valuestring);
+            }
+        }
+    }
+
+    cJSON_Delete(payload);
+    return result;
+}
+
+int dm_cloud_complete_operation(
+    const char *agent_id,
+    const char *operation_id,
+    int succeeded,
+    const char *result_json,
+    const char *error
+) {
+    if (!agent_id || !operation_id || strlen(operation_id) != 36) return -1;
+
+    char server[256];
+    char credential_id[64];
+    char credential[256];
+    if (
+        dm_credentials_get_server(server, sizeof(server)) != 0 ||
+        dm_credentials_get_agent_credential(
+            credential_id,
+            sizeof(credential_id),
+            credential,
+            sizeof(credential)
+        ) != 0
+    ) {
+        return -1;
+    }
+
+    char path[128];
+    int path_length = snprintf(
+        path,
+        sizeof(path),
+        "/api/v1/agents/operations/%s/complete",
+        operation_id
+    );
+    if (path_length <= 0 || (size_t)path_length >= sizeof(path)) return -1;
+
+    char url[384];
+    if (build_url(url, sizeof(url), server, path) != 0) return -1;
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return -1;
+    cJSON_AddStringToObject(root, "status", succeeded ? "succeeded" : "failed");
+
+    cJSON *result = NULL;
+    if (result_json && result_json[0]) {
+        result = cJSON_Parse(result_json);
+    }
+    if (!result || !cJSON_IsObject(result)) {
+        cJSON_Delete(result);
+        result = cJSON_CreateObject();
+    }
+    cJSON_AddItemToObject(root, "result", result);
+    if (!succeeded && error && error[0]) {
+        cJSON_AddStringToObject(root, "error", error);
+    }
+
+    char *body = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!body) return -1;
+    esp_err_t err = http_json(
+        url,
+        body,
+        agent_id,
+        credential,
+        NULL,
+        0,
+        NULL
+    );
+    cJSON_free(body);
+    return err == ESP_OK ? 0 : -1;
 }
