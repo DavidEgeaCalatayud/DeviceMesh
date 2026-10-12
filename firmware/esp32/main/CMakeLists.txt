@@ -13,6 +13,8 @@ idf_component_register(
         "network_probe.c"
         "offline_queue.c"
         "recovery.c"
+        "ota.c"
+        "operations.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
@@ -25,4 +27,5 @@ idf_component_register(
         mbedtls
         lwip
         driver
+        app_update
 )
