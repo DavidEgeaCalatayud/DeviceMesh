@@ -215,47 +215,75 @@ class SqlAlchemyTelemetryRetentionRepository:
 
         compaction = self.compact_before(raw_cutoff)
         with self._session_factory.begin() as session:
-            def count_before(model: type[Base], column: object, cutoff: datetime) -> int:
-                primary_key = next(iter(model.__table__.primary_key.columns))
-                count = session.scalar(select(func.count(primary_key)).where(column < cutoff)) or 0
-                return int(count)
-
-            hourly_rollups_deleted = count_before(
-                MetricHourlyRollupRow,
-                MetricHourlyRollupRow.bucket_start,
-                hourly_cutoff,
+            hourly_rollups_deleted = int(
+                session.scalar(
+                    select(func.count(MetricHourlyRollupRow.id)).where(
+                        MetricHourlyRollupRow.bucket_start < hourly_cutoff
+                    )
+                )
+                or 0
             )
-            events_deleted = count_before(DeviceEventRow, DeviceEventRow.timestamp, event_cutoff)
-            synthetic_checks_deleted = count_before(
-                SyntheticCheckResultRow,
-                SyntheticCheckResultRow.checked_at,
-                synthetic_cutoff,
+            events_deleted = int(
+                session.scalar(
+                    select(func.count(DeviceEventRow.id)).where(
+                        DeviceEventRow.timestamp < event_cutoff
+                    )
+                )
+                or 0
             )
-            discovery_observations_deleted = count_before(
-                DeviceObservationRow,
-                DeviceObservationRow.observed_at,
-                discovery_cutoff,
+            synthetic_checks_deleted = int(
+                session.scalar(
+                    select(func.count(SyntheticCheckResultRow.id)).where(
+                        SyntheticCheckResultRow.checked_at < synthetic_cutoff
+                    )
+                )
+                or 0
             )
-            nms_counters_deleted = count_before(
-                NetworkInterfaceCounterRow,
-                NetworkInterfaceCounterRow.sampled_at,
-                nms_counter_cutoff,
+            discovery_observations_deleted = int(
+                session.scalar(
+                    select(func.count(DeviceObservationRow.id)).where(
+                        DeviceObservationRow.observed_at < discovery_cutoff
+                    )
+                )
+                or 0
             )
-            syslog_messages_deleted = count_before(
-                SyslogMessageRow,
-                SyslogMessageRow.received_at,
-                syslog_cutoff,
+            nms_counters_deleted = int(
+                session.scalar(
+                    select(func.count(NetworkInterfaceCounterRow.id)).where(
+                        NetworkInterfaceCounterRow.sampled_at < nms_counter_cutoff
+                    )
+                )
+                or 0
             )
-            audit_events_deleted = count_before(AuditRow, AuditRow.timestamp, audit_cutoff)
-            security_audit_events_deleted = count_before(
-                SecurityAuditEventRow,
-                SecurityAuditEventRow.occurred_at,
-                security_audit_cutoff,
+            syslog_messages_deleted = int(
+                session.scalar(
+                    select(func.count(SyslogMessageRow.id)).where(
+                        SyslogMessageRow.received_at < syslog_cutoff
+                    )
+                )
+                or 0
             )
-            notification_deliveries_deleted = count_before(
-                NotificationDeliveryRow,
-                NotificationDeliveryRow.created_at,
-                notification_delivery_cutoff,
+            audit_events_deleted = int(
+                session.scalar(
+                    select(func.count(AuditRow.id)).where(AuditRow.timestamp < audit_cutoff)
+                )
+                or 0
+            )
+            security_audit_events_deleted = int(
+                session.scalar(
+                    select(func.count(SecurityAuditEventRow.id)).where(
+                        SecurityAuditEventRow.occurred_at < security_audit_cutoff
+                    )
+                )
+                or 0
+            )
+            notification_deliveries_deleted = int(
+                session.scalar(
+                    select(func.count(NotificationDeliveryRow.id)).where(
+                        NotificationDeliveryRow.created_at < notification_delivery_cutoff
+                    )
+                )
+                or 0
             )
 
             session.execute(
