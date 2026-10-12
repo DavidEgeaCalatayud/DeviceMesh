@@ -82,3 +82,10 @@ int dm_offline_queue_pop(void) {
 unsigned dm_offline_queue_count(void) {
     return s_queue.count;
 }
+
+
+int dm_offline_queue_clear(void) {
+    memset(&s_queue, 0, sizeof(s_queue));
+    s_queue.magic = QUEUE_MAGIC;
+    return persist();
+}
