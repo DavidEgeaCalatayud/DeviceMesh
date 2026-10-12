@@ -9,7 +9,7 @@ from typing import Literal
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, select
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
 from app.infrastructure.database import Base
@@ -32,6 +32,14 @@ class PushTarget:
 
 class MobilePushSubscriptionRow(Base):
     __tablename__ = "mobile_push_subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "provider",
+            "installation_id",
+            name="uq_mobile_push_user_provider_installation",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
