@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     event_retention_days: int = Field(default=90, ge=7, le=3650)
     # SLOs support a 90-day window; check history must never be configured shorter.
     synthetic_check_retention_days: int = Field(default=90, ge=90, le=3650)
+    discovery_observation_retention_days: int = Field(default=30, ge=7, le=3650)
+    nms_counter_retention_days: int = Field(default=90, ge=7, le=3650)
+    audit_retention_days: int = Field(default=730, ge=30, le=3650)
+    security_audit_retention_days: int = Field(default=730, ge=30, le=3650)
+    notification_delivery_retention_days: int = Field(default=90, ge=7, le=3650)
 
     @model_validator(mode="after")
     def validate_runtime(self) -> Self:
@@ -82,6 +87,9 @@ class Settings(BaseSettings):
             "synthetic_consensus_round_window_seconds", "retention_run_interval_seconds",
             "telemetry_raw_retention_days", "telemetry_hourly_retention_days",
             "event_retention_days", "synthetic_check_retention_days",
+            "discovery_observation_retention_days", "nms_counter_retention_days",
+            "audit_retention_days", "security_audit_retention_days",
+            "notification_delivery_retention_days",
             "notification_delivery_interval_seconds", "notification_delivery_timeout_seconds",
             "notification_delivery_batch_size", "notification_delivery_lease_seconds",
             "notification_delivery_max_attempts", "syslog_port",

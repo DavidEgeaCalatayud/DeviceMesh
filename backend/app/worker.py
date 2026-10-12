@@ -3,7 +3,7 @@ import asyncio
 import logging
 import signal
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from prometheus_client import start_http_server
 from sqlalchemy import text
@@ -24,7 +24,6 @@ from app.runtime import (
     notification_dispatcher,
     offline_device_sweeper,
     synthetic_probe_worker,
-    syslog_repository,
     telemetry_retention_repository,
 )
 
@@ -100,19 +99,31 @@ async def run_jobs(stop: asyncio.Event) -> None:
                         hourly_retention_days=settings.telemetry_hourly_retention_days,
                         event_retention_days=settings.event_retention_days,
                         synthetic_check_retention_days=settings.synthetic_check_retention_days,
+                        discovery_observation_retention_days=(
+                            settings.discovery_observation_retention_days
+                        ),
+                        nms_counter_retention_days=settings.nms_counter_retention_days,
+                        syslog_retention_days=settings.syslog_retention_days,
+                        audit_retention_days=settings.audit_retention_days,
+                        security_audit_retention_days=settings.security_audit_retention_days,
+                        notification_delivery_retention_days=(
+                            settings.notification_delivery_retention_days
+                        ),
                     )
                     retention_rollups.inc(result.rollups_touched)
-                    retention_deleted.labels("telemetry_raw").inc(result.raw_samples_deleted)
-                    retention_deleted.labels("telemetry_hourly").inc(result.hourly_rollups_deleted)
-                    retention_deleted.labels("device_events").inc(result.events_deleted)
-                    retention_deleted.labels("synthetic_checks").inc(
-                        result.synthetic_checks_deleted
-                    )
-                    syslog_deleted = await asyncio.to_thread(
-                        syslog_repository.delete_before,
-                        datetime.now(UTC) - timedelta(days=settings.syslog_retention_days),
-                    )
-                    retention_deleted.labels("syslog").inc(syslog_deleted)
+                    for storage_class, deleted in {
+                        "telemetry_raw": result.raw_samples_deleted,
+                        "telemetry_hourly": result.hourly_rollups_deleted,
+                        "device_events": result.events_deleted,
+                        "synthetic_checks": result.synthetic_checks_deleted,
+                        "discovery_observations": result.discovery_observations_deleted,
+                        "nms_interface_counters": result.nms_counters_deleted,
+                        "syslog": result.syslog_messages_deleted,
+                        "audit_log": result.audit_events_deleted,
+                        "security_audit": result.security_audit_events_deleted,
+                        "notification_deliveries": result.notification_deliveries_deleted,
+                    }.items():
+                        retention_deleted.labels(storage_class).inc(deleted)
                     next_retention = (
                         asyncio.get_running_loop().time()
                         + settings.retention_run_interval_seconds

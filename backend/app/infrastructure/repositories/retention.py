@@ -15,8 +15,18 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column, sessionmaker
 
-from app.infrastructure.database import Base, DeviceEventRow, MetricSampleRow
+from app.infrastructure.database import (
+    Base,
+    DeviceEventRow,
+    DeviceObservationRow,
+    MetricSampleRow,
+    SecurityAuditEventRow,
+)
+from app.infrastructure.repositories.nms import NetworkInterfaceCounterRow
+from app.infrastructure.repositories.notifications import NotificationDeliveryRow
 from app.infrastructure.repositories.synthetics import SyntheticCheckResultRow
+from app.infrastructure.repositories.syslog import SyslogMessageRow
+from app.infrastructure.security.human_auth import AuditRow
 
 
 class MetricHourlyRollupRow(Base):
@@ -74,11 +84,23 @@ class RetentionPolicyResult:
     hourly_cutoff: datetime
     event_cutoff: datetime
     synthetic_cutoff: datetime
+    discovery_cutoff: datetime
+    nms_counter_cutoff: datetime
+    syslog_cutoff: datetime
+    audit_cutoff: datetime
+    security_audit_cutoff: datetime
+    notification_delivery_cutoff: datetime
     rollups_touched: int
     raw_samples_deleted: int
     hourly_rollups_deleted: int
     events_deleted: int
     synthetic_checks_deleted: int
+    discovery_observations_deleted: int
+    nms_counters_deleted: int
+    syslog_messages_deleted: int
+    audit_events_deleted: int
+    security_audit_events_deleted: int
+    notification_deliveries_deleted: int
 
 
 class SqlAlchemyTelemetryRetentionRepository:
@@ -168,6 +190,12 @@ class SqlAlchemyTelemetryRetentionRepository:
         hourly_retention_days: int,
         event_retention_days: int,
         synthetic_check_retention_days: int,
+        discovery_observation_retention_days: int,
+        nms_counter_retention_days: int,
+        syslog_retention_days: int,
+        audit_retention_days: int,
+        security_audit_retention_days: int,
+        notification_delivery_retention_days: int,
     ) -> RetentionPolicyResult:
         if now.tzinfo is None:
             raise ValueError("now must include a timezone")
@@ -178,40 +206,144 @@ class SqlAlchemyTelemetryRetentionRepository:
         hourly_cutoff = now - timedelta(days=hourly_retention_days)
         event_cutoff = now - timedelta(days=event_retention_days)
         synthetic_cutoff = now - timedelta(days=synthetic_check_retention_days)
+        discovery_cutoff = now - timedelta(days=discovery_observation_retention_days)
+        nms_counter_cutoff = now - timedelta(days=nms_counter_retention_days)
+        syslog_cutoff = now - timedelta(days=syslog_retention_days)
+        audit_cutoff = now - timedelta(days=audit_retention_days)
+        security_audit_cutoff = now - timedelta(days=security_audit_retention_days)
+        notification_delivery_cutoff = now - timedelta(days=notification_delivery_retention_days)
 
         compaction = self.compact_before(raw_cutoff)
         with self._session_factory.begin() as session:
-            hourly_rollups_deleted = session.scalar(
-                select(func.count(MetricHourlyRollupRow.id)).where(
+            hourly_rollups_deleted = int(
+                session.scalar(
+                    select(func.count(MetricHourlyRollupRow.id)).where(
+                        MetricHourlyRollupRow.bucket_start < hourly_cutoff
+                    )
+                )
+                or 0
+            )
+            events_deleted = int(
+                session.scalar(
+                    select(func.count(DeviceEventRow.id)).where(
+                        DeviceEventRow.timestamp < event_cutoff
+                    )
+                )
+                or 0
+            )
+            synthetic_checks_deleted = int(
+                session.scalar(
+                    select(func.count(SyntheticCheckResultRow.id)).where(
+                        SyntheticCheckResultRow.checked_at < synthetic_cutoff
+                    )
+                )
+                or 0
+            )
+            discovery_observations_deleted = int(
+                session.scalar(
+                    select(func.count(DeviceObservationRow.id)).where(
+                        DeviceObservationRow.observed_at < discovery_cutoff
+                    )
+                )
+                or 0
+            )
+            nms_counters_deleted = int(
+                session.scalar(
+                    select(func.count(NetworkInterfaceCounterRow.id)).where(
+                        NetworkInterfaceCounterRow.sampled_at < nms_counter_cutoff
+                    )
+                )
+                or 0
+            )
+            syslog_messages_deleted = int(
+                session.scalar(
+                    select(func.count(SyslogMessageRow.id)).where(
+                        SyslogMessageRow.received_at < syslog_cutoff
+                    )
+                )
+                or 0
+            )
+            audit_events_deleted = int(
+                session.scalar(
+                    select(func.count(AuditRow.id)).where(AuditRow.timestamp < audit_cutoff)
+                )
+                or 0
+            )
+            security_audit_events_deleted = int(
+                session.scalar(
+                    select(func.count(SecurityAuditEventRow.id)).where(
+                        SecurityAuditEventRow.occurred_at < security_audit_cutoff
+                    )
+                )
+                or 0
+            )
+            notification_deliveries_deleted = int(
+                session.scalar(
+                    select(func.count(NotificationDeliveryRow.id)).where(
+                        NotificationDeliveryRow.created_at < notification_delivery_cutoff
+                    )
+                )
+                or 0
+            )
+
+            session.execute(
+                delete(MetricHourlyRollupRow).where(
                     MetricHourlyRollupRow.bucket_start < hourly_cutoff
                 )
-            ) or 0
-            events_deleted = session.scalar(
-                select(func.count(DeviceEventRow.id)).where(DeviceEventRow.timestamp < event_cutoff)
-            ) or 0
-            synthetic_checks_deleted = session.scalar(
-                select(func.count(SyntheticCheckResultRow.id)).where(
+            )
+            session.execute(delete(DeviceEventRow).where(DeviceEventRow.timestamp < event_cutoff))
+            session.execute(
+                delete(SyntheticCheckResultRow).where(
                     SyntheticCheckResultRow.checked_at < synthetic_cutoff
                 )
-            ) or 0
-            session.execute(delete(MetricHourlyRollupRow).where(
-                MetricHourlyRollupRow.bucket_start < hourly_cutoff
-            ))
-            session.execute(delete(DeviceEventRow).where(DeviceEventRow.timestamp < event_cutoff))
-            session.execute(delete(SyntheticCheckResultRow).where(
-                SyntheticCheckResultRow.checked_at < synthetic_cutoff
-            ))
+            )
+            session.execute(
+                delete(DeviceObservationRow).where(
+                    DeviceObservationRow.observed_at < discovery_cutoff
+                )
+            )
+            session.execute(
+                delete(NetworkInterfaceCounterRow).where(
+                    NetworkInterfaceCounterRow.sampled_at < nms_counter_cutoff
+                )
+            )
+            session.execute(
+                delete(SyslogMessageRow).where(SyslogMessageRow.received_at < syslog_cutoff)
+            )
+            session.execute(delete(AuditRow).where(AuditRow.timestamp < audit_cutoff))
+            session.execute(
+                delete(SecurityAuditEventRow).where(
+                    SecurityAuditEventRow.occurred_at < security_audit_cutoff
+                )
+            )
+            session.execute(
+                delete(NotificationDeliveryRow).where(
+                    NotificationDeliveryRow.created_at < notification_delivery_cutoff
+                )
+            )
 
         return RetentionPolicyResult(
             raw_cutoff=raw_cutoff,
             hourly_cutoff=hourly_cutoff,
             event_cutoff=event_cutoff,
             synthetic_cutoff=synthetic_cutoff,
+            discovery_cutoff=discovery_cutoff,
+            nms_counter_cutoff=nms_counter_cutoff,
+            syslog_cutoff=syslog_cutoff,
+            audit_cutoff=audit_cutoff,
+            security_audit_cutoff=security_audit_cutoff,
+            notification_delivery_cutoff=notification_delivery_cutoff,
             rollups_touched=compaction.rollups_touched,
             raw_samples_deleted=compaction.raw_samples_deleted,
-            hourly_rollups_deleted=int(hourly_rollups_deleted),
-            events_deleted=int(events_deleted),
-            synthetic_checks_deleted=int(synthetic_checks_deleted),
+            hourly_rollups_deleted=hourly_rollups_deleted,
+            events_deleted=events_deleted,
+            synthetic_checks_deleted=synthetic_checks_deleted,
+            discovery_observations_deleted=discovery_observations_deleted,
+            nms_counters_deleted=nms_counters_deleted,
+            syslog_messages_deleted=syslog_messages_deleted,
+            audit_events_deleted=audit_events_deleted,
+            security_audit_events_deleted=security_audit_events_deleted,
+            notification_deliveries_deleted=notification_deliveries_deleted,
         )
 
     def list_hourly(

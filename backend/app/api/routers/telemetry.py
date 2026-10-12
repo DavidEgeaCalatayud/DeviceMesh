@@ -171,6 +171,26 @@ def retention_policy(_: Operator) -> RetentionPolicyResponse:
         telemetryHourlyDays=settings.telemetry_hourly_retention_days,
         deviceEventsDays=settings.event_retention_days,
         syntheticChecksDays=settings.synthetic_check_retention_days,
+        discoveryObservationsDays=settings.discovery_observation_retention_days,
+        nmsInterfaceCountersDays=settings.nms_counter_retention_days,
+        syslogDays=settings.syslog_retention_days,
+        auditLogDays=settings.audit_retention_days,
+        securityAuditDays=settings.security_audit_retention_days,
+        notificationDeliveriesDays=settings.notification_delivery_retention_days,
+        indefiniteClasses=[
+            "devices",
+            "agents",
+            "device_interfaces",
+            "device_services_current_state",
+            "alerts",
+            "incidents",
+            "maintenance_windows",
+            "network_neighbors_current_state",
+            "network_routes_current_state",
+            "network_arp_current_state",
+            "network_vlans_current_state",
+            "nms_targets",
+        ],
     )
 
 
