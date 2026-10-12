@@ -1,4 +1,8 @@
 name: DeviceMesh
+packages:
+  ESPProvision:
+    url: https://github.com/espressif/esp-idf-provisioning-ios.git
+    from: 2.1.1
 targets:
   DeviceMesh:
     type: application
@@ -8,6 +12,8 @@ targets:
       - path: Sources
         excludes:
           - "**/*.md"
+    dependencies:
+      - package: ESPProvision
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh
