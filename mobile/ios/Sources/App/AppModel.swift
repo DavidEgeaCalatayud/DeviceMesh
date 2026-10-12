@@ -86,6 +86,25 @@ final class AppModel: ObservableObject {
         self.probes = (try? await api.syntheticProbes()) ?? []
     }
 
+    func deviceDetail(_ deviceId: String) async throws -> (DeviceHealth, [MetricSample]) {
+        async let health = api.deviceHealth(deviceId)
+        async let metrics = api.latestMetrics(deviceId)
+        return try await (health, metrics)
+    }
+
+    func queueDeviceOperation(
+        deviceId: String,
+        operationType: String
+    ) async throws -> RemoteOperation {
+        guard session?.user.role != "viewer" else {
+            throw DeviceMeshAPIError.server(403, "Viewer role cannot queue operations")
+        }
+        return try await api.queueRemoteOperation(
+            deviceId: deviceId,
+            operationType: operationType
+        )
+    }
+
     private func enablePushNotifications() async {
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(
