@@ -44,13 +44,13 @@ jobs:
         working-directory: firmware/esp32
         run: |
           . "$IDF_PATH/export.sh"
-          idf.py set-target "${{ inputs.target }}"
           if [[ "${{ inputs.require_environment }}" == "true" ]]; then
             printf '\nCONFIG_DM_BME280_ENABLED=y\n' >> sdkconfig.defaults
           fi
           if [[ "${{ inputs.require_hardening }}" == "true" ]]; then
             printf '\nCONFIG_DM_REQUIRE_HARDENING=y\n' >> sdkconfig.defaults
           fi
+          idf.py set-target "${{ inputs.target }}"
           idf.py build
           idf.py -p "${{ inputs.serial_port }}" flash
       - name: Install HIL serial dependency
