@@ -2,7 +2,7 @@
 
 Primera entrega: `feat/production-platform-foundations`. Base revisada: `5e8fca2` (post-PR #68).
 
-Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Los scaffolds móviles y ESP32 siguen siendo scaffolds. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
+Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Android e iOS ya son clientes operativos nativos en `main` tras #72/#73; ESP32 sigue siendo el principal componente hardware pendiente de cerrar. Las PRs abiertas de push, provisioning BLE, detalle/operaciones, UI/release y firmware no se contabilizan como `main` hasta fusionarse. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
 
 | Nº | Área | Estado | Evidencia / siguiente criterio |
 |---|---|---|---|
@@ -68,11 +68,10 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 
 ## Orden de continuación
 
-1. Red/NMS (#13–#16): inventario persistente de red, LLDP/CDP, SNMPv3 con secret refs y Syslog.
-2. Base de datos/retención/performance (#38, #39, #46), cerrando benchmarks y soak prolongado antes de anomaly detection.
-3. Android/iOS (#19–#24), incluyendo sesiones seguras, pantallas reales, pruebas, push y distribución propias.
-4. ESP32/hardware (#25–#28, #48, #55) con identidad, provisioning, sensores y pruebas físicas antes de OTA.
-5. GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema completo (#59) una vez sus dependencias estén implementadas.
+1. Fusionar/validar la capacidad y retención (#38/#39) de #75; mantener #46 abierto hasta conservar evidencia real de soak 24/48 h.
+2. Cerrar el cliente móvil (#19/#20/#22/#23/#24/#47) con #78 push, #83 detalle/operaciones, #77 provisioning BLE y #84 UI + distribución; la aceptación física/store sigue siendo evidencia externa.
+3. Cerrar ESP32/hardware (#25–#28/#48/#55) con #76; el software ya cubre identidad, provisioning, red, sensores opcionales, offline/OTA/recovery, pero #28/#48 exigen la matriz física retenida.
+4. Completar GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema (#59) una vez los gates externos anteriores estén satisfechos.
 
 ## Límites verificables
 
