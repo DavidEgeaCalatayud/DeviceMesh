@@ -66,6 +66,57 @@ actor DeviceMeshAPI {
         accessToken = nil
     }
 
+    func remoteOperations(deviceId: String) async throws -> [RemoteOperation] {
+        guard let encoded = deviceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            throw DeviceMeshAPIError.server(0, "Invalid device identifier")
+        }
+        return try await request(
+            path: "/api/v1/operator/remote-operations?deviceId=\(encoded)&limit=100"
+        )
+    }
+
+    func queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String? = nil
+    ) async throws -> RemoteOperation {
+        let allowed = Set([
+            "telemetry.collect",
+            "inventory.refresh",
+            "agent.health_check",
+            "network.dns_lookup",
+            "network.route_snapshot",
+        ])
+        guard allowed.contains(operationType) else {
+            throw DeviceMeshAPIError.server(0, "Unsupported remote operation")
+        }
+        var arguments: [String: String] = [:]
+        if operationType == "network.dns_lookup" {
+            guard let hostname,
+                  !hostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  hostname.count <= 253 else {
+                throw DeviceMeshAPIError.server(0, "DNS lookup requires a valid hostname")
+            }
+            arguments["hostname"] = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        struct Payload: Codable {
+            let deviceId: String
+            let operationType: String
+            let arguments: [String: String]
+            let ttlSeconds: Int
+        }
+        return try await request(
+            path: "/api/v1/operator/remote-operations",
+            method: "POST",
+            body: Payload(
+                deviceId: deviceId,
+                operationType: operationType,
+                arguments: arguments,
+                ttlSeconds: 300
+            )
+        )
+    }
+
     func devices() async throws -> [Device] {
         try await request(path: "/api/v1/devices")
     }
