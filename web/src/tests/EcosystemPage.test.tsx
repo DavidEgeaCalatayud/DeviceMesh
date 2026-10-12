@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { render, screen } from '@testing-library/react'
-import { vi } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { EcosystemPage } from '../features/platform/EcosystemPage'
 import { platformApi } from '../shared/api/session'
 
