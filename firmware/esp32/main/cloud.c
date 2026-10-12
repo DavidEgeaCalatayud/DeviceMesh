@@ -181,3 +181,73 @@ int dm_cloud_send_heartbeat(const char *agent_id, const dm_telemetry_t *telemetr
     cJSON_free(body);
     return result;
 }
+
+
+int dm_cloud_send_telemetry(const char *agent_id, const dm_telemetry_t *telemetry) {
+    if (!agent_id || !telemetry) return -1;
+
+    char server[256];
+    char credential_id[64];
+    char credential[256];
+    if (dm_credentials_get_server(server, sizeof(server)) != 0 ||
+        dm_credentials_get_agent_credential(
+            credential_id,
+            sizeof(credential_id),
+            credential,
+            sizeof(credential)
+        ) != 0) {
+        return -1;
+    }
+
+    time_t now = time(NULL);
+    if (now < 1704067200) return -1;
+    struct tm utc;
+    gmtime_r(&now, &utc);
+    char timestamp[32];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc);
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return -1;
+    cJSON_AddStringToObject(root, "type", "telemetry");
+    cJSON_AddNumberToObject(root, "protocolVersion", 1);
+    cJSON_AddStringToObject(root, "agentId", agent_id);
+    cJSON_AddStringToObject(root, "timestamp", timestamp);
+    cJSON *metrics = cJSON_AddArrayToObject(root, "metrics");
+
+    cJSON *rssi = cJSON_CreateObject();
+    cJSON_AddStringToObject(rssi, "name", "network.wifi.rssi.dbm");
+    cJSON_AddNumberToObject(rssi, "value", telemetry->wifi_rssi);
+    cJSON_AddStringToObject(rssi, "unit", "dBm");
+    cJSON_AddItemToArray(metrics, rssi);
+
+    cJSON *heap = cJSON_CreateObject();
+    cJSON_AddStringToObject(heap, "name", "memory.free.bytes");
+    cJSON_AddNumberToObject(heap, "value", telemetry->free_heap_bytes);
+    cJSON_AddStringToObject(heap, "unit", "bytes");
+    cJSON_AddItemToArray(metrics, heap);
+
+    cJSON *uptime = cJSON_CreateObject();
+    cJSON_AddStringToObject(uptime, "name", "system.uptime.seconds");
+    cJSON_AddNumberToObject(uptime, "value", (double)telemetry->uptime_seconds);
+    cJSON_AddStringToObject(uptime, "unit", "seconds");
+    cJSON_AddItemToArray(metrics, uptime);
+
+    cJSON *failures = cJSON_CreateObject();
+    cJSON_AddStringToObject(failures, "name", "agent.delivery.failed_cycles");
+    cJSON_AddNumberToObject(failures, "value", telemetry->failed_delivery_cycles);
+    cJSON_AddStringToObject(failures, "unit", "count");
+    cJSON_AddItemToArray(metrics, failures);
+
+    char *body = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!body) return -1;
+
+    char url[320];
+    int result = -1;
+    if (build_url(url, sizeof(url), server, "/api/v1/agents/telemetry") == 0 &&
+        http_json(url, body, agent_id, credential, NULL, 0) == ESP_OK) {
+        result = 0;
+    }
+    cJSON_free(body);
+    return result;
+}
