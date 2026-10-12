@@ -1,2 +1,5 @@
 dependencies:
-  espressif/bme280: "^0.1.1"
+  idf:
+    version: ">=5.2,<6.0"
+  espressif/bme280:
+    version: "^0.1.1"
