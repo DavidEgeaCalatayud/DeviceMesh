@@ -1,0 +1,21 @@
+menu "DeviceMesh hardware"
+
+config DM_BME280_ENABLED
+    bool "Enable BME280 environmental sensor"
+    default n
+    help
+        Enable temperature, humidity and pressure acquisition from a BME280 over I2C.
+
+config DM_BME280_SDA_GPIO
+    int "BME280 SDA GPIO"
+    depends on DM_BME280_ENABLED
+    default 21
+    range 0 48
+
+config DM_BME280_SCL_GPIO
+    int "BME280 SCL GPIO"
+    depends on DM_BME280_ENABLED
+    default 22
+    range 0 48
+
+endmenu
