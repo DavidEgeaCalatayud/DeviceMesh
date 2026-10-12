@@ -67,6 +67,7 @@ jobs:
           name: devicemesh-android-signed
           path: dist/android/
           if-no-files-found: error
+          retention-days: 30
       - name: Cleanup mobile release secrets
         if: always()
         run: rm -f mobile/android/app/google-services.json "$RUNNER_TEMP/devicemesh-release.jks"
