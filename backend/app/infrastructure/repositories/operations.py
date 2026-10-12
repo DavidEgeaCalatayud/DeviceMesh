@@ -242,6 +242,30 @@ class SqlAlchemyRemoteOperationRepository:
         operation_type: RemoteOperationType,
         arguments: dict[str, object],
     ) -> None:
+        if operation_type is RemoteOperationType.NETWORK_DNS_LOOKUP:
+            if set(arguments) != {"hostname"}:
+                raise ValueError("network.dns_lookup requires only hostname")
+            hostname = arguments.get("hostname")
+            if not isinstance(hostname, str) or not 1 <= len(hostname.strip()) <= 253:
+                raise ValueError("hostname must be 1-253 characters")
+            return
+        if operation_type is RemoteOperationType.FIRMWARE_UPDATE:
+            if set(arguments) != {"url", "sha256", "version"}:
+                raise ValueError("firmware.update requires url, sha256 and version")
+            url = arguments.get("url")
+            sha256 = arguments.get("sha256")
+            version = arguments.get("version")
+            if not isinstance(url, str) or not url.startswith("https://") or len(url) > 2048:
+                raise ValueError("firmware update URL must use HTTPS")
+            if (
+                not isinstance(sha256, str)
+                or len(sha256) != 64
+                or any(character not in "0123456789abcdefABCDEF" for character in sha256)
+            ):
+                raise ValueError("firmware update sha256 must be hexadecimal")
+            if not isinstance(version, str) or not 1 <= len(version.strip()) <= 64:
+                raise ValueError("firmware update version must be 1-64 characters")
+            return
         if arguments:
             raise ValueError(f"{operation_type.value} does not accept arguments in V1.1")
 
