@@ -16,6 +16,7 @@ idf_component_register(
         "ota.c"
         "operations.c"
         "telemetry_queue.c"
+        "security.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
@@ -29,4 +30,5 @@ idf_component_register(
         lwip
         driver
         app_update
+        bootloader_support
 )
