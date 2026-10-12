@@ -1,9 +1,11 @@
 package io.github.davidegeacalatayud.devicemesh
 
 import android.content.Intent
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
@@ -49,11 +51,11 @@ class AuthenticatedMainActivityUiTest {
             }
             composeRule.onNodeWithText("Operational summary").assertExists()
             composeRule.onNodeWithText("Devices").performClick()
-            composeRule.onNodeWithText("Devices").assertExists()
+            composeRule.onAllNodesWithText("Devices").assertCountEquals(2)
             composeRule.onNodeWithText("Incidents").performClick()
-            composeRule.onNodeWithText("Incidents").assertExists()
+            composeRule.onAllNodesWithText("Incidents").assertCountEquals(2)
             composeRule.onNodeWithText("Alerts").performClick()
-            composeRule.onNodeWithText("Alerts").assertExists()
+            composeRule.onAllNodesWithText("Alerts").assertCountEquals(2)
             composeRule.onNodeWithText("Synthetics").performClick()
             composeRule.onNodeWithText("Distributed probes").assertExists()
         }
