@@ -110,15 +110,123 @@ struct DashboardView: View {
 
 private struct DeviceListView: View {
     @EnvironmentObject private var model: AppModel
+
     var body: some View {
         NavigationStack {
             List(model.devices) { device in
-                VStack(alignment: .leading) {
-                    Text(device.hostname ?? device.id).font(.headline)
-                    Text(device.status + " · " + device.ipAddresses.joined(separator: ", "))
-                        .font(.caption).foregroundStyle(.secondary)
+                NavigationLink {
+                    DeviceDetailView(device: device)
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(device.hostname ?? device.id).font(.headline)
+                        Text(device.status + " · " + device.ipAddresses.joined(separator: ", "))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
-            }.navigationTitle("Devices")
+            }
+            .navigationTitle("Devices")
+        }
+    }
+}
+
+private struct DeviceDetailView: View {
+    @EnvironmentObject private var model: AppModel
+    let device: Device
+    @State private var health: DeviceHealth?
+    @State private var metrics: [MetricSample] = []
+    @State private var operationMessage = ""
+    @State private var loading = true
+
+    var body: some View {
+        List {
+            Section("Identity") {
+                LabeledContent("Status", value: device.status)
+                LabeledContent("IP", value: device.ipAddresses.joined(separator: ", "))
+                if let operatingSystem = device.operatingSystem {
+                    LabeledContent("OS", value: operatingSystem)
+                }
+                if let manufacturer = device.manufacturer {
+                    LabeledContent("Manufacturer", value: manufacturer)
+                }
+            }
+            Section("Operational health") {
+                if let health {
+                    LabeledContent("State", value: health.currentState ?? "unknown")
+                    if let availability = health.availability24h {
+                        LabeledContent(
+                            "Availability 24h",
+                            value: String(format: "%.3f%%", availability)
+                        )
+                    }
+                    if let outage = health.currentOutageSeconds {
+                        LabeledContent("Current outage", value: String(Int(outage)) + " s")
+                    }
+                    if health.maintenanceActive {
+                        Label("Maintenance active", systemImage: "wrench.and.screwdriver")
+                    }
+                } else if loading {
+                    ProgressView()
+                } else {
+                    Text("Health data unavailable")
+                }
+            }
+            if !metrics.isEmpty {
+                Section("Latest metrics") {
+                    ForEach(metrics.prefix(12)) { metric in
+                        LabeledContent(
+                            metric.name,
+                            value: String(metric.value) + (metric.unit.map { " " + $0 } ?? "")
+                        )
+                    }
+                }
+            }
+            if model.session?.user.role != "viewer" {
+                Section("Safe operations") {
+                    Button("Collect telemetry") {
+                        queue("telemetry.collect")
+                    }
+                    Button("Refresh inventory") {
+                        queue("inventory.refresh")
+                    }
+                    Button("Agent health check") {
+                        queue("agent.health_check")
+                    }
+                    if !operationMessage.isEmpty {
+                        Text(operationMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle(device.hostname ?? "Device")
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            let detail = try await model.deviceDetail(device.id)
+            health = detail.0
+            metrics = detail.1
+        } catch {
+            operationMessage = error.localizedDescription
+        }
+    }
+
+    private func queue(_ operationType: String) {
+        Task {
+            do {
+                let operation = try await model.queueDeviceOperation(
+                    deviceId: device.id,
+                    operationType: operationType
+                )
+                operationMessage = operation.operationType + " · " + operation.status
+            } catch {
+                operationMessage = error.localizedDescription
+            }
         }
     }
 }
