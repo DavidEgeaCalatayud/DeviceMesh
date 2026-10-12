@@ -33,6 +33,11 @@ void app_main(void) {
     if (dm_identity_get(agent_id, sizeof(agent_id)) != 0) return;
     ESP_LOGI(TAG, "DeviceMesh ESP32 agent %s", agent_id);
 
+    if (dm_wifi_prepare() != 0) {
+        ESP_LOGE(TAG, "Unable to initialize Wi-Fi stack");
+        return;
+    }
+
     int provisioning = dm_ble_init(agent_id);
     if (provisioning < 0) {
         ESP_LOGE(TAG, "BLE provisioning initialization failed");
