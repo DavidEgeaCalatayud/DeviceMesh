@@ -25,15 +25,15 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 17 | Web: aún le falta convertirse en una aplicación completa de operaciones | Implementado en main | Navegación, Dashboard, Services, Incidents, detalle, Administration, Audit, login y búsqueda global Ctrl/Cmd+K. PR #61 convierte Maintenance, Operations, Synthetics y Probes en rutas de primera clase, conserva la vista agregada y alinea la allowlist web con diagnósticos DNS/route snapshot del backend; Playwright cubre las rutas reales. |
 | 18 | UX web | Implementado en main | Estados de carga/error/vacío, búsqueda, URLs de detalle, formularios etiquetados, diseño adaptable y navegación operativa. PR #63 añade preferencia ES/EN persistente y vistas guardadas de deep-links con deduplicación, límite, validación y recuperación ante almacenamiento corrupto. |
 | 19 | Android: aplicación operativa | Pendiente | PR #72 reemplaza el scaffold por login/MFA/sesión, Dashboard, Devices, Incidents, Alerts, Synthetics y Probes sobre la API real. Falta integrar en main el detalle/operaciones móviles de la PR apilada y completar la aceptación UI/E2E antes de cerrar el punto. |
-| 20 | Android: push notifications | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 20 | Android: push notifications | Pendiente | PR #91 consolida registro/revocación de tokens, FCM HTTP v1, APNs, routing durable y lifecycle nativo. Falta fusionar/validar la PR y conservar evidencia de push real en dispositivo/proveedor. |
 | 21 | Android: seguridad | Implementado en main | PR #72 exige HTTPS, desactiva cleartext/backup y cifra access/refresh tokens con AES-256-GCM mediante AndroidKeyStore; refresh/logout respetan la revocación del backend y no se almacenan password/MFA. |
-| 22 | Android testing/release | Pendiente | Main ya ejecuta unit tests, lint, debug build y release bundle, y dispone de pipeline de APK/AAB firmado con secretos externos. Falta ampliar UI/E2E y conservar evidencia de distribución/instalación real antes de cerrarlo. |
-| 23 | iOS: aplicación operativa | Pendiente | PR #73 reemplaza el scaffold por SwiftUI real con login/MFA/sesión, Keychain ThisDeviceOnly, Dashboard, Devices, Incidents, Alerts, Synthetics, Probes y XCTest. Push/distribución y detalle/operaciones siguen en PRs posteriores antes de cerrar el punto. |
-| 24 | BLE provisioning desde Android/iOS | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 25 | ESP32: prácticamente todo el firmware real queda por desarrollar | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 26 | ESP32: sensores | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 22 | Android testing/release | Pendiente | Main ya ejecuta unit/lint/build; PR #91 añade Compose UI instrumentation, APK/AAB firmado y publicación opcional a Play internal. Falta fusionar/validar y conservar evidencia de instalación/publicación real. |
+| 23 | iOS: aplicación operativa | Pendiente | PR #73 aporta la app SwiftUI real; PR #91 consolida detalle/operaciones, APNs, XCUITest y pipeline IPA/TestFlight. Falta fusionar/validar y conservar evidencia física/store antes de cerrar el punto. |
+| 24 | BLE provisioning desde Android/iOS | Pendiente | PR #91 implementa clientes Android/iOS con SDK oficial Espressif, Security 1 + PoP, token DeviceMesh de 15 min y Wi-Fi/server enrollment; depende del endpoint firmware de PR #86. Falta fusionar y validar en hardware real. |
+| 25 | ESP32: base firmware real | Pendiente | PR #86 implementa identidad persistente NVS, provisioning, enrollment, credenciales, HTTPS, SNTP, Wi-Fi/backoff, heartbeat, telemetría y watchdog. Falta fusionar/validar. |
+| 26 | ESP32: sensores | Pendiente | PR #86 incorpora señales reales de sistema y perfil BME280 opcional sin fabricar datos ausentes. Falta fusionar y validar con el sensor de referencia físico. |
 | 27 | ESP32 como probe de red | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 28 | ESP32 production-ready | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 28 | ESP32 production-ready | Pendiente | PR #86 ya cubre offline queue, OTA A/B con SHA-256/rollback, recovery, allowlist, hardening, watchdog y workflow HIL. El cierre exige evidencia física retenida de BLE/offline/sensor/OTA/rollback/hardening. |
 | 29 | Windows Agent | Implementado en main | Agente .NET 8 con identidad estable, enrollment, credencial persistente, heartbeat/telemetría autenticados y servicio Windows. CI dedicado restaura, compila Release y ejecuta tests en `windows-latest`; Release Validation publica binario self-contained y MSI x64 con checksum/provenance. |
 | 30 | Windows telemetry | Implementado en main | Collector nativo publica CPU, memoria/pagefile, discos, interfaces/bytes de red, procesos y uptime con nombres portables. Tests cubren collector y serialización; los datos se envían por el contrato de telemetría autenticado. |
 | 31 | Windows remote operations | Implementado en main | El agente reclama y completa operaciones pull-based usando la allowlist declarativa del backend; no existe shell/PowerShell/comando arbitrario. El contrato prueba campos estructurados y ausencia de primitivas `command`/`shell`, y la UI sólo expone operaciones allowlisted. |
@@ -68,9 +68,9 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 
 ## Orden de continuación
 
-1. Fusionar/validar la capacidad y retención (#38/#39) de #75; mantener #46 abierto hasta conservar evidencia real de soak 24/48 h.
-2. Cerrar el cliente móvil (#19/#20/#22/#23/#24/#47) con #78 push, #83 detalle/operaciones, #77 provisioning BLE y #84 UI + distribución; la aceptación física/store sigue siendo evidencia externa.
-3. Cerrar ESP32/hardware (#25–#28/#48/#55) con #76; el software ya cubre identidad, provisioning, red, sensores opcionales, offline/OTA/recovery, pero #28/#48 exigen la matriz física retenida.
+1. Fusionar/validar #85 para capacidad y retención (#38/#39); mantener #46 abierto hasta conservar evidencia real de soak 24/48 h.
+2. Fusionar/validar #91 para cliente móvil completo (#19/#20/#22/#23/#24/#47); la aceptación física de push/BLE/instalación y los recibos Play/TestFlight siguen siendo evidencia externa.
+3. Fusionar/validar #86 para ESP32/hardware (#25–#28/#48/#55); el software cubre identidad, provisioning, sensores, probe, offline/OTA/recovery/hardening y HIL, pero #28/#48 exigen la matriz física retenida.
 4. Completar GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema (#59) una vez los gates externos anteriores estén satisfechos.
 
 ## Límites verificables
