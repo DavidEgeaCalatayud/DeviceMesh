@@ -9,6 +9,9 @@ type Monitor = { id: string; name: string }
 type Slo = { id: string; name: string; status: string; actualPercent: number | null; targetPercent: number; remainingFailedChecks: number | null; remainingBadUnits: number | null; budgetUnit: string; totalChecks: number; burnRates: Record<string, number | null>; burnAlert: string; sliMode: string; observedSeconds: number | null; coveragePercent: number | null }
 type Timeline = { id: string; timestamp: string; actor: string; action: string; details: Record<string, unknown> }
 type CorrelatedIncident = { id: string; monitorId: string; classification: string; state: string; openedAt: string }
+type RcaEvidence = { kind: string; summary: string; weight: number; timestamp: string | null }
+type RcaCandidate = { kind: string; entityId: string; label: string; score: number; confidence: string; causalPath: string[]; firstSignalAt: string | null; evidence: RcaEvidence[] }
+type RcaReport = { incidentId: string; method: string; status: string; primaryCandidate: RcaCandidate | null; candidates: RcaCandidate[]; limitations: string[] }
 type Incident = { id: string; title: string; severity: string; status: string; openedAt: string; assignedTo: string | null; rootCause: string; resolution: string; impactSummary: string; postmortem: string; timeline?: Timeline[]; correlatedIncidents?: CorrelatedIncident[] }
 type User = { id: string; username: string; role: string; enabled: boolean }
 type Audit = { id: string; timestamp: string; actor: string; action: string; resource: string }
@@ -114,6 +117,7 @@ export function ServicesPage() {
 export function IncidentsPage({ incidentId }: { incidentId?: string }) {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [detail, setDetail] = useState<Incident | null>(null)
+  const [rca, setRca] = useState<RcaReport | null>(null)
   const [error, setError] = useState('')
   const [activeOnly, setActiveOnly] = useState(true)
   const [offset, setOffset] = useState(0)
@@ -122,7 +126,11 @@ export function IncidentsPage({ incidentId }: { incidentId?: string }) {
   const [role, setRole] = useState('viewer')
   useEffect(() => {
     let active = true
-    const request = incidentId ? platformApi<Incident>(`/incidents/${encodeURIComponent(incidentId)}`).then(data => { if (active) setDetail(data) })
+    const request = incidentId
+      ? Promise.all([
+        platformApi<Incident>(`/incidents/${encodeURIComponent(incidentId)}`),
+        platformApi<RcaReport>(`/incidents/${encodeURIComponent(incidentId)}/rca`),
+      ]).then(([data, report]) => { if (active) { setDetail(data); setRca(report) } })
       : platformApi<Incident[]>(`/incidents?activeOnly=${activeOnly}&limit=50&offset=${offset}`).then(data => { if (active) setIncidents(data) })
     request.catch(reason => { if (active) setError(errorText(reason)) }).finally(() => { if (active) setLoading(false) })
     if (getToken()) void platformApi<{ role: string }>('/auth/me').then(user => { if (active) setRole(user.role) }).catch(() => {})
@@ -130,7 +138,14 @@ export function IncidentsPage({ incidentId }: { incidentId?: string }) {
   }, [incidentId, activeOnly, offset])
   async function update(changes: Record<string, unknown>) {
     setBusy(true); setError('')
-    try { await platformApi(`/incidents/${incidentId}`, { method: 'PATCH', body: JSON.stringify(changes) }); setDetail(await platformApi<Incident>(`/incidents/${incidentId}`)) }
+    try {
+      await platformApi(`/incidents/${incidentId}`, { method: 'PATCH', body: JSON.stringify(changes) })
+      const [nextDetail, nextRca] = await Promise.all([
+        platformApi<Incident>(`/incidents/${incidentId}`),
+        platformApi<RcaReport>(`/incidents/${incidentId}/rca`),
+      ])
+      setDetail(nextDetail); setRca(nextRca)
+    }
     catch (reason) { setError(errorText(reason)) } finally { setBusy(false) }
   }
   return <main className="platform-page"><h1>{detail && incidentId ? detail.title : 'Incidents'}</h1>{error && <p role="alert">{error}</p>}{loading && <p role="status">Loading incidents…</p>}
@@ -139,6 +154,15 @@ export function IncidentsPage({ incidentId }: { incidentId?: string }) {
       <ul className="incident-list">{incidents.map(incident => <li key={incident.id}><a href={`#/incidents/${incident.id}`}><strong>{incident.severity} · {incident.title}</strong></a><span>{incident.status} · {date(incident.openedAt)}</span></li>)}</ul>
       <div className="platform-actions"><button disabled={offset === 0} onClick={() => setOffset(v => Math.max(0, v - 50))}>Previous</button><button disabled={incidents.length < 50} onClick={() => setOffset(v => v + 50)}>Next</button></div></>}
     {incidentId && detail && <><p>{detail.severity} · {detail.status} · assigned to {detail.assignedTo || 'nobody'}</p><a href="#/incidents">All incidents</a>
+      {rca && <section><h2>Root cause analysis</h2><p>{rca.method} · {rca.status}</p>
+        {rca.primaryCandidate ? <article className="platform-card"><h3>Primary candidate: {rca.primaryCandidate.label}</h3>
+          <p>{rca.primaryCandidate.kind} · score {rca.primaryCandidate.score}/100 · {rca.primaryCandidate.confidence} confidence</p>
+          <p>Causal path: {rca.primaryCandidate.causalPath.join(' → ')}</p>
+          <ul>{rca.primaryCandidate.evidence.map((item, index) => <li key={`${item.kind}-${index}`}>{item.timestamp ? `${date(item.timestamp)} · ` : ''}{item.summary} (+{item.weight})</li>)}</ul>
+        </article> : <p>Not enough correlated evidence to rank a root-cause candidate.</p>}
+        {rca.candidates.length > 1 && <details><summary>Other candidates</summary><ul>{rca.candidates.slice(1).map(candidate => <li key={`${candidate.kind}:${candidate.entityId}`}><strong>{candidate.label}</strong> · {candidate.score}/100 · {candidate.confidence}</li>)}</ul></details>}
+        <p className="muted">{rca.limitations[0]}</p>
+      </section>}
       {!!detail.correlatedIncidents?.length && <section><h2>Correlated incidents</h2><ul>{detail.correlatedIncidents.map(item => <li key={item.id}><a href={`#/incidents/${item.id}`}>{item.classification} · {item.state} · {date(item.openedAt)}</a></li>)}</ul></section>}
       {role !== 'viewer' && <><div className="platform-actions">
         {detail.status === 'open' && <button disabled={busy} onClick={() => void update({ status: 'acknowledged' })}>Acknowledge</button>}

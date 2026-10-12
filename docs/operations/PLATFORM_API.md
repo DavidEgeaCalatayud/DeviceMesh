@@ -1,6 +1,6 @@
 # Platform API and security
 
-Agent Protocol v1 remains unchanged. `GET /api/v1/system/version` returns the distributable server version, supported agent protocol versions and required Alembic revision. This endpoint requires a human session in production. A full minimum-version matrix across clients remains pending.
+Agent Protocol v1 remains unchanged. `GET /api/v1/system/version` returns the distributable server version, supported protocol versions, required Alembic revision and minimum-version policies for Windows, Linux, macOS, distributed probes, Android, iOS and ESP32. `GET /api/v1/system/compatibility/{component}` evaluates a concrete client version/protocol pair. These endpoints require a human session in production.
 
 | API | Authorization | Purpose |
 |---|---|---|
@@ -15,7 +15,9 @@ Agent Protocol v1 remains unchanged. `GET /api/v1/system/version` returns the di
 | `POST /api/v1/service-catalog` | Operator+ | create service |
 | `PUT /api/v1/service-catalog/{id}/monitors/{monitorId}` | Operator+ | associate existing monitor |
 | `GET /api/v1/incidents` and `/{id}` | Viewer+ | filtered list and timeline detail |
+| `GET /api/v1/incidents/{id}/rca` | Viewer+ | explainable dependency/temporal/event/Syslog RCA candidates |
 | `PATCH /api/v1/incidents/{id}` | Operator+ | status, severity, assignee, notes, root cause, resolution |
+| `GET /api/v1/system/ecosystem` | Viewer+ | software readiness, runtime counts and external acceptance gates |
 | `GET/POST /api/v1/service-catalog/{id}/slos` | Viewer+ / Operator+ | reports / create objective |
 | Agent enrollment-token and credential administration | Administrator | machine lifecycle |
 | `/api/v1/agents/*` | agent's existing credential scheme | agent ingestion/operations |
@@ -27,8 +29,8 @@ Development retains explicit `public_reads=true` compatibility. Production refus
 
 Incidents keep the existing monitor detection identity for compatibility. Services associate monitors; the new catalogue does not yet consolidate simultaneous failures into one service incident. Workflow supports open → acknowledged/investigating → mitigated/resolved and explicit reopen; automatic recovery resolves the human phase and appends a timeline event. Manual resolution requires a note. Reopening is rejected if a newer open incident already exists for that monitor. Notes and updates persist alongside an audit record.
 
-SLI is **successful checks / total checks**, pooled over accepted observations for the selected monitor. Error budgets are expressed in failed checks, never minutes; probe sampling frequency affects weighting. `allowedFailedChecks = totalChecks × (1 − targetPercent/100)`; remaining budget may be negative. Burn rate is the failed-check fraction in 1h or 6h divided by the allowed fraction. Reports are unknown with no data or stale/disabled monitoring. Time-weighted availability SLOs and burn-rate notification policies are not implemented yet.
+SLIs support both successful-check ratio and time-weighted availability. Error budgets are expressed in checks or seconds according to the configured SLI. Multi-window burn rates (1h/6h/24h) produce normal/warning/critical states, while stale/disabled monitoring remains unknown rather than healthy. Notification routing can consume incident/alert transitions through the durable outbox.
 
 401 means missing/expired/revoked identity; 403 means insufficient role; 404 unknown entity; 409 invalid workflow transition/duplicate username; 422 invalid input; 429 login throttled. Responses include a server-generated `X-Request-ID`. GET list limits are bounded; service search and incident/admin pagination are supported. OpenAPI at `/docs` describes request schemas; it is not an authentication bypass.
 
-Audit currently covers human login/logout/denial, account management, service/monitor association, SLO creation and manual incident changes. Legacy operations still have their previous auditing behavior and are not all part of the global audit table. MFA, OIDC/LDAP, forgotten-password flows, complete immutable audit controls and notification channels remain roadmap work.
+Global mutation auditing covers authenticated human changes in addition to semantic domain audit events. Local accounts support MFA possession factors, session revocation and administrative recovery. Durable notification channels/routing are implemented. OIDC/LDAP and forgotten-password identity federation remain optional future integrations rather than V1 requirements.

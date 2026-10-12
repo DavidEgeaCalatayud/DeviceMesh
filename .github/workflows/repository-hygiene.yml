@@ -1,0 +1,64 @@
+name: Repository hygiene
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Delete eligible merged branches instead of dry-run
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  prune-merged-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune short-lived branches that have a merged pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY: ${{ github.event_name == 'schedule' || github.event_name == 'push' || inputs.apply == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          echo "Default branch: $default_branch"
+          echo "Apply deletion: $APPLY"
+
+          mapfile -t branches < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name'
+          )
+
+          deleted=0
+          eligible=0
+          for branch in "${branches[@]}"; do
+            [[ "$branch" == "$default_branch" ]] && continue
+            case "$branch" in
+              feat/*|fix/*|docs/*|test/*|security/*|chore/*) ;;
+              *) continue ;;
+            esac
+
+            merged_count="$(
+              gh api --method GET "repos/$GITHUB_REPOSITORY/pulls"                 -f state=closed                 -f "head=$owner:$branch"                 -f per_page=100                 --jq '[.[] | select(.merged_at != null)] | length'
+            )"
+            [[ "$merged_count" -eq 0 ]] && continue
+
+            eligible=$((eligible + 1))
+            echo "eligible: $branch ($merged_count merged PR)"
+            if [[ "$APPLY" == "true" ]]; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
+              deleted=$((deleted + 1))
+            fi
+          done
+
+          echo "Eligible merged branches: $eligible"
+          echo "Deleted branches: $deleted"
