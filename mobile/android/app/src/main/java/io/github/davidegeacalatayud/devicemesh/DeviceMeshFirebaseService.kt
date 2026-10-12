@@ -1,6 +1,7 @@
 package io.github.davidegeacalatayud.devicemesh
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -36,6 +37,7 @@ class DeviceMeshFirebaseService : FirebaseMessagingService() {
         }
     }
 
+    @SuppressLint("MissingPermission")
     override fun onMessageReceived(message: RemoteMessage) {
         createNotificationChannel()
         if (
