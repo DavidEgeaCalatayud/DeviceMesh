@@ -5,6 +5,7 @@ import io.github.davidegeacalatayud.devicemesh.core.model.Device
 import io.github.davidegeacalatayud.devicemesh.core.model.DeviceStatus
 import io.github.davidegeacalatayud.devicemesh.core.model.HumanUser
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.RemoteOperation
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticProbe
@@ -28,6 +29,12 @@ interface DeviceMeshApi {
     suspend fun alerts(): List<Alert>
     suspend fun syntheticMonitors(): List<SyntheticMonitor>
     suspend fun syntheticProbes(): List<SyntheticProbe>
+    suspend fun remoteOperations(deviceId: String): List<RemoteOperation>
+    suspend fun queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String? = null,
+    ): RemoteOperation
 }
 
 fun validateBaseUrl(raw: String): String {
@@ -173,6 +180,78 @@ class HttpDeviceMeshApi(
                 )
             }
         }
+    }
+
+    override suspend fun remoteOperations(deviceId: String): List<RemoteOperation> =
+        withContext(Dispatchers.IO) {
+            val rows = requestArray(
+                "GET",
+                "/api/v1/operator/remote-operations?deviceId=" + java.net.URLEncoder.encode(
+                    deviceId,
+                    Charsets.UTF_8.name(),
+                ) + "&limit=100",
+            )
+            buildList {
+                for (index in 0 until rows.length()) {
+                    add(parseRemoteOperation(rows.getJSONObject(index)))
+                }
+            }
+        }
+
+    override suspend fun queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+        hostname: String?,
+    ): RemoteOperation = withContext(Dispatchers.IO) {
+        require(
+            operationType in setOf(
+                "telemetry.collect",
+                "inventory.refresh",
+                "agent.health_check",
+                "network.dns_lookup",
+                "network.route_snapshot",
+            ),
+        ) { "Unsupported remote operation" }
+        val arguments = JSONObject()
+        if (operationType == "network.dns_lookup") {
+            val value = hostname?.trim().orEmpty()
+            require(value.isNotBlank() && value.length <= 253) {
+                "DNS lookup requires a valid hostname"
+            }
+            arguments.put("hostname", value)
+        }
+        parseRemoteOperation(
+            requestJson(
+                "POST",
+                "/api/v1/operator/remote-operations",
+                JSONObject()
+                    .put("deviceId", deviceId)
+                    .put("operationType", operationType)
+                    .put("arguments", arguments)
+                    .put("ttlSeconds", 300),
+            ),
+        )
+    }
+
+    private fun parseRemoteOperation(row: JSONObject): RemoteOperation {
+        val result = row.optJSONObject("result") ?: JSONObject()
+        val flattened = buildMap {
+            val keys = result.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                put(key, result.opt(key)?.toString().orEmpty())
+            }
+        }
+        return RemoteOperation(
+            id = row.getString("id"),
+            deviceId = row.getString("deviceId"),
+            operationType = row.getString("operationType"),
+            status = row.getString("status"),
+            createdAt = row.getString("createdAt"),
+            completedAt = row.optNullableString("completedAt"),
+            result = flattened,
+            error = row.optNullableString("error"),
+        )
     }
 
     private fun parseSession(body: JSONObject): SessionTokens {
