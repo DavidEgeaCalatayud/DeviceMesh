@@ -11,6 +11,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "identity.h"
 #include "wifi_provisioning/manager.h"
 #include "wifi_provisioning/scheme_ble.h"
 
@@ -127,8 +128,11 @@ int dm_ble_init(const char *device_id) {
     const char *suffix = device_id + strlen(device_id) - 6;
     snprintf(service_name, sizeof(service_name), "DM-%s", suffix);
 
-    char pop[13];
-    snprintf(pop, sizeof(pop), "%.12s", device_id);
+    char pop[17];
+    if (dm_identity_get_provisioning_pop(pop, sizeof(pop)) != 0) {
+        wifi_prov_mgr_deinit();
+        return -1;
+    }
     ESP_LOGI(TAG, "BLE provisioning service %s", service_name);
     ESP_LOGI(TAG, "Provisioning proof-of-possession: %s", pop);
 
