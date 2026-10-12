@@ -42,3 +42,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.davidegeacalatayud.devicemesh.uitests
         SWIFT_VERSION: 5.10
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  DeviceMesh:
+    build:
+      targets:
+        DeviceMesh: all
+    test:
+      targets:
+        - DeviceMeshTests
+        - DeviceMeshUITests
