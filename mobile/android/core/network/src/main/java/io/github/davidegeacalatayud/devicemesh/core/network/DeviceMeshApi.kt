@@ -2,9 +2,12 @@ package io.github.davidegeacalatayud.devicemesh.core.network
 
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
+import io.github.davidegeacalatayud.devicemesh.core.model.DeviceHealth
 import io.github.davidegeacalatayud.devicemesh.core.model.DeviceStatus
 import io.github.davidegeacalatayud.devicemesh.core.model.HumanUser
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.MetricSample
+import io.github.davidegeacalatayud.devicemesh.core.model.RemoteOperation
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticProbe
@@ -24,6 +27,9 @@ interface DeviceMeshApi {
     suspend fun refresh(refreshToken: String): SessionTokens
     suspend fun logout()
     suspend fun devices(): List<Device>
+    suspend fun deviceHealth(deviceId: String): DeviceHealth
+    suspend fun latestMetrics(deviceId: String): List<MetricSample>
+    suspend fun queueRemoteOperation(deviceId: String, operationType: String): RemoteOperation
     suspend fun incidents(): List<Incident>
     suspend fun alerts(): List<Alert>
     suspend fun syntheticMonitors(): List<SyntheticMonitor>
@@ -108,6 +114,77 @@ class HttpDeviceMeshApi(
                 )
             }
         }
+    }
+
+    override suspend fun deviceHealth(deviceId: String): DeviceHealth =
+        withContext(Dispatchers.IO) {
+            val safeId = java.net.URLEncoder.encode(deviceId, Charsets.UTF_8.name())
+            val row = requestJson("GET", "/api/v1/devices/" + safeId + "/health", null)
+            val windows = row.optJSONArray("windows") ?: JSONArray()
+            var availability24h: Double? = null
+            for (index in 0 until windows.length()) {
+                val window = windows.getJSONObject(index)
+                if (window.optString("label") == "24h" && !window.isNull("availabilityPercent")) {
+                    availability24h = window.optDouble("availabilityPercent")
+                }
+            }
+            DeviceHealth(
+                deviceId = row.getString("deviceId"),
+                currentState = row.optNullableString("currentState"),
+                currentOutageSeconds = if (row.isNull("currentOutageSeconds")) {
+                    null
+                } else {
+                    row.optDouble("currentOutageSeconds")
+                },
+                maintenanceActive = row.optBoolean("maintenanceActive"),
+                availability24h = availability24h,
+            )
+        }
+
+    override suspend fun latestMetrics(deviceId: String): List<MetricSample> =
+        withContext(Dispatchers.IO) {
+            val rows = requestArray("GET", "/api/v1/telemetry/latest")
+            buildList {
+                for (index in 0 until rows.length()) {
+                    val row = rows.getJSONObject(index)
+                    if (row.optString("deviceId") != deviceId) continue
+                    add(
+                        MetricSample(
+                            name = row.getString("name"),
+                            value = row.getDouble("value"),
+                            unit = row.optNullableString("unit"),
+                            timestamp = row.getString("timestamp"),
+                        ),
+                    )
+                }
+            }.sortedBy { it.name }
+        }
+
+    override suspend fun queueRemoteOperation(
+        deviceId: String,
+        operationType: String,
+    ): RemoteOperation = withContext(Dispatchers.IO) {
+        require(
+            operationType in setOf(
+                "telemetry.collect",
+                "inventory.refresh",
+                "agent.health_check",
+            ),
+        ) { "Unsupported mobile operation" }
+        val row = requestJson(
+            "POST",
+            "/api/v1/operator/remote-operations",
+            JSONObject()
+                .put("deviceId", deviceId)
+                .put("operationType", operationType)
+                .put("arguments", JSONObject())
+                .put("ttlSeconds", 300),
+        )
+        RemoteOperation(
+            id = row.getString("id"),
+            operationType = row.getString("operationType"),
+            status = row.getString("status"),
+        )
     }
 
     override suspend fun incidents(): List<Incident> = withContext(Dispatchers.IO) {
@@ -225,6 +302,16 @@ class HttpDeviceMeshApi(
     private fun requestArray(method: String, path: String): JSONArray {
         val (_, text) = request(method, path)
         return JSONArray(text)
+    }
+
+    private fun requestJson(
+        method: String,
+        path: String,
+        body: Nothing?,
+        authenticated: Boolean = true,
+    ): JSONObject {
+        val (_, text) = request(method, path, null, authenticated)
+        return JSONObject(text)
     }
 
     private fun requestJson(
