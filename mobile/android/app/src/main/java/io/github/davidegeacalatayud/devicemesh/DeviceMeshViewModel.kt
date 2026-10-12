@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.messaging.FirebaseMessaging
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
@@ -63,6 +64,7 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
             state = state.copy(loading = true, error = null)
             try {
                 loadData()
+                syncPushRegistration()
             } catch (error: ApiException) {
                 if (error.statusCode == 401) {
                     try {
@@ -70,6 +72,7 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
                         store.save(refreshed)
                         state = state.copy(session = refreshed)
                         loadData()
+                        syncPushRegistration()
                     } catch (refreshError: Exception) {
                         store.clear()
                         state = MobileState(
@@ -105,8 +108,33 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    private fun syncPushRegistration() {
+        if (state.session == null) return
+
+        fun register(token: String) {
+            store.savePushToken(token)
+            viewModelScope.launch {
+                runCatching {
+                    api.registerPushToken(
+                        provider = "fcm",
+                        environment = "production",
+                        installationId = store.installationId(),
+                        token = token,
+                    )
+                }
+            }
+        }
+
+        store.pushToken()?.let(::register)
+        runCatching { FirebaseMessaging.getInstance() }
+            .getOrNull()
+            ?.token
+            ?.addOnSuccessListener(::register)
+    }
+
     fun logout() {
         viewModelScope.launch {
+            runCatching { api.unregisterPushToken(store.installationId()) }
             runCatching { api.logout() }
             store.clear()
             state = MobileState(server = store.server())
