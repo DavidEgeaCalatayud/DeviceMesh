@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     notification_secret_directory: str = "/run/secrets/devicemesh-notifications"
     nms_secret_directory: str = "/run/secrets/devicemesh-nms"
     nms_poll_interval_seconds: int = Field(default=5, ge=1, le=300)
+    syslog_host: str = "0.0.0.0"
+    syslog_port: int = Field(default=5514, ge=1, le=65535)
+    syslog_max_datagram_bytes: int = Field(default=8192, ge=256, le=65535)
+    syslog_retention_days: int = Field(default=90, ge=7, le=3650)
     notification_delivery_interval_seconds: int = Field(default=5, ge=1, le=300)
     notification_delivery_timeout_seconds: int = Field(default=10, ge=1, le=60)
     notification_delivery_batch_size: int = Field(default=25, ge=1, le=500)
@@ -80,7 +84,8 @@ class Settings(BaseSettings):
             "event_retention_days", "synthetic_check_retention_days",
             "notification_delivery_interval_seconds", "notification_delivery_timeout_seconds",
             "notification_delivery_batch_size", "notification_delivery_lease_seconds",
-            "notification_delivery_max_attempts",
+            "notification_delivery_max_attempts", "syslog_port",
+            "syslog_max_datagram_bytes", "syslog_retention_days",
         ):
             if getattr(self, field) <= 0:
                 raise ValueError(f"{field} must be positive")
