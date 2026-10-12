@@ -116,7 +116,19 @@ def main() -> None:
             encoding="utf-8",
         )
 
+    summary_path = output / "capacity-summary.json"
+    run(
+        [
+            sys.executable,
+            "tools/benchmarking/capacity_summary.py",
+            str(output),
+            "--output",
+            str(summary_path),
+        ],
+        env=env,
+    )
     print(state_path.read_text(encoding="utf-8"))
+    print(summary_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
