@@ -67,3 +67,13 @@ int dm_credentials_get_agent_credential(
     if (get_value("cred_id", credential_id, credential_id_capacity) != 0) return -1;
     return get_value("credential", credential, credential_capacity);
 }
+
+
+int dm_credentials_clear_all(void) {
+    nvs_handle_t handle;
+    if (nvs_open(DM_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) return -1;
+    esp_err_t err = nvs_erase_all(handle);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    nvs_close(handle);
+    return err == ESP_OK ? 0 : -1;
+}
