@@ -199,7 +199,9 @@ int dm_cloud_send_telemetry(const char *agent_id, const dm_telemetry_t *telemetr
         return -1;
     }
 
-    time_t now = time(NULL);
+    time_t now = telemetry->sampled_at_unix > 0
+        ? (time_t)telemetry->sampled_at_unix
+        : time(NULL);
     if (now < 1704067200) return -1;
     struct tm utc;
     gmtime_r(&now, &utc);
