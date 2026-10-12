@@ -69,7 +69,7 @@ def parse_syslog(payload: bytes, *, maximum_bytes: int = 8192) -> ParsedSyslog:
         timestamp = match.group("timestamp")
         if timestamp != "-":
             try:
-                datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                datetime.fromisoformat(timestamp)
             except ValueError as exc:
                 raise ValueError("invalid RFC5424 timestamp") from exc
         return ParsedSyslog(
