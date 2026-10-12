@@ -18,3 +18,15 @@ data class Incident(val id: String, val title: String, val severity: String, val
 data class Alert(val id: String, val deviceId: String, val openedAt: String?, val closedAt: String?)
 data class SyntheticMonitor(val id: String, val name: String, val kind: String, val target: String, val enabled: Boolean)
 data class SyntheticProbe(val id: String, val name: String, val location: String, val online: Boolean, val lastSeenAt: String?)
+
+
+data class RemoteOperation(
+    val id: String,
+    val deviceId: String,
+    val operationType: String,
+    val status: String,
+    val createdAt: String,
+    val completedAt: String?,
+    val result: Map<String, String>,
+    val error: String?,
+)
