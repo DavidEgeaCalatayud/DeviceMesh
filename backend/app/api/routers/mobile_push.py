@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.dependencies.security import require_human
 from app.api.schemas.mobile_push import (
@@ -28,13 +28,19 @@ def register_push_subscription(
     principal: Human,
     repository: Repository,
 ) -> MobilePushRegistrationResponse:
-    target = repository.register(
-        user_id=principal.id,
-        provider=request.provider,
-        environment=request.environment,
-        installation_id=request.installationId,
-        token=request.token,
-    )
+    try:
+        target = repository.register(
+            user_id=principal.id,
+            provider=request.provider,
+            environment=request.environment,
+            installation_id=request.installationId,
+            token=request.token,
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="mobile push requires a persisted human account",
+        ) from exc
     return MobilePushRegistrationResponse(
         id=target.id,
         provider=target.provider,
