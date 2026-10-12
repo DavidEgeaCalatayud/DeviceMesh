@@ -8,11 +8,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.database import DeviceEventRow, DeviceRow
 from app.infrastructure.repositories.nms import NetworkNeighborRow
-from app.infrastructure.repositories.platform import (
-    ServiceDependencyRow,
-    ServiceMonitorRow,
-    ServiceRow,
-)
 from app.infrastructure.repositories.synthetics import (
     ServiceIncidentRow,
     SyntheticMonitorRow,
@@ -87,6 +82,8 @@ class RcaRepository:
         impacted_service_ids: list[str],
         max_depth: int = 5,
     ) -> dict[str, list[str]]:
+        from app.infrastructure.repositories.platform import ServiceDependencyRow
+
         paths: dict[str, list[str]] = {}
         pending: list[tuple[str, list[str], int]] = [
             (service_id, [service_id], 0) for service_id in impacted_service_ids
@@ -113,6 +110,8 @@ class RcaRepository:
 
     @staticmethod
     def _service_labels(session: Session, service_ids: list[str]) -> dict[str, str]:
+        from app.infrastructure.repositories.platform import ServiceRow
+
         if not service_ids:
             return {}
         rows = session.scalars(
@@ -122,6 +121,8 @@ class RcaRepository:
 
     @staticmethod
     def _monitor_ids(session: Session, service_id: str) -> list[str]:
+        from app.infrastructure.repositories.platform import ServiceMonitorRow
+
         return list(
             session.scalars(
                 select(ServiceMonitorRow.monitor_id).where(
@@ -203,6 +204,8 @@ class RcaRepository:
         candidate.score = min(100, candidate.score + strongest_syslog)
 
     def explain(self, incident_id: str) -> dict[str, object]:
+        from app.infrastructure.repositories.platform import ServiceMonitorRow, ServiceRow
+
         with self.sessions() as session:
             incident = session.get(ServiceIncidentRow, incident_id)
             if incident is None:
