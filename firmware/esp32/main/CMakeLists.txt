@@ -11,6 +11,7 @@ idf_component_register(
         "cloud.c"
         "time_sync.c"
         "network_probe.c"
+        "offline_queue.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
