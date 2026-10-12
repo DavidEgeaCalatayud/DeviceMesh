@@ -10,6 +10,7 @@ idf_component_register(
         "credentials.c"
         "cloud.c"
         "time_sync.c"
+        "network_probe.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
@@ -20,4 +21,5 @@ idf_component_register(
         esp_http_client
         json
         mbedtls
+        lwip
 )
