@@ -27,6 +27,10 @@ def main() -> None:
     parser.add_argument("--output-dir", default="artifacts/soak")
     parser.add_argument("--operator-token", default=os.getenv("DEVICEMESH_OPERATOR_TOKEN"))
     parser.add_argument("--database-url", default=os.getenv("DEVICEMESH_DATABASE_URL"))
+    parser.add_argument("--api-metrics-url", default=os.getenv("DEVICEMESH_API_METRICS_URL"))
+    parser.add_argument("--worker-metrics-url", default=os.getenv("DEVICEMESH_WORKER_METRICS_URL"))
+    parser.add_argument("--redis-url", default=os.getenv("DEVICEMESH_REDIS_URL"))
+    parser.add_argument("--websocket-url", default=os.getenv("DEVICEMESH_WEBSOCKET_URL"))
     parser.add_argument("--max-failure-rate", type=float, default=0.001)
     parser.add_argument("--max-p95-ms", type=float, default=1000.0)
     args = parser.parse_args()
@@ -38,6 +42,14 @@ def main() -> None:
         parser.error("operator token is required")
     if not args.database_url:
         parser.error("database URL is required")
+    if not args.api_metrics_url:
+        parser.error("API metrics URL is required")
+    if not args.worker_metrics_url:
+        parser.error("worker metrics URL is required")
+    if not args.redis_url:
+        parser.error("Redis URL is required")
+    if not args.websocket_url:
+        parser.error("WebSocket URL is required")
 
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -63,6 +75,7 @@ def main() -> None:
         stamp = f"{chunk_index:05d}"
         load_report = output / f"load-{stamp}.json"
         capacity_report = output / f"capacity-{stamp}.json"
+        runtime_report = output / f"runtime-{stamp}.json"
         run(
             [
                 sys.executable,
@@ -96,6 +109,25 @@ def main() -> None:
                 args.database_url,
                 "--output",
                 str(capacity_report),
+            ],
+            env=env,
+        )
+        run(
+            [
+                sys.executable,
+                "tools/benchmarking/runtime_snapshot.py",
+                "--api-metrics-url",
+                args.api_metrics_url,
+                "--worker-metrics-url",
+                args.worker_metrics_url,
+                "--redis-url",
+                args.redis_url,
+                "--websocket-url",
+                args.websocket_url,
+                "--operator-token",
+                args.operator_token,
+                "--output",
+                str(runtime_report),
             ],
             env=env,
         )
