@@ -108,8 +108,10 @@ Human mutation audit middleware records channel/route creation, state changes an
 
 ## Mobile subscription lifecycle
 
-Android uses Firebase Cloud Messaging. A production build supplies `app/google-services.json`;
-CI deliberately does not require that secret configuration. The FCM token is cached under the
+Android uses Firebase Cloud Messaging. Normal pull-request CI deliberately does not require
+Firebase project credentials. The signed release workflow requires
+`ANDROID_GOOGLE_SERVICES_JSON_BASE64` and decodes it only to the ephemeral runner's
+`app/google-services.json` before Gradle configuration, then deletes it during cleanup. The FCM token is cached under the
 Android Keystore-backed encrypted store, registered after login/refresh, updated on
 `onNewToken`, and unregistered from DeviceMesh on logout.
 
