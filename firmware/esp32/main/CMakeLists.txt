@@ -12,6 +12,7 @@ idf_component_register(
         "time_sync.c"
         "network_probe.c"
         "offline_queue.c"
+        "recovery.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
@@ -23,4 +24,5 @@ idf_component_register(
         json
         mbedtls
         lwip
+        driver
 )
