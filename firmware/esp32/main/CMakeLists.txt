@@ -1,1 +1,22 @@
-idf_component_register(SRCS "main.c" "telemetry.c" "wifi.c" "ble.c" "sensors.c" "protocol.c" INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS
+        "main.c"
+        "telemetry.c"
+        "wifi.c"
+        "ble.c"
+        "sensors.c"
+        "protocol.c"
+        "identity.c"
+        "credentials.c"
+        "cloud.c"
+    INCLUDE_DIRS "."
+    REQUIRES
+        esp_wifi
+        esp_event
+        esp_netif
+        nvs_flash
+        wifi_provisioning
+        esp_http_client
+        json
+        mbedtls
+)
