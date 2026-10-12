@@ -105,6 +105,14 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    suspend fun createHardwareEnrollmentToken(): String {
+        val session = state.session ?: throw IllegalStateException("No active session")
+        require(session.user.role == "administrator") {
+            "Administrator role is required to provision hardware"
+        }
+        return api.createAgentEnrollmentToken(900)
+    }
+
     fun logout() {
         viewModelScope.launch {
             runCatching { api.logout() }
