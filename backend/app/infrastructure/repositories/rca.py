@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.database import DeviceEventRow, DeviceRow
@@ -287,13 +287,13 @@ class RcaRepository:
                             .where(
                                 NetworkNeighborRow.present.is_(True),
                                 or_(
-                                    (
-                                        (NetworkNeighborRow.device_id == service.device_id)
-                                        & (NetworkNeighborRow.remote_device_id == target_device_id)
+                                    and_(
+                                        NetworkNeighborRow.device_id == service.device_id,
+                                        NetworkNeighborRow.remote_device_id == target_device_id,
                                     ),
-                                    (
-                                        (NetworkNeighborRow.device_id == target_device_id)
-                                        & (NetworkNeighborRow.remote_device_id == service.device_id)
+                                    and_(
+                                        NetworkNeighborRow.device_id == target_device_id,
+                                        NetworkNeighborRow.remote_device_id == service.device_id,
                                     ),
                                 ),
                             )
@@ -355,11 +355,12 @@ class RcaRepository:
                 ),
             )
             views = [candidate.view() for candidate in ordered[:10]]
+            explained = bool(ordered and ordered[0].score >= 40)
             return {
                 "incidentId": incident.id,
                 "generatedAt": datetime.now(UTC),
                 "method": "dependency-temporal-evidence-v1",
-                "status": "explained" if views else "insufficient_data",
+                "status": "explained" if explained else "insufficient_data",
                 "primaryCandidate": views[0] if views else None,
                 "candidates": views,
                 "evidenceWindow": {
