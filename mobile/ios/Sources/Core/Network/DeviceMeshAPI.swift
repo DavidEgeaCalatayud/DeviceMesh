@@ -66,6 +66,20 @@ actor DeviceMeshAPI {
         accessToken = nil
     }
 
+    func createAgentEnrollmentToken(ttlSeconds: Int = 900) async throws -> String {
+        guard (60...3600).contains(ttlSeconds) else {
+            throw DeviceMeshAPIError.server(0, "Invalid enrollment TTL")
+        }
+        struct Request: Codable { let ttlSeconds: Int }
+        struct Response: Codable { let token: String; let expiresAt: String }
+        let response: Response = try await request(
+            path: "/api/v1/operator/agent-enrollment-tokens",
+            method: "POST",
+            body: Request(ttlSeconds: ttlSeconds)
+        )
+        return response.token
+    }
+
     func devices() async throws -> [Device] {
         try await request(path: "/api/v1/devices")
     }
