@@ -132,6 +132,12 @@ def test_policy_compacts_raw_and_expires_archived_operational_data() -> None:
         hourly_retention_days=365,
         event_retention_days=90,
         synthetic_check_retention_days=90,
+        discovery_observation_retention_days=30,
+        nms_counter_retention_days=90,
+        syslog_retention_days=90,
+        audit_retention_days=730,
+        security_audit_retention_days=730,
+        notification_delivery_retention_days=90,
     )
 
     assert result.raw_samples_deleted >= 2
