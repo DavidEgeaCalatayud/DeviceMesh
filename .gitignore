@@ -33,12 +33,16 @@ coverage/
 local.properties
 *.apk
 *.aab
+google-services.json
 
 # Apple
 .DS_Store
 DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
+*.p12
+*.mobileprovision
+AuthKey_*.p8
 
 # ESP-IDF
 firmware/esp32/build/
