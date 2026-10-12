@@ -18,9 +18,18 @@ config DM_BME280_SCL_GPIO
     default 22
     range 0 48
 
+config DM_REQUIRE_HARDENING
+    bool "Require Secure Boot and flash encryption at runtime"
+    default n
+    help
+        Enable for production/manufacturing builds after provisioning the
+        corresponding eFuses and signing/encryption keys. Firmware fails
+        closed before reading DeviceMesh credentials if either protection
+        is unavailable.
+
 config DM_RECOVERY_GPIO
     int "Recovery button GPIO"
-    default 0
+    default 27
     range 0 48
     help
         Hold this active-low GPIO for three seconds during boot to clear Wi-Fi,
