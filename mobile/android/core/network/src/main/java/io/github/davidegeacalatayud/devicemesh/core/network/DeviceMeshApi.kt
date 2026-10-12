@@ -19,6 +19,18 @@ import org.json.JSONObject
 
 class ApiException(val statusCode: Int, message: String) : RuntimeException(message)
 
+private val REMOTE_OPERATION_TYPES = setOf(
+    "telemetry.collect",
+    "inventory.refresh",
+    "agent.health_check",
+    "network.dns_lookup",
+    "network.route_snapshot",
+)
+
+fun validateRemoteOperationType(operationType: String) {
+    require(operationType in REMOTE_OPERATION_TYPES) { "Unsupported remote operation" }
+}
+
 interface DeviceMeshApi {
     suspend fun health(): Boolean
     suspend fun login(username: String, password: String, mfaCode: String? = null): SessionTokens
@@ -203,15 +215,7 @@ class HttpDeviceMeshApi(
         operationType: String,
         hostname: String?,
     ): RemoteOperation = withContext(Dispatchers.IO) {
-        require(
-            operationType in setOf(
-                "telemetry.collect",
-                "inventory.refresh",
-                "agent.health_check",
-                "network.dns_lookup",
-                "network.route_snapshot",
-            ),
-        ) { "Unsupported remote operation" }
+        validateRemoteOperationType(operationType)
         val arguments = JSONObject()
         if (operationType == "network.dns_lookup") {
             val value = hostname?.trim().orEmpty()
