@@ -13,12 +13,28 @@ final class AppModel: ObservableObject {
 
     private let store = SecureSessionStore()
     private var api: DeviceMeshAPI
+    private var pushObserver: NSObjectProtocol?
 
     init() {
         let restored = store.load()
         self.session = restored
         self.api = try! DeviceMeshAPI(baseURL: store.server, accessToken: restored?.accessToken)
-        if restored != nil { Task { await refreshAll() } }
+        self.pushObserver = NotificationCenter.default.addObserver(
+            forName: .deviceMeshPushToken,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let token = notification.userInfo?["token"] as? String else { return }
+            Task { @MainActor [weak self] in
+                await self?.registerPushToken(token)
+            }
+        }
+        if restored != nil {
+            Task {
+                await refreshAll()
+                await syncPushRegistration()
+            }
+        }
     }
 
     func login(server: String, username: String, password: String, mfaCode: String) async {
@@ -38,6 +54,7 @@ final class AppModel: ObservableObject {
             api = nextAPI
             session = nextSession
             await refreshAll()
+            await syncPushRegistration()
         } catch {
             self.error = error.localizedDescription
         }
@@ -78,7 +95,28 @@ final class AppModel: ObservableObject {
         self.probes = (try? await api.syntheticProbes()) ?? []
     }
 
+    private func syncPushRegistration() async {
+        guard let token = store.pushToken() else { return }
+        await registerPushToken(token)
+    }
+
+    private func registerPushToken(_ token: String) async {
+        guard session != nil else { return }
+        #if DEBUG
+        let environment = "sandbox"
+        #else
+        let environment = "production"
+        #endif
+        try? await api.registerPushToken(
+            provider: "apns",
+            environment: environment,
+            installationId: store.installationId,
+            token: token
+        )
+    }
+
     func logout() async {
+        try? await api.unregisterPushToken(installationId: store.installationId)
         await api.logout()
         store.clear()
         session = nil
