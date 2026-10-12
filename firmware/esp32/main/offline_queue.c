@@ -1,22 +1,12 @@
 #include "offline_queue.h"
 
-#include <string.h>
-
 #include "nvs.h"
+#include "telemetry_queue.h"
 
 #define QUEUE_NAMESPACE "dm_queue"
 #define QUEUE_KEY "telemetry"
-#define QUEUE_MAGIC 0x444D5131U
-#define QUEUE_CAPACITY 64U
 
-typedef struct {
-    uint32_t magic;
-    uint32_t head;
-    uint32_t count;
-    dm_telemetry_t samples[QUEUE_CAPACITY];
-} queue_state_t;
-
-static queue_state_t s_queue;
+static dm_queue_state_t s_queue;
 
 static int persist(void) {
     nvs_handle_t handle;
@@ -28,8 +18,7 @@ static int persist(void) {
 }
 
 int dm_offline_queue_init(void) {
-    memset(&s_queue, 0, sizeof(s_queue));
-    s_queue.magic = QUEUE_MAGIC;
+    dm_queue_reset(&s_queue);
 
     nvs_handle_t handle;
     if (nvs_open(QUEUE_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
@@ -41,41 +30,25 @@ int dm_offline_queue_init(void) {
     if (
         err != ESP_OK ||
         length != sizeof(s_queue) ||
-        s_queue.magic != QUEUE_MAGIC ||
-        s_queue.head >= QUEUE_CAPACITY ||
-        s_queue.count > QUEUE_CAPACITY
+        !dm_queue_valid(&s_queue)
     ) {
-        memset(&s_queue, 0, sizeof(s_queue));
-        s_queue.magic = QUEUE_MAGIC;
+        dm_queue_reset(&s_queue);
         return persist();
     }
     return 0;
 }
 
 int dm_offline_queue_push(const dm_telemetry_t *sample) {
-    if (!sample) return -1;
-    uint32_t index = (s_queue.head + s_queue.count) % QUEUE_CAPACITY;
-    if (s_queue.count == QUEUE_CAPACITY) {
-        index = s_queue.head;
-        s_queue.head = (s_queue.head + 1U) % QUEUE_CAPACITY;
-    } else {
-        s_queue.count++;
-    }
-    s_queue.samples[index] = *sample;
+    if (dm_queue_push(&s_queue, sample) != 0) return -1;
     return persist();
 }
 
 int dm_offline_queue_peek(dm_telemetry_t *sample) {
-    if (!sample || s_queue.count == 0U) return -1;
-    *sample = s_queue.samples[s_queue.head];
-    return 0;
+    return dm_queue_peek(&s_queue, sample);
 }
 
 int dm_offline_queue_pop(void) {
-    if (s_queue.count == 0U) return -1;
-    memset(&s_queue.samples[s_queue.head], 0, sizeof(dm_telemetry_t));
-    s_queue.head = (s_queue.head + 1U) % QUEUE_CAPACITY;
-    s_queue.count--;
+    if (dm_queue_pop(&s_queue) != 0) return -1;
     return persist();
 }
 
@@ -83,9 +56,7 @@ unsigned dm_offline_queue_count(void) {
     return s_queue.count;
 }
 
-
 int dm_offline_queue_clear(void) {
-    memset(&s_queue, 0, sizeof(s_queue));
-    s_queue.magic = QUEUE_MAGIC;
+    dm_queue_reset(&s_queue);
     return persist();
 }
