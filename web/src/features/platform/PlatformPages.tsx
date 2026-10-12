@@ -138,7 +138,14 @@ export function IncidentsPage({ incidentId }: { incidentId?: string }) {
   }, [incidentId, activeOnly, offset])
   async function update(changes: Record<string, unknown>) {
     setBusy(true); setError('')
-    try { await platformApi(`/incidents/${incidentId}`, { method: 'PATCH', body: JSON.stringify(changes) }); setDetail(await platformApi<Incident>(`/incidents/${incidentId}`)) }
+    try {
+      await platformApi(`/incidents/${incidentId}`, { method: 'PATCH', body: JSON.stringify(changes) })
+      const [nextDetail, nextRca] = await Promise.all([
+        platformApi<Incident>(`/incidents/${incidentId}`),
+        platformApi<RcaReport>(`/incidents/${incidentId}/rca`),
+      ])
+      setDetail(nextDetail); setRca(nextRca)
+    }
     catch (reason) { setError(errorText(reason)) } finally { setBusy(false) }
   }
   return <main className="platform-page"><h1>{detail && incidentId ? detail.title : 'Incidents'}</h1>{error && <p role="alert">{error}</p>}{loading && <p role="status">Loading incidents…</p>}
