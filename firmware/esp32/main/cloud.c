@@ -283,7 +283,7 @@ int dm_cloud_send_telemetry(const char *agent_id, const dm_telemetry_t *telemetr
     char url[320];
     int result = -1;
     if (build_url(url, sizeof(url), server, "/api/v1/agents/telemetry") == 0 &&
-        http_json(url, body, agent_id, credential, NULL, 0) == ESP_OK) {
+        http_json(url, body, agent_id, credential, NULL, 0, NULL) == ESP_OK) {
         result = 0;
     }
     cJSON_free(body);
