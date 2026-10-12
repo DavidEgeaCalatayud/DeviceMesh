@@ -1,4 +1,4 @@
-# Runs against GitHub's current pull-request merge ref so HA is validated with the latest main.
+# Runs after changes land on main, or manually, to validate the production HA contract.
 name: High availability acceptance
 
 on:
