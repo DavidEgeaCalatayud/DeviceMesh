@@ -14,3 +14,6 @@ jobs:
         run: xcodegen generate
       - working-directory: mobile/ios
         run: xcodebuild -project DeviceMesh.xcodeproj -scheme DeviceMesh -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
+      - name: Run iOS unit tests
+        working-directory: mobile/ios
+        run: xcodebuild -project DeviceMesh.xcodeproj -scheme DeviceMesh -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' test CODE_SIGNING_ALLOWED=NO
