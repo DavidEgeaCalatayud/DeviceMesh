@@ -20,8 +20,9 @@ x-api: &api
     DEVICEMESH_REDIS_URL: redis://redis:6379/0
     DEVICEMESH_DATABASE_URL_FILE: /run/secrets/application_url
     DEVICEMESH_OPERATOR_TOKEN_FILE: /run/secrets/operator_token
+    DEVICEMESH_MOBILE_PUSH_ENCRYPTION_SECRET_FILE: /run/secrets/mobile_push_encryption
     DEVICEMESH_CORS_ORIGINS: ${DEVICEMESH_CORS_ORIGINS:?set the HTTPS origin}
-  secrets: [application_url, operator_token]
+  secrets: [application_url, operator_token, mobile_push_encryption]
 
 services:
   postgres:
@@ -64,7 +65,7 @@ services:
     environment:
       <<: *runtime
       DEVICEMESH_DATABASE_URL_FILE: /run/secrets/migration_url
-    secrets: [migration_url, operator_token]
+    secrets: [migration_url, operator_token, mobile_push_encryption]
     depends_on:
       postgres: {condition: service_healthy}
     restart: "no"
@@ -190,4 +191,5 @@ secrets:
   application_url: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/application_url"}
   migration_url: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/migration_url"}
   operator_token: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/operator_token"}
+  mobile_push_encryption: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/mobile_push_encryption"}
   grafana_admin_password: {file: "${DEVICEMESH_SECRETS_DIR:-./.secrets}/grafana_admin_password"}
