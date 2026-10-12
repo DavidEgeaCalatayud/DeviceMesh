@@ -10,7 +10,9 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
+import io.github.davidegeacalatayud.devicemesh.core.model.DeviceHealth
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.MetricSample
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticProbe
@@ -30,6 +32,9 @@ data class MobileState(
     val alerts: List<Alert> = emptyList(),
     val monitors: List<SyntheticMonitor> = emptyList(),
     val probes: List<SyntheticProbe> = emptyList(),
+    val deviceHealth: Map<String, DeviceHealth> = emptyMap(),
+    val deviceMetrics: Map<String, List<MetricSample>> = emptyMap(),
+    val operationMessage: String? = null,
 )
 
 class DeviceMeshViewModel(application: Application) : AndroidViewModel(application) {
@@ -90,6 +95,42 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
                 state = state.copy(error = error.message ?: "Unable to load DeviceMesh")
             } finally {
                 state = state.copy(loading = false)
+            }
+        }
+    }
+
+    fun loadDeviceDetails(deviceId: String) {
+        viewModelScope.launch {
+            try {
+                val health = async { api.deviceHealth(deviceId) }
+                val metrics = async { api.latestMetrics(deviceId) }
+                state = state.copy(
+                    deviceHealth = state.deviceHealth + (deviceId to health.await()),
+                    deviceMetrics = state.deviceMetrics + (deviceId to metrics.await()),
+                    operationMessage = null,
+                )
+            } catch (error: Exception) {
+                state = state.copy(error = error.message ?: "Unable to load device detail")
+            }
+        }
+    }
+
+    fun queueDeviceOperation(deviceId: String, operationType: String) {
+        val role = state.session?.user?.role ?: return
+        if (role == "viewer") {
+            state = state.copy(operationMessage = "Viewer role cannot queue operations")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val operation = api.queueRemoteOperation(deviceId, operationType)
+                state = state.copy(
+                    operationMessage = operation.operationType + " · " + operation.status,
+                )
+            } catch (error: Exception) {
+                state = state.copy(
+                    operationMessage = error.message ?: "Unable to queue operation",
+                )
             }
         }
     }
