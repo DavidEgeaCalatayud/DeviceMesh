@@ -66,6 +66,40 @@ actor DeviceMeshAPI {
         accessToken = nil
     }
 
+    func registerPushToken(
+        provider: String,
+        environment: String,
+        installationId: String,
+        token: String
+    ) async throws {
+        struct Body: Codable {
+            let provider: String
+            let environment: String
+            let installationId: String
+            let token: String
+        }
+        let _: EmptyResponse = try await request(
+            path: "/api/v1/mobile/push-subscriptions",
+            method: "POST",
+            body: Body(
+                provider: provider,
+                environment: environment,
+                installationId: installationId,
+                token: token
+            )
+        )
+    }
+
+    func unregisterPushToken(installationId: String) async throws {
+        let safe = installationId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? installationId
+        let _: EmptyResponse = try await request(
+            path: "/api/v1/mobile/push-subscriptions/" + safe,
+            method: "DELETE"
+        )
+    }
+
     func devices() async throws -> [Device] {
         try await request(path: "/api/v1/devices")
     }
