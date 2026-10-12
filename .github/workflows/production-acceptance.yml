@@ -1,8 +1,13 @@
 name: Production acceptance
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths: ["backend/**", "web/**", "infra/**", "observability/**", "tools/deployment/**", ".github/workflows/production-acceptance.yml"]
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
