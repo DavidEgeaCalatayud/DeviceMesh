@@ -9,6 +9,7 @@
 #include "identity.h"
 #include "nvs_flash.h"
 #include "sensors.h"
+#include "time_sync.h"
 #include "wifi.h"
 
 static const char *TAG = "devicemesh";
@@ -47,6 +48,10 @@ void app_main(void) {
         return;
     }
 
+    if (dm_time_sync(30000) != 0) {
+        ESP_LOGW(TAG, "SNTP synchronization not ready; cloud loop will retry");
+    }
+
     esp_task_wdt_add(NULL);
     uint32_t failed_cycles = 0;
     for (;;) {
@@ -55,7 +60,8 @@ void app_main(void) {
         if (dm_cloud_enroll_if_needed(agent_id) == 0) {
             dm_telemetry_t telemetry = {.failed_delivery_cycles = failed_cycles};
             if (dm_read_sensors(&telemetry) == 0 &&
-                dm_cloud_send_heartbeat(agent_id, &telemetry) == 0) {
+                dm_cloud_send_heartbeat(agent_id, &telemetry) == 0 &&
+                dm_cloud_send_telemetry(agent_id, &telemetry) == 0) {
                 failed_cycles = 0;
             } else if (failed_cycles < UINT32_MAX) {
                 failed_cycles++;
