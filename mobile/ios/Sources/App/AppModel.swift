@@ -78,6 +78,15 @@ final class AppModel: ObservableObject {
         self.probes = (try? await api.syntheticProbes()) ?? []
     }
 
+    var serverURL: URL { store.server }
+
+    func createHardwareEnrollmentToken() async throws -> String {
+        guard session?.user.role == "administrator" else {
+            throw DeviceMeshAPIError.server(403, "Administrator role is required to provision hardware")
+        }
+        return try await api.createAgentEnrollmentToken(ttlSeconds: 900)
+    }
+
     func logout() async {
         await api.logout()
         store.clear()
