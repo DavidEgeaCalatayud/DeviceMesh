@@ -4,7 +4,7 @@
 
 DeviceMesh discovers devices on networks you control, models stable device identity, ingests optional agent telemetry and builds a realtime inventory, event timeline, alerting surface and observed network view.
 
-> **Current status:** V1.3 plus a platform/deployment candidate. Windows/Linux/macOS agents, distributed probes and monitor incidents are implemented. This branch adds human sessions/RBAC, a logical service catalogue, incident workflow/timeline, check-based SLOs, Redis fan-out, a separate worker, durable probe delivery, metrics and production deployment/restore tooling. Clean-host, Docker/PostgreSQL acceptance and scale/soak validation are still release gates. Android, iOS and ESP32 remain scaffolds.
+> **Current status:** V1.3 plus a platform/deployment candidate. Windows/Linux/macOS agents, distributed probes, native Android/iOS operator clients, SNMPv3 NMS polling, LLDP/CDP physical topology and persistent Syslog are implemented in main. Human sessions/RBAC, service/incident/SLO workflows, Redis fan-out, workers, observability and production deployment/restore tooling are also present. Long soak/capacity evidence, full mobile E2E/distribution and production ESP32 hardware acceptance remain release gates.
 
 See the [57-point implementation ledger](docs/product/IMPLEMENTATION_57_POINTS.md) for the exact scope and remaining work, [production deployment](docs/operations/PRODUCTION_DEPLOYMENT.md), [platform API/security](docs/operations/PLATFORM_API.md), [backup/restore](docs/operations/BACKUP_RESTORE.md) and [probe daemon](docs/operations/PROBE_DAEMON.md).
 
@@ -44,7 +44,7 @@ Windows Agent Linux Agent  macOS Agent  Network Probes
 - Separate human, agent and probe trust domains.
 - Network discovery is bounded to operator-authorized scopes.
 - Service inventory uses an explicit port allowlist and connect-only checks.
-- Approximate topology is labelled as inference rather than physical truth.
+- LLDP/CDP physical topology is preferred; segment inference is retained only as an explicitly approximate fallback.
 - Controlled remote operations use a strict allowlist and never expose generic shell execution.
 - CI, security scanning, SBOM and observability are product concerns.
 
@@ -58,9 +58,9 @@ Windows Agent Linux Agent  macOS Agent  Network Probes
 | `agents/linux/` | Python | Linux host agent |
 | `agents/macos/` | Swift | native macOS host agent |
 | `agents/probe/` | Python | bounded discovery and distributed synthetic probe |
-| `mobile/android/` | Kotlin, Compose | modular Android client scaffold |
-| `mobile/ios/` | Swift, SwiftUI | iOS client scaffold |
-| `firmware/esp32/` | C, ESP-IDF | edge probe scaffold |
+| `mobile/android/` | Kotlin, Compose | native Android operator client |
+| `mobile/ios/` | Swift, SwiftUI | native iOS operator client |
+| `firmware/esp32/` | C, ESP-IDF | ESP32 edge-probe workstream; production hardware acceptance pending |
 | `protocol/` | JSON Schema | cross-language wire contracts |
 | `infra/` | Docker, PostgreSQL, Redis | local deployment |
 | `docs/adr/` | ADRs | architectural decisions and trade-offs |
