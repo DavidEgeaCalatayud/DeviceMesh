@@ -2,7 +2,7 @@
 
 Primera entrega: `feat/production-platform-foundations`. Base revisada: `5e8fca2` (post-PR #68).
 
-Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Los scaffolds móviles y ESP32 siguen siendo scaffolds. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
+Este documento conserva el alcance completo. **Implementado en main** significa que el criterio explícito que mantenía el punto abierto está implementado y validado por CI/acceptance dentro del alcance actual del producto. **Pendiente** significa que el punto todavía requiere implementación sustancial. Android e iOS ya son clientes operativos nativos en `main` tras #72/#73; ESP32 sigue siendo el principal componente hardware pendiente de cerrar. Las PRs abiertas de push, provisioning BLE, detalle/operaciones, UI/release y firmware no se contabilizan como `main` hasta fusionarse. Tras la reconciliación de septiembre de 2026 no quedan filas marcadas como **Parcial** ni **Parcial avanzado**.
 
 | Nº | Área | Estado | Evidencia / siguiente criterio |
 |---|---|---|---|
@@ -18,22 +18,22 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 10 | Distributed Probes: V1.3 está hecha, pero todavía falta bastante | Implementado en main | Dockerfile y systemd endurecidos, liveness local, cola SQLite acotada, concurrencia limitada, backpressure, backoff/jitter, rotación transaccional de bearer token con sólo hash persistido, expiración de credenciales a 90 días y runtime heartbeat con versión, uptime, cola/capacidad y concurrencia; operator API expone estado/lifecycle. |
 | 11 | Synthetic monitoring mucho más profundo | Implementado en main | HTTP/TCP/DNS/TLS e ICMP distribuido, SLA/latencia y validación de destino. PR #68 añade headers HTTP no sensibles, referencias secretas para headers autenticados, assertion `expectedBodyContains`, error `assertion`, persistencia separada, paridad backend/probe y configuración web. Backend, Probe, Web/Playwright, Integration, Security, HA, Failure, Performance, Production, Release y Documentation CI verdes. |
 | 12 | Consenso distribuido V2: rondas/quorum | Implementado en main | `RoundAwareSyntheticRepository` agrupa sólo observaciones de la misma ronda temporal, calcula mayoría estricta sobre probes activos/asignados y devuelve `insufficient_data` antes de quorum. Integración prueba rondas parciales, aislamiento de resultados de rondas anteriores y quorum 2/3 sin abrir incidentes prematuros. |
-| 13 | Network Monitoring / NMS: aquí hay un campo enorme todavía | Pendiente | Implementar inventario/polling de dispositivos de red, métricas de interfaces y health operativo sobre una base persistente; SNMPv3 debe usar credenciales referenciadas, no secretos en claro. |
-| 14 | LLDP/CDP y topología automática | Pendiente | Incorporar vecinos LLDP/CDP como evidencia de enlace persistente y priorizarlos sobre la topología inferida por segmento; validar actualización, caducidad y cambios de enlace. |
-| 15 | Más información de red | Pendiente | Enriquecer interfaces/rutas/ARP-VLAN/velocidad-MTU y exposición operativa para diagnóstico, manteniendo contratos acotados y portables. |
-| 16 | Syslog | Pendiente | Añadir receptor/parser persistente con límites, normalización de severidad/facility, búsqueda/retención y correlación segura con dispositivos/servicios. |
+| 13 | Network Monitoring / NMS: aquí hay un campo enorme todavía | Implementado en main | PR #70/#71 añaden inventario persistente de interfaces y targets SNMPv3 read-only con secret refs, polling programado, estado/MTU/MAC/velocidad, contadores de tráfico/errores y health operativo; las credenciales SNMP no se persisten en claro. |
+| 14 | LLDP/CDP y topología automática | Implementado en main | PR #71 persiste vecinos LLDP/CDP, enlaza identidades remotas conocidas, registra aparición/desaparición/cambio y prioriza enlaces físicos sobre segmentos inferidos; la inferencia queda sólo como fallback etiquetado. |
+| 15 | Más información de red | Implementado en main | PR #70/#71 exponen inventario persistente de interfaces, velocidad/MTU/MAC/estado, contadores 64-bit, rutas IPv4/gateways, ARP y VLAN, con APIs de consulta y reconciliación histórica sin borrar estado previo. |
+| 16 | Syslog | Implementado en main | PR #74 añade receiver UDP dedicado y acotado, RFC5424/RFC3164, facility/severity normalizados, persistencia/búsqueda, correlación por IP/hostname, retención y despliegue production en UDP/5514. |
 | 17 | Web: aún le falta convertirse en una aplicación completa de operaciones | Implementado en main | Navegación, Dashboard, Services, Incidents, detalle, Administration, Audit, login y búsqueda global Ctrl/Cmd+K. PR #61 convierte Maintenance, Operations, Synthetics y Probes en rutas de primera clase, conserva la vista agregada y alinea la allowlist web con diagnósticos DNS/route snapshot del backend; Playwright cubre las rutas reales. |
 | 18 | UX web | Implementado en main | Estados de carga/error/vacío, búsqueda, URLs de detalle, formularios etiquetados, diseño adaptable y navegación operativa. PR #63 añade preferencia ES/EN persistente y vistas guardadas de deep-links con deduplicación, límite, validación y recuperación ante almacenamiento corrupto. |
-| 19 | Android: prácticamente toda la aplicación real está pendiente | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 20 | Android: push notifications | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 21 | Android: seguridad | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 22 | Android testing/release | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 23 | iOS: también es fundamentalmente scaffold | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 24 | BLE provisioning desde Android/iOS | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 25 | ESP32: prácticamente todo el firmware real queda por desarrollar | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 26 | ESP32: sensores | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 19 | Android: aplicación operativa | Pendiente | PR #72 reemplaza el scaffold por login/MFA/sesión, Dashboard, Devices, Incidents, Alerts, Synthetics y Probes sobre la API real. Falta integrar en main el detalle/operaciones móviles de la PR apilada y completar la aceptación UI/E2E antes de cerrar el punto. |
+| 20 | Android: push notifications | Pendiente | PR #91 consolida registro/revocación de tokens, FCM HTTP v1, APNs, routing durable y lifecycle nativo. Falta fusionar/validar la PR y conservar evidencia de push real en dispositivo/proveedor. |
+| 21 | Android: seguridad | Implementado en main | PR #72 exige HTTPS, desactiva cleartext/backup y cifra access/refresh tokens con AES-256-GCM mediante AndroidKeyStore; refresh/logout respetan la revocación del backend y no se almacenan password/MFA. |
+| 22 | Android testing/release | Pendiente | Main ya ejecuta unit/lint/build; PR #91 añade Compose UI instrumentation, APK/AAB firmado y publicación opcional a Play internal. Falta fusionar/validar y conservar evidencia de instalación/publicación real. |
+| 23 | iOS: aplicación operativa | Pendiente | PR #73 aporta la app SwiftUI real; PR #91 consolida detalle/operaciones, APNs, XCUITest y pipeline IPA/TestFlight. Falta fusionar/validar y conservar evidencia física/store antes de cerrar el punto. |
+| 24 | BLE provisioning desde Android/iOS | Pendiente | PR #91 implementa clientes Android/iOS con SDK oficial Espressif, Security 1 + PoP, token DeviceMesh de 15 min y Wi-Fi/server enrollment; depende del endpoint firmware de PR #86. Falta fusionar y validar en hardware real. |
+| 25 | ESP32: base firmware real | Pendiente | PR #86 implementa identidad persistente NVS, provisioning, enrollment, credenciales, HTTPS, SNTP, Wi-Fi/backoff, heartbeat, telemetría y watchdog. Falta fusionar/validar. |
+| 26 | ESP32: sensores | Pendiente | PR #86 incorpora señales reales de sistema y perfil BME280 opcional sin fabricar datos ausentes. Falta fusionar y validar con el sensor de referencia físico. |
 | 27 | ESP32 como probe de red | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 28 | ESP32 production-ready | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 28 | ESP32 production-ready | Pendiente | PR #86 ya cubre offline queue, OTA A/B con SHA-256/rollback, recovery, allowlist, hardening, watchdog y workflow HIL. El cierre exige evidencia física retenida de BLE/offline/sensor/OTA/rollback/hardening. |
 | 29 | Windows Agent | Implementado en main | Agente .NET 8 con identidad estable, enrollment, credencial persistente, heartbeat/telemetría autenticados y servicio Windows. CI dedicado restaura, compila Release y ejecuta tests en `windows-latest`; Release Validation publica binario self-contained y MSI x64 con checksum/provenance. |
 | 30 | Windows telemetry | Implementado en main | Collector nativo publica CPU, memoria/pagefile, discos, interfaces/bytes de red, procesos y uptime con nombres portables. Tests cubren collector y serialización; los datos se envían por el contrato de telemetría autenticado. |
 | 31 | Windows remote operations | Implementado en main | El agente reclama y completa operaciones pull-based usando la allowlist declarativa del backend; no existe shell/PowerShell/comando arbitrario. El contrato prueba campos estructurados y ausencia de primitivas `command`/`shell`, y la UI sólo expone operaciones allowlisted. |
@@ -68,11 +68,10 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 
 ## Orden de continuación
 
-1. Red/NMS (#13–#16): inventario persistente de red, LLDP/CDP, SNMPv3 con secret refs y Syslog.
-2. Base de datos/retención/performance (#38, #39, #46), cerrando benchmarks y soak prolongado antes de anomaly detection.
-3. Android/iOS (#19–#24), incluyendo sesiones seguras, pantallas reales, pruebas, push y distribución propias.
-4. ESP32/hardware (#25–#28, #48, #55) con identidad, provisioning, sensores y pruebas físicas antes de OTA.
-5. GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema completo (#59) una vez sus dependencias estén implementadas.
+1. Fusionar/validar #85 para capacidad y retención (#38/#39); mantener #46 abierto hasta conservar evidencia real de soak 24/48 h.
+2. Fusionar/validar #91 para cliente móvil completo (#19/#20/#22/#23/#24/#47); la aceptación física de push/BLE/instalación y los recibos Play/TestFlight siguen siendo evidencia externa.
+3. Fusionar/validar #86 para ESP32/hardware (#25–#28/#48/#55); el software cubre identidad, provisioning, sensores, probe, offline/OTA/recovery/hardening y HIL, pero #28/#48 exigen la matriz física retenida.
+4. Completar GitHub hygiene (#56), RCA (#58) y el cierre del ecosistema (#59) una vez los gates externos anteriores estén satisfechos.
 
 ## Límites verificables
 
