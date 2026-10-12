@@ -70,6 +70,8 @@ private struct OperatorTabs: View {
                 .tabItem { Label("Alerts", systemImage: "bell") }
             SyntheticListView()
                 .tabItem { Label("Synthetics", systemImage: "waveform.path.ecg") }
+            HardwareProvisioningView()
+                .tabItem { Label("Provision", systemImage: "antenna.radiowaves.left.and.right") }
         }
     }
 }
@@ -172,6 +174,92 @@ private struct SyntheticListView: View {
                     }
                 }
             }.navigationTitle("Synthetics")
+        }
+    }
+}
+
+
+private struct HardwareProvisioningView: View {
+    @EnvironmentObject private var model: AppModel
+    @StateObject private var provisioning = DeviceMeshProvisioningModel()
+    @State private var selectedDeviceName = ""
+    @State private var proof = ""
+    @State private var ssid = ""
+    @State private var passphrase = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if model.session?.user.role != "administrator" {
+                    Section {
+                        Text("Administrator role is required to provision hardware.")
+                            .foregroundStyle(.red)
+                    }
+                } else {
+                    Section("DeviceMesh ESP32") {
+                        Button("Scan BLE") { provisioning.scan() }
+                            .disabled(provisioning.busy)
+                        ForEach(provisioning.devices, id: \.name) { device in
+                            Button {
+                                selectedDeviceName = device.name
+                            } label: {
+                                HStack {
+                                    Text(device.name)
+                                    Spacer()
+                                    if selectedDeviceName == device.name {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Section("Secure provisioning") {
+                        SecureField("Proof of possession", text: $proof)
+                        TextField("Wi-Fi SSID", text: $ssid)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        SecureField("Wi-Fi password", text: $passphrase)
+                        Text(model.serverURL.absoluteString)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Section {
+                        Button(provisioning.busy ? "Provisioning…" : "Provision") {
+                            guard let device = provisioning.devices.first(
+                                where: { $0.name == selectedDeviceName }
+                            ) else { return }
+                            Task {
+                                do {
+                                    let token = try await model.createHardwareEnrollmentToken()
+                                    await provisioning.provision(
+                                        device: device,
+                                        proofOfPossession: proof,
+                                        serverURL: model.serverURL,
+                                        enrollmentToken: token,
+                                        ssid: ssid,
+                                        passphrase: passphrase
+                                    )
+                                    if provisioning.status.hasPrefix("Provisioning complete") {
+                                        passphrase = ""
+                                    }
+                                } catch {
+                                    provisioning.status = error.localizedDescription
+                                }
+                            }
+                        }
+                        .disabled(
+                            provisioning.busy ||
+                            selectedDeviceName.isEmpty ||
+                            proof.isEmpty ||
+                            ssid.isEmpty
+                        )
+                    }
+                }
+                if !provisioning.status.isEmpty {
+                    Section("Status") { Text(provisioning.status) }
+                }
+            }
+            .navigationTitle("Provision hardware")
         }
     }
 }
