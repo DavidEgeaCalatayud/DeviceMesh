@@ -54,3 +54,15 @@ struct SyntheticProbe: Codable, Identifiable {
     let online: Bool
     let lastSeenAt: String?
 }
+
+
+struct RemoteOperation: Codable, Identifiable {
+    let id: String
+    let deviceId: String
+    let operationType: String
+    let status: String
+    let createdAt: String
+    let completedAt: String?
+    let result: [String: String]
+    let error: String?
+}
