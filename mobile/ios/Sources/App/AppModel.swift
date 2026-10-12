@@ -1,4 +1,6 @@
 import Foundation
+import UIKit
+import UserNotifications
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -13,26 +15,15 @@ final class AppModel: ObservableObject {
 
     private let store = SecureSessionStore()
     private var api: DeviceMeshAPI
-    private var pushObserver: NSObjectProtocol?
 
     init() {
         let restored = store.load()
         self.session = restored
         self.api = try! DeviceMeshAPI(baseURL: store.server, accessToken: restored?.accessToken)
-        self.pushObserver = NotificationCenter.default.addObserver(
-            forName: .deviceMeshPushToken,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let token = notification.userInfo?["token"] as? String else { return }
-            Task { @MainActor [weak self] in
-                await self?.registerPushToken(token)
-            }
-        }
         if restored != nil {
             Task {
                 await refreshAll()
-                await syncPushRegistration()
+                await enablePushNotifications()
             }
         }
     }
@@ -54,7 +45,7 @@ final class AppModel: ObservableObject {
             api = nextAPI
             session = nextSession
             await refreshAll()
-            await syncPushRegistration()
+            await enablePushNotifications()
         } catch {
             self.error = error.localizedDescription
         }
@@ -95,29 +86,31 @@ final class AppModel: ObservableObject {
         self.probes = (try? await api.syntheticProbes()) ?? []
     }
 
-    private func syncPushRegistration() async {
-        guard let token = store.pushToken() else { return }
-        await registerPushToken(token)
-    }
-
-    private func registerPushToken(_ token: String) async {
-        guard session != nil else { return }
-        #if DEBUG
-        let environment = "sandbox"
-        #else
-        let environment = "production"
-        #endif
-        try? await api.registerPushToken(
-            provider: "apns",
-            environment: environment,
-            installationId: store.installationId,
-            token: token
-        )
+    private func enablePushNotifications() async {
+        do {
+            let granted = try await UNUserNotificationCenter.current().requestAuthorization(
+                options: [.alert, .badge, .sound]
+            )
+            guard granted else { return }
+            UIApplication.shared.registerForRemoteNotifications()
+            if let token = store.pushToken() {
+                try await api.registerPushToken(
+                    provider: "apns",
+                    environment: DeviceMeshAppDelegate.apnsEnvironment,
+                    installationId: store.installationId,
+                    token: token
+                )
+            }
+        } catch {
+            // Push is optional: keep the operator app usable if notification permission is denied
+            // or APNs registration is temporarily unavailable.
+        }
     }
 
     func logout() async {
         try? await api.unregisterPushToken(installationId: store.installationId)
         await api.logout()
+        UIApplication.shared.unregisterForRemoteNotifications()
         store.clear()
         session = nil
         devices = []
