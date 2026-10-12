@@ -14,6 +14,22 @@ enum DeviceMeshAPIError: Error, LocalizedError {
     }
 }
 
+enum RemoteOperationPolicy {
+    static let allowed: Set<String> = [
+        "telemetry.collect",
+        "inventory.refresh",
+        "agent.health_check",
+        "network.dns_lookup",
+        "network.route_snapshot",
+    ]
+
+    static func validate(_ operationType: String) throws {
+        guard allowed.contains(operationType) else {
+            throw DeviceMeshAPIError.server(0, "Unsupported remote operation")
+        }
+    }
+}
+
 actor DeviceMeshAPI {
     private let baseURL: URL
     private var accessToken: String?
@@ -80,16 +96,7 @@ actor DeviceMeshAPI {
         operationType: String,
         hostname: String? = nil
     ) async throws -> RemoteOperation {
-        let allowed = Set([
-            "telemetry.collect",
-            "inventory.refresh",
-            "agent.health_check",
-            "network.dns_lookup",
-            "network.route_snapshot",
-        ])
-        guard allowed.contains(operationType) else {
-            throw DeviceMeshAPIError.server(0, "Unsupported remote operation")
-        }
+        try RemoteOperationPolicy.validate(operationType)
         var arguments: [String: String] = [:]
         if operationType == "network.dns_lookup" {
             guard let hostname,
