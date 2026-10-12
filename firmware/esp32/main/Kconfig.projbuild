@@ -18,4 +18,12 @@ config DM_BME280_SCL_GPIO
     default 22
     range 0 48
 
+config DM_RECOVERY_GPIO
+    int "Recovery button GPIO"
+    default 0
+    range 0 48
+    help
+        Hold this active-low GPIO for three seconds during boot to clear Wi-Fi,
+        DeviceMesh credentials and the offline queue while retaining device identity.
+
 endmenu
