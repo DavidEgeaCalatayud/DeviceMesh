@@ -14,6 +14,7 @@ class RemoteOperationCreateRequest(BaseModel):
         "agent.health_check",
         "network.dns_lookup",
         "network.route_snapshot",
+        "firmware.update",
     ]
     arguments: dict[str, object] = Field(default_factory=dict)
     ttlSeconds: int = Field(default=300, ge=30, le=3600)
@@ -26,6 +27,28 @@ class RemoteOperationCreateRequest(BaseModel):
             hostname = self.arguments.get("hostname")
             if not isinstance(hostname, str) or not 1 <= len(hostname.strip()) <= 253:
                 raise ValueError("hostname must be a non-empty string of at most 253 characters")
+        elif self.operationType == "firmware.update":
+            if set(self.arguments) != {"url", "sha256", "version"}:
+                raise ValueError(
+                    "firmware.update requires only url, sha256 and version arguments"
+                )
+            url = self.arguments.get("url")
+            sha256 = self.arguments.get("sha256")
+            version = self.arguments.get("version")
+            if (
+                not isinstance(url, str)
+                or not url.startswith("https://")
+                or not 12 <= len(url) <= 2048
+            ):
+                raise ValueError("firmware update URL must be a bounded HTTPS URL")
+            if (
+                not isinstance(sha256, str)
+                or len(sha256) != 64
+                or any(character not in "0123456789abcdefABCDEF" for character in sha256)
+            ):
+                raise ValueError("firmware update sha256 must be 64 hexadecimal characters")
+            if not isinstance(version, str) or not 1 <= len(version.strip()) <= 64:
+                raise ValueError("firmware update version must be 1-64 characters")
         elif self.arguments:
             raise ValueError(f"{self.operationType} does not accept arguments")
         return self

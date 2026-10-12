@@ -9,6 +9,7 @@ class RemoteOperationType(StrEnum):
     AGENT_HEALTH_CHECK = "agent.health_check"
     NETWORK_DNS_LOOKUP = "network.dns_lookup"
     NETWORK_ROUTE_SNAPSHOT = "network.route_snapshot"
+    FIRMWARE_UPDATE = "firmware.update"
 
 
 class RemoteOperationStatus(StrEnum):

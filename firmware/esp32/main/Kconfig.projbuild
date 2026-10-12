@@ -1,0 +1,46 @@
+menu "DeviceMesh hardware"
+
+config DM_BME280_ENABLED
+    bool "Enable BME280 environmental sensor"
+    default n
+    help
+        Enable temperature, humidity and pressure acquisition from a BME280 over I2C.
+
+config DM_BME280_SDA_GPIO
+    int "BME280 SDA GPIO"
+    depends on DM_BME280_ENABLED
+    default 21
+    range 0 48
+
+config DM_BME280_SCL_GPIO
+    int "BME280 SCL GPIO"
+    depends on DM_BME280_ENABLED
+    default 22
+    range 0 48
+
+config DM_LOG_PROVISIONING_POP
+    bool "Print BLE proof-of-possession to serial log"
+    default n
+    help
+        Development convenience only. Disable for production/manufacturing
+        images after recording the provisioning PoP in the controlled device
+        label/asset system.
+
+config DM_REQUIRE_HARDENING
+    bool "Require Secure Boot and flash encryption at runtime"
+    default n
+    help
+        Enable for production/manufacturing builds after provisioning the
+        corresponding eFuses and signing/encryption keys. Firmware fails
+        closed before reading DeviceMesh credentials if either protection
+        is unavailable.
+
+config DM_RECOVERY_GPIO
+    int "Recovery button GPIO"
+    default 27
+    range 0 48
+    help
+        Hold this active-low GPIO for three seconds during boot to clear Wi-Fi,
+        DeviceMesh credentials and the offline queue while retaining device identity.
+
+endmenu
