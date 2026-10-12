@@ -1,0 +1,77 @@
+name: ESP32 Hardware Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      serial_port:
+        description: Serial port for the attached reference ESP32
+        required: true
+        default: /dev/ttyUSB0
+        type: string
+      target:
+        description: ESP-IDF target used by the physical fixture
+        required: true
+        default: esp32
+        type: string
+      require_environment:
+        description: Require physical BME280 temperature/humidity/pressure evidence
+        required: true
+        default: false
+        type: boolean
+      require_hardening:
+        description: Require Secure Boot + flash encryption runtime evidence
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  physical-smoke:
+    runs-on: [self-hosted, linux, devicemesh-esp32]
+    env:
+      DEVICEMESH_HIL_BASE_URL: ${{ secrets.DEVICEMESH_HIL_BASE_URL }}
+      DEVICEMESH_HIL_OPERATOR_TOKEN: ${{ secrets.DEVICEMESH_HIL_OPERATOR_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require fixture configuration
+        run: |
+          test -n "$DEVICEMESH_HIL_BASE_URL"
+          test -n "$DEVICEMESH_HIL_OPERATOR_TOKEN"
+          test -e "${{ inputs.serial_port }}"
+      - name: Build and flash reference firmware
+        working-directory: firmware/esp32
+        run: |
+          . "$IDF_PATH/export.sh"
+          if [[ "${{ inputs.require_environment }}" == "true" ]]; then
+            printf '\nCONFIG_DM_BME280_ENABLED=y\n' >> sdkconfig.defaults
+          fi
+          if [[ "${{ inputs.require_hardening }}" == "true" ]]; then
+            printf '\nCONFIG_DM_REQUIRE_HARDENING=y\n' >> sdkconfig.defaults
+          fi
+          idf.py set-target "${{ inputs.target }}"
+          idf.py build
+          idf.py -p "${{ inputs.serial_port }}" flash
+      - name: Install HIL serial dependency
+        run: python3 -m pip install --user 'pyserial==3.5'
+      - name: Verify physical identity and backend telemetry
+        run: |
+          args=(
+            --port "${{ inputs.serial_port }}"
+            --output artifacts/esp32-hil.json
+          )
+          if [[ "${{ inputs.require_environment }}" == "true" ]]; then
+            args+=(--require-environment)
+          fi
+          if [[ "${{ inputs.require_hardening }}" == "true" ]]; then
+            args+=(--require-hardening)
+          fi
+          python3 tools/hardware/esp32_acceptance.py "${args[@]}"
+      - name: Upload physical acceptance evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: esp32-hardware-acceptance-${{ github.run_id }}
+          path: artifacts/esp32-hil.json
+          if-no-files-found: error
+          retention-days: 30

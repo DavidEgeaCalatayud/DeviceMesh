@@ -9,6 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Host-test pure protocol contract
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror             firmware/esp32/main/protocol.c firmware/esp32/tests/test_protocol.c             -Ifirmware/esp32/main -o /tmp/devicemesh-protocol-test
+          /tmp/devicemesh-protocol-test
+          cc -std=c11 -Wall -Wextra -Werror             firmware/esp32/main/telemetry_queue.c firmware/esp32/tests/test_telemetry_queue.c             -Ifirmware/esp32/main -o /tmp/devicemesh-queue-test
+          /tmp/devicemesh-queue-test
       - uses: espressif/esp-idf-ci-action@9d38657f3d789ca759b2b37aaf5ceffbc42c4f0d # v1 branch resolved 2026-09-25
         with:
           path: firmware/esp32
