@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
+import io.github.davidegeacalatayud.devicemesh.core.model.HumanUser
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
@@ -102,6 +103,24 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
             alerts = alerts.await(),
             monitors = monitors.await(),
             probes = probes.await(),
+        )
+    }
+
+    fun seedAuthenticatedUiTestSession() {
+        check(BuildConfig.DEBUG) { "UI-test session seeding is disabled in release builds" }
+        state = MobileState(
+            server = "https://mesh.example.com",
+            session = SessionTokens(
+                accessToken = "ui-test-access",
+                refreshToken = "ui-test-refresh",
+                expiresAt = "2099-01-01T00:00:00Z",
+                user = HumanUser(
+                    id = "ui-test-user",
+                    username = "ui-test",
+                    role = "administrator",
+                    mfaEnabled = true,
+                ),
+            ),
         )
     }
 
