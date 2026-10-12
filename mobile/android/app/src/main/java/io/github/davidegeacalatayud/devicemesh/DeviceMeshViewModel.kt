@@ -8,7 +8,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.davidegeacalatayud.devicemesh.core.model.Alert
 import io.github.davidegeacalatayud.devicemesh.core.model.Device
+import io.github.davidegeacalatayud.devicemesh.core.model.DeviceHealth
 import io.github.davidegeacalatayud.devicemesh.core.model.Incident
+import io.github.davidegeacalatayud.devicemesh.core.model.MetricSample
 import io.github.davidegeacalatayud.devicemesh.core.model.RemoteOperation
 import io.github.davidegeacalatayud.devicemesh.core.model.SessionTokens
 import io.github.davidegeacalatayud.devicemesh.core.model.SyntheticMonitor
@@ -30,6 +32,8 @@ data class MobileState(
     val monitors: List<SyntheticMonitor> = emptyList(),
     val probes: List<SyntheticProbe> = emptyList(),
     val operationsByDevice: Map<String, List<RemoteOperation>> = emptyMap(),
+    val deviceHealth: Map<String, DeviceHealth> = emptyMap(),
+    val deviceMetrics: Map<String, List<MetricSample>> = emptyMap(),
 )
 
 class DeviceMeshViewModel(application: Application) : AndroidViewModel(application) {
@@ -107,21 +111,30 @@ class DeviceMeshViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    fun loadOperations(deviceId: String) {
+    fun loadDeviceDetails(deviceId: String) {
         viewModelScope.launch {
-            runCatching { api.remoteOperations(deviceId) }
-                .onSuccess { operations ->
-                    state = state.copy(
-                        operationsByDevice = state.operationsByDevice + (deviceId to operations),
-                    )
-                }
-                .onFailure { error ->
-                    state = state.copy(error = error.message ?: "Unable to load operations")
-                }
+            try {
+                val operations = async { api.remoteOperations(deviceId) }
+                val health = async { api.deviceHealth(deviceId) }
+                val metrics = async { api.latestMetrics(deviceId) }
+                state = state.copy(
+                    operationsByDevice = state.operationsByDevice + (deviceId to operations.await()),
+                    deviceHealth = state.deviceHealth + (deviceId to health.await()),
+                    deviceMetrics = state.deviceMetrics + (deviceId to metrics.await()),
+                )
+            } catch (error: Exception) {
+                state = state.copy(error = error.message ?: "Unable to load device details")
+            }
         }
     }
 
+    fun loadOperations(deviceId: String) = loadDeviceDetails(deviceId)
+
     fun queueOperation(deviceId: String, operationType: String, hostname: String? = null) {
+        if (state.session?.user?.role == "viewer") {
+            state = state.copy(error = "Viewer role cannot queue operations")
+            return
+        }
         viewModelScope.launch {
             state = state.copy(loading = true, error = null)
             try {
