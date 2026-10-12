@@ -80,6 +80,17 @@ services:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
     restart: unless-stopped
+  syslog:
+    <<: *api
+    command: [python, -m, app.syslog_receiver]
+    environment:
+      <<: *runtime
+      DEVICEMESH_SYSLOG_HOST: 0.0.0.0
+      DEVICEMESH_SYSLOG_PORT: "5514"
+    ports: ["${DEVICEMESH_SYSLOG_BIND_PORT:-5514}:5514/udp"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
   worker:
     <<: *api
     command: [python, -m, app.worker]
