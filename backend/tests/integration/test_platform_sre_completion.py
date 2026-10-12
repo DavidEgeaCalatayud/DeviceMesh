@@ -8,10 +8,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import security
-from app.api.routers.platform import get_platform_repository
+from app.api.routers.platform import get_platform_repository, get_rca_repository
 from app.core.config import Settings
 from app.infrastructure.database import Base
 from app.infrastructure.repositories.platform import PlatformRepository
+from app.infrastructure.repositories.rca import RcaRepository
 from app.infrastructure.repositories.synthetics import (
     ServiceIncidentRow,
     SyntheticCheckResultRow,
@@ -34,6 +35,7 @@ def sre_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(security, "get_settings", lambda: settings)
     app.dependency_overrides[original] = lambda: auth
     app.dependency_overrides[get_platform_repository] = lambda: PlatformRepository(sessions)
+    app.dependency_overrides[get_rca_repository] = lambda: RcaRepository(sessions)
     client = TestClient(app)
     token = client.post("/api/v1/auth/login", json={
         "username": "operator", "password": "correct horse battery"
@@ -158,6 +160,48 @@ def test_incident_correlation_impact_and_postmortem(sre_client) -> None:
     assert detail["impactSummary"].startswith("Checkout errors")
     assert detail["postmortem"].startswith("Add pool saturation")
     assert any(item["action"] == "postmortem.updated" for item in detail["timeline"])
+
+
+def test_explainable_rca_prioritizes_earlier_upstream_failure(sre_client) -> None:
+    client, sessions, headers = sre_client
+    now = datetime.now(UTC)
+    api = create_service(client, headers, "Checkout API")
+    database = create_service(client, headers, "Orders Database")
+    monitor_api, monitor_db = str(uuid4()), str(uuid4())
+    incident_api, incident_db = str(uuid4()), str(uuid4())
+
+    with sessions.begin() as session:
+        add_monitor(session, monitor_api, "API health", now)
+        add_monitor(session, monitor_db, "Database health", now)
+        session.flush()
+        add_incident(session, incident_db, monitor_db, now - timedelta(minutes=7))
+        add_incident(session, incident_api, monitor_api, now - timedelta(minutes=2))
+
+    assert client.put(
+        f"/api/v1/service-catalog/{api['id']}/monitors/{monitor_api}",
+        headers=headers,
+    ).status_code == 200
+    assert client.put(
+        f"/api/v1/service-catalog/{database['id']}/monitors/{monitor_db}",
+        headers=headers,
+    ).status_code == 200
+    assert client.put(
+        f"/api/v1/service-catalog/{api['id']}/dependencies/{database['id']}",
+        headers=headers,
+        json={"kind": "hard"},
+    ).status_code == 200
+
+    response = client.get(f"/api/v1/incidents/{incident_api}/rca", headers=headers)
+    assert response.status_code == 200
+    report = response.json()
+    assert report["status"] == "explained"
+    assert report["method"] == "dependency-temporal-evidence-v1"
+    assert report["primaryCandidate"]["kind"] == "service"
+    assert report["primaryCandidate"]["entityId"] == database["id"]
+    assert report["primaryCandidate"]["confidence"] == "high"
+    assert report["primaryCandidate"]["causalPath"] == ["Orders Database", "Checkout API"]
+    evidence_kinds = {item["kind"] for item in report["primaryCandidate"]["evidence"]}
+    assert {"dependency_path", "correlated_incident"} <= evidence_kinds
 
 
 def test_time_weighted_slo_and_multiwindow_burn_alert(sre_client) -> None:

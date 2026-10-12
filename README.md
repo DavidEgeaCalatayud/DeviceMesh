@@ -4,9 +4,9 @@
 
 DeviceMesh discovers devices on networks you control, models stable device identity, ingests optional agent telemetry and builds a realtime inventory, event timeline, alerting surface and observed network view.
 
-> **Current status:** V1.3 plus a platform/deployment candidate. Windows/Linux/macOS agents, distributed probes, native Android/iOS operator clients, SNMPv3 NMS polling, LLDP/CDP physical topology and persistent Syslog are implemented in main. Human sessions/RBAC, service/incident/SLO workflows, Redis fan-out, workers, observability and production deployment/restore tooling are also present. Long soak/capacity evidence, full mobile E2E/distribution and production ESP32 hardware acceptance remain release gates.
+> **Current status:** V1.3 plus a platform/deployment candidate. Windows/Linux/macOS agents, distributed probes, native Android/iOS operator clients, SNMPv3 NMS polling, LLDP/CDP physical topology and persistent Syslog are implemented in main. Human sessions/RBAC, service/incident/SLO workflows, explainable RCA, ecosystem readiness, Redis fan-out, workers, observability and production deployment/restore tooling are also present. Long soak/capacity evidence, full mobile E2E/distribution and production ESP32 hardware acceptance remain external release gates.
 
-See the [57-point implementation ledger](docs/product/IMPLEMENTATION_57_POINTS.md) for the exact scope and remaining work, [production deployment](docs/operations/PRODUCTION_DEPLOYMENT.md), [platform API/security](docs/operations/PLATFORM_API.md), [backup/restore](docs/operations/BACKUP_RESTORE.md) and [probe daemon](docs/operations/PROBE_DAEMON.md).
+See the [57-point implementation ledger](docs/product/IMPLEMENTATION_57_POINTS.md) for the exact scope and remaining work, [ecosystem readiness](docs/product/ECOSYSTEM_READINESS.md), [RCA operations](docs/operations/RCA.md), [production deployment](docs/operations/PRODUCTION_DEPLOYMENT.md), [platform API/security](docs/operations/PLATFORM_API.md), [backup/restore](docs/operations/BACKUP_RESTORE.md) and [probe daemon](docs/operations/PROBE_DAEMON.md).
 
 ## Architecture at a glance
 

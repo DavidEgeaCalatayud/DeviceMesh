@@ -1,0 +1,10 @@
+# Default ownership. Add narrower teams/owners here if the project grows.
+* @DavidEgeaCalatayud
+/.github/ @DavidEgeaCalatayud
+/backend/ @DavidEgeaCalatayud
+/web/ @DavidEgeaCalatayud
+/agents/ @DavidEgeaCalatayud
+/mobile/ @DavidEgeaCalatayud
+/firmware/ @DavidEgeaCalatayud
+/infra/ @DavidEgeaCalatayud
+/docs/ @DavidEgeaCalatayud

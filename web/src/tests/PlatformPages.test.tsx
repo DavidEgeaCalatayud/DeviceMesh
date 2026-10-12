@@ -18,9 +18,16 @@ describe('Platform screens', () => {
     await waitFor(() => expect(window.location.hash).toBe('#/'))
   })
   it('does not offer incident mutations to a viewer', async () => {
-    vi.mocked(platformApi).mockImplementation(async path => path === '/auth/me' ? { role: 'viewer' } : {
-      id: 'one', title: 'API unavailable', severity: 'SEV1', status: 'open', openedAt: new Date().toISOString(),
-      assignedTo: null, rootCause: '', resolution: '', timeline: [],
+    vi.mocked(platformApi).mockImplementation(async path => {
+      if (path === '/auth/me') return { role: 'viewer' }
+      if (path.endsWith('/rca')) return {
+        incidentId: 'one', method: 'dependency-temporal-evidence-v1', status: 'insufficient_data',
+        primaryCandidate: null, candidates: [], limitations: ['Correlation is evidence, not proof of causation.'],
+      }
+      return {
+        id: 'one', title: 'API unavailable', severity: 'SEV1', status: 'open', openedAt: new Date().toISOString(),
+        assignedTo: null, rootCause: '', resolution: '', impactSummary: '', postmortem: '', timeline: [],
+      }
     })
     render(<IncidentsPage incidentId="one" />)
     expect(await screen.findByRole('heading', { name: 'API unavailable' })).toBeInTheDocument()

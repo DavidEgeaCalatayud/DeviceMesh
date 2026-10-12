@@ -6,6 +6,7 @@ import './global-search.css'
 import { AdministrationPage, IncidentsPage, ServicesPage } from '../features/platform/PlatformPages'
 import { AccountSecurityPage } from '../features/platform/AccountSecurityPage'
 import { AuditPage } from '../features/platform/AuditPage'
+import { EcosystemPage } from '../features/platform/EcosystemPage'
 import { GlobalSearch } from '../features/platform/GlobalSearch'
 import { SecureLoginPage } from '../features/platform/SecureLoginPage'
 import { WorkspacePreferencesPage } from '../features/platform/WorkspacePreferencesPage'
@@ -69,6 +70,7 @@ export function App() {
   if (hash.startsWith('#/incidents/')) page = <IncidentsPage key={hash} incidentId={hash.slice(12)} />
   if (hash === '#/administration') page = <AdministrationPage />
   if (hash === '#/audit') page = <AuditPage />
+  if (hash === '#/ecosystem') page = <EcosystemPage />
   if (hash === '#/preferences') page = <WorkspacePreferencesPage />
   if (hash === '#/security') page = <AccountSecurityPage />
   return <><nav className="platform-nav" aria-label={preferences.locale === 'es' ? 'Navegación principal' : 'Main navigation'}>
@@ -76,6 +78,7 @@ export function App() {
     <a href="#/maintenance">{nav.maintenance}</a><a href="#/operations">{nav.operations}</a>
     <a href="#/synthetics">{nav.synthetics}</a><a href="#/probes">{nav.probes}</a>
     <a href="#/administration">{nav.administration}</a><a href="#/audit">{nav.audit}</a>
+    <a href="#/ecosystem">{nav.ecosystem}</a>
     <a href="#/preferences">{nav.preferences}</a>
     {getToken() && <a href="#/security">{nav.security}</a>}
     <GlobalSearch />

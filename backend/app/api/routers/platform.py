@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.dependencies.security import require_operator
 from app.infrastructure.database import SessionFactory
 from app.infrastructure.repositories.platform import PlatformRepository
+from app.infrastructure.repositories.rca import RcaRepository
 from app.infrastructure.security.human_auth import HumanPrincipal
 
 router = APIRouter(prefix="/api/v1", tags=["platform"])
@@ -16,7 +17,12 @@ def get_platform_repository() -> PlatformRepository:
     return PlatformRepository(SessionFactory)
 
 
+def get_rca_repository() -> RcaRepository:
+    return RcaRepository(SessionFactory)
+
+
 Repository = Annotated[PlatformRepository, Depends(get_platform_repository)]
+RcaRepositoryDependency = Annotated[RcaRepository, Depends(get_rca_repository)]
 
 
 class ServiceCreate(BaseModel):
@@ -171,6 +177,17 @@ def list_incidents(repository: Repository, limit: Annotated[int, Query(ge=1, le=
 def incident_detail(incident_id: str, repository: Repository) -> dict[str, object]:
     try:
         return repository.incident_detail(incident_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/incidents/{incident_id}/rca")
+def incident_rca(
+    incident_id: str,
+    repository: RcaRepositoryDependency,
+) -> dict[str, object]:
+    try:
+        return repository.explain(incident_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
 

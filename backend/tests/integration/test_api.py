@@ -113,6 +113,20 @@ def test_component_compatibility_rejects_old_or_wrong_protocol_clients() -> None
     assert unknown.status_code == 404
 
 
+def test_ecosystem_readiness_reports_software_and_external_gates() -> None:
+    response = client.get("/api/v1/system/ecosystem")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["softwareComplete"] is True
+    assert payload["overallStatus"] == "software_ready_external_acceptance_pending"
+    component_ids = {item["id"] for item in payload["components"]}
+    assert {"backend-api", "web-console", "nms", "android", "ios", "esp32"} <= component_ids
+    gate_ids = {item["id"] for item in payload["externalGates"]}
+    assert {"capacity-profiles", "long-soak", "mobile-distribution", "esp32-hil"} <= gate_ids
+    assert payload["runtime"]["devices"] >= 0
+    assert payload["runtime"]["syslogMessages"] >= 0
+
+
 def test_agent_heartbeat_and_device_inventory() -> None:
     agent_id = f"integration-agent-{uuid4().hex[:8]}"
     credential = _enroll(agent_id)

@@ -79,12 +79,12 @@ const copy = {
   en: {
     overview: 'Overview', services: 'Services', incidents: 'Incidents', maintenance: 'Maintenance',
     operations: 'Operations', synthetics: 'Synthetics', probes: 'Probes', administration: 'Administration',
-    audit: 'Audit', preferences: 'Preferences', security: 'Account security', signIn: 'Sign in', signOut: 'Sign out',
+    audit: 'Audit', ecosystem: 'Ecosystem', preferences: 'Preferences', security: 'Account security', signIn: 'Sign in', signOut: 'Sign out',
   },
   es: {
     overview: 'Resumen', services: 'Servicios', incidents: 'Incidentes', maintenance: 'Mantenimiento',
     operations: 'Operaciones', synthetics: 'Sintéticos', probes: 'Sondas', administration: 'Administración',
-    audit: 'Auditoría', preferences: 'Preferencias', security: 'Seguridad de la cuenta', signIn: 'Iniciar sesión', signOut: 'Cerrar sesión',
+    audit: 'Auditoría', ecosystem: 'Ecosistema', preferences: 'Preferencias', security: 'Seguridad de la cuenta', signIn: 'Iniciar sesión', signOut: 'Cerrar sesión',
   },
 } as const
 

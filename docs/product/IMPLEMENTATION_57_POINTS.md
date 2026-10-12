@@ -61,17 +61,17 @@ Este documento conserva el alcance completo. **Implementado en main** significa 
 | 53 | Documentación | Implementado en main | README y guías de despliegue, recuperación, seguridad, HA, logging, probes y releases, junto con vistas C4 de contexto, contenedores, componentes y deployment que documentan trust boundaries, persistencia y failover. |
 | 54 | API documentation | Implementado en main | Guía de autenticación/convenciones y catálogo exhaustivo generado desde OpenAPI, incluyendo endpoints fuera de schema (`/metrics`, `/ws/events`). Documentation CI regenera el catálogo y falla si el Markdown comprometido deriva del contrato real. |
 | 55 | Documentation for hardware | Implementado en main | #86 añade `docs/hardware/ESP32.md`, referencia de compra/flash/configuración, guía de provisioning/recovery/OTA/hardening y checklist de aceptación física/HIL. |
-| 56 | GitHub hygiene | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 56 | GitHub hygiene | Implementado en main | CODEOWNERS, Dependabot multi-ecosistema, guía de contribución y workflow de higiene que identifica y elimina sólo ramas cortas con PR fusionada; no toca `main` ni ramas fuera de prefijos controlados. |
 | 57 | Inteligencia/anomaly detection | Diferido según propuesta | Baselines/anomalías posteriores a benchmark, retención y fiabilidad. |
-| 58 | Correlación / Root Cause Analysis | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
-| 59 | Cómo debería quedar el ecosistema completo | Pendiente | Implementar y validar después de sus dependencias; sin dar por completo el scaffold existente. |
+| 58 | Correlación / Root Cause Analysis | Implementado en main | RCA explicable `dependency-temporal-evidence-v1`: combina dependencias explícitas, precedencia temporal de incidentes correlacionados, eventos de dispositivo, Syslog y host-offline; devuelve candidatos, score, confianza, camino causal y evidencia sin sobrescribir la causa humana. |
+| 59 | Cómo debería quedar el ecosistema completo | Implementado en main | `GET /api/v1/system/ecosystem` y vista web Ecosystem publican matriz de componentes, snapshot runtime y gates externos. El producto separa explícitamente software completo de aceptación física/proveedor/soak aún pendiente. |
 
 ## Orden de continuación
 
 1. Ejecutar `Long soak acceptance` durante 24 h (y después 48 h si se quiere certificar ese perfil), conservando `capacity-summary.json` y snapshots como evidencia de #38/#46.
 2. Ejecutar los pipelines móviles con secretos reales y conservar evidencia de FCM/APNs, instalación firmada, Play internal/TestFlight y provisioning BLE Android+iOS para cerrar #19/#20/#22/#23/#24/#47.
 3. Ejecutar `ESP32 Hardware Acceptance` y la matriz física completa de `docs/hardware/ESP32_ACCEPTANCE.md` para cerrar #25–#28/#48.
-4. El trabajo de software de #39 y #55 ya está cerrado en `main`. Después de los gates externos anteriores quedan como siguiente trabajo de producto #56 (GitHub hygiene), #58 (RCA) y #59 (ecosistema final).
+4. #56, #58 y #59 cierran el trabajo de software pendiente del ledger. Después de estos puntos, lo que resta para certificar los bloques anteriores son únicamente los gates externos listados arriba o los puntos expresamente diferidos (#37, #41, #52 y #57).
 
 ## Límites verificables
 
