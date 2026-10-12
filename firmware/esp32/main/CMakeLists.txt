@@ -15,6 +15,7 @@ idf_component_register(
         "recovery.c"
         "ota.c"
         "operations.c"
+        "telemetry_queue.c"
     INCLUDE_DIRS "."
     REQUIRES
         esp_wifi
