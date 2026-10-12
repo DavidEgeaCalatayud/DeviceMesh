@@ -14,3 +14,4 @@ int dm_credentials_get_agent_credential(
     char *credential,
     size_t credential_capacity
 );
+int dm_credentials_clear_all(void);
