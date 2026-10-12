@@ -56,10 +56,18 @@ Run on a dedicated host that will not be reclaimed:
       --server https://mesh.example.com \
       --duration-hours 24 \
       --devices 1000 \
+      --api-metrics-url http://127.0.0.1:18000/metrics \
+      --worker-metrics-url http://127.0.0.1:19100/metrics \
+      --redis-url redis://127.0.0.1:16379/0 \
+      --websocket-url wss://mesh.example.com/ws/events \
       --output-dir artifacts/soak-24h
 
 The soak is resumable through its credential cache/state file and records one load report plus
-one PostgreSQL capacity report per chunk. A 48-hour run uses `--duration-hours 48`.
+one PostgreSQL capacity report and one runtime snapshot per chunk. Runtime snapshots record API
+and worker RSS, scheduler leadership, Redis memory/evictions/clients, and repeated authenticated
+WebSocket connect-auth-heartbeat-close cycles. The direct metrics/Redis URLs should be exposed
+only to the soak host or an isolated management network; the public Caddy endpoint intentionally
+does not expose `/metrics`. A 48-hour run uses `--duration-hours 48`.
 
 At completion the harness writes `capacity-summary.json`, comparing the first and last database
 snapshots. It reports database bytes/hour, per-table row/byte/index growth, dead-tuple ratios,
@@ -70,8 +78,9 @@ triggers engineering review rather than blindly enabling partitioning.
 
 A soak is accepted only if all chunks stay within failure/p95 objectives and review of the
 summary/snapshots shows no monotonic resource leak or uncontrolled storage/index growth.
-WebSocket reconnect behaviour, Redis memory and worker leadership should be captured from the
-existing Prometheus endpoints alongside the soak artifacts.
+The final summary fails review through warnings if worker leadership disappears, Redis evicts
+keys, any WebSocket reconnect probe fails, or API/worker resident memory grows by both more than
+100 MiB and 50% across the evidence window.
 
 CI intentionally does not claim this evidence: a normal pull-request runner executes only short
 acceptance tests. Roadmap item #46 remains incomplete until a real 24/48-hour report has been
