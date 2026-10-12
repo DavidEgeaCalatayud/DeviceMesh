@@ -1,6 +1,11 @@
 package io.github.davidegeacalatayud.devicemesh
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -23,11 +28,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,6 +67,7 @@ private fun DeviceMeshApp(model: DeviceMeshViewModel = viewModel()) {
         LoginScreen(state.server, state.loading, state.error, model::login)
         return
     }
+    PushNotificationPermission()
     var tabName by rememberSaveable { mutableStateOf(Tab.DASHBOARD.name) }
     val tab = Tab.valueOf(tabName)
     Scaffold(
@@ -252,5 +260,23 @@ private fun Synthetics(state: MobileState) = LazyColumn(Modifier.padding(16.dp))
             probe.name + " · " + probe.location + " · " + if (probe.online) "online" else "offline",
             modifier = Modifier.padding(vertical = 8.dp),
         )
+    }
+}
+
+
+@Composable
+private fun PushNotificationPermission() {
+    if (Build.VERSION.SDK_INT < 33) return
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+    LaunchedEffect(Unit) {
+        if (
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 }
