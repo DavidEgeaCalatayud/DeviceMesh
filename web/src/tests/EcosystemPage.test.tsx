@@ -7,7 +7,7 @@ import { platformApi } from '../shared/api/session'
 vi.mock('../shared/api/session', () => ({ platformApi: vi.fn() }))
 
 it('separates software readiness from external acceptance gates', async () => {
-  vi.mocked(platformApi).mockResolvedValue({
+  vi.mocked(platformApi).mockImplementation(async () => ({
     generatedAt: new Date().toISOString(),
     softwareComplete: true,
     overallStatus: 'software_ready_external_acceptance_pending',
@@ -19,7 +19,7 @@ it('separates software readiness from external acceptance gates', async () => {
       { id: 'long-soak', label: 'Retained 24/48-hour sustained soak', status: 'external_evidence_required' },
     ],
     runtime: { devices: 12, onlineDevices: 10 },
-  })
+  }))
   render(<EcosystemPage />)
   expect(await screen.findByText('Software complete')).toBeInTheDocument()
   expect(screen.getByText('ESP32 hardware probe')).toBeInTheDocument()
