@@ -28,6 +28,13 @@ interface DeviceMeshApi {
     suspend fun alerts(): List<Alert>
     suspend fun syntheticMonitors(): List<SyntheticMonitor>
     suspend fun syntheticProbes(): List<SyntheticProbe>
+    suspend fun registerPushToken(
+        provider: String,
+        environment: String,
+        installationId: String,
+        token: String,
+    )
+    suspend fun unregisterPushToken(installationId: String)
 }
 
 fun validateBaseUrl(raw: String): String {
@@ -174,6 +181,31 @@ class HttpDeviceMeshApi(
             }
         }
     }
+
+    override suspend fun registerPushToken(
+        provider: String,
+        environment: String,
+        installationId: String,
+        token: String,
+    ) = withContext(Dispatchers.IO) {
+        requestJson(
+            "POST",
+            "/api/v1/mobile/push-subscriptions",
+            JSONObject()
+                .put("provider", provider)
+                .put("environment", environment)
+                .put("installationId", installationId)
+                .put("token", token),
+        )
+        Unit
+    }
+
+    override suspend fun unregisterPushToken(installationId: String) =
+        withContext(Dispatchers.IO) {
+            val safeId = java.net.URLEncoder.encode(installationId, Charsets.UTF_8.name())
+            request("DELETE", "/api/v1/mobile/push-subscriptions/" + safeId)
+            Unit
+        }
 
     private fun parseSession(body: JSONObject): SessionTokens {
         val user = body.getJSONObject("user")
