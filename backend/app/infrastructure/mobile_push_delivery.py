@@ -5,7 +5,6 @@ import json
 import re
 import time
 from collections.abc import Mapping
-from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
